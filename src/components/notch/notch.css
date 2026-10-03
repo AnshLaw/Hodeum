@@ -547,3 +547,8 @@
   width: 11px;
   height: 11px;
 }
+
+/* Hodey's viewBox reserves room for z's, ear, and sparkles; let that room overflow the bar instead of shrinking the face. */
+.notch__grip .hodey {
+  margin: -10px 0 -10px -8px;
+}

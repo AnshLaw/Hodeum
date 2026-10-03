@@ -1,11 +1,15 @@
 import type { Ref } from "react";
 import { COPY } from "../../lib/copy";
-import { CheckIcon, CrosshairIcon, HodeyGlyph, IconButton, MoreIcon, MutedIcon, VolumeIcon } from "../shared/icons";
+import { HodeyFace } from "../hodey/HodeyFace";
+import { CheckIcon, CrosshairIcon, IconButton, MoreIcon, MutedIcon, VolumeIcon } from "../shared/icons";
 import { DockMenu } from "./DockMenu";
 import { GoalForm } from "./GoalForm";
 import { Grip, LocalBadge, NotchContent } from "./NotchParts";
 import type { StepItem } from "./notch-view";
 import type { SurfaceProps } from "./surface";
+
+const HODEY_TAB_SIZE = 42;
+const HODEY_BAR_SIZE = 40;
 
 function StepList({ steps }: { steps: StepItem[] }) {
   return (
@@ -68,7 +72,7 @@ export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceR
         {collapsed ? (
           <Grip onGrip={props.onGrip}>
             <span className="sidebar__tab">
-              <HodeyGlyph />
+              <HodeyFace mood={props.mood} size={HODEY_TAB_SIZE} />
               <span className="sidebar__tab-label">{COPY.idleTitle}</span>
               <span className="sidebar__tab-dot" aria-label={COPY.local} />
             </span>
@@ -78,7 +82,7 @@ export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceR
             <header className="notch__bar sidebar__bar">
               {view.busy && <span className="notch__scan" aria-hidden="true" />}
               <Grip onGrip={props.onGrip}>
-                <HodeyGlyph />
+                <HodeyFace mood={props.mood} size={HODEY_BAR_SIZE} />
                 <span className="notch__bar-title">{menuOpen ? COPY.hodeySettings : (view.eyebrow ?? COPY.idleTitle)}</span>
               </Grip>
               <span className="notch__spacer" />

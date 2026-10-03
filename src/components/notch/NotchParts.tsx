@@ -1,6 +1,8 @@
 import type { PointerEvent, ReactNode } from "react";
 import { COPY } from "../../lib/copy";
-import { CheckIcon, CloseIcon, CrosshairIcon, HodeyGlyph, IconButton, MoreIcon, MutedIcon, PauseIcon, VolumeIcon } from "../shared/icons";
+import { HodeyFace } from "../hodey/HodeyFace";
+import type { HodeyMood } from "../hodey/mood";
+import { CheckIcon, CloseIcon, CrosshairIcon, IconButton, MoreIcon, MutedIcon, PauseIcon, VolumeIcon } from "../shared/icons";
 import type { NotchControl, NotchView } from "./notch-view";
 
 const LABELS: Record<NotchControl, string> = {
@@ -16,6 +18,8 @@ const LABELS: Record<NotchControl, string> = {
   dismiss: COPY.gotIt,
   cancel_annotate: COPY.cancel,
 };
+/** Hodey's face in the notch bar, in CSS px. */
+const HODEY_BAR_SIZE = 38;
 const PRIMARY = new Set<NotchControl>(["start", "resume", "retry", "dismiss"]);
 
 function iconFor(control: NotchControl): ReactNode {
@@ -111,6 +115,7 @@ export function Grip({ onGrip, children }: { onGrip: () => void; children: React
 
 export interface BarProps {
   view: NotchView;
+  mood: HodeyMood;
   expanded: boolean;
   muted: boolean;
   menuOpen: boolean;
@@ -120,13 +125,13 @@ export interface BarProps {
   onGrip: () => void;
 }
 
-export function NotchBar({ view, expanded, muted, menuOpen, onToggleMute, onToggleMenu, onControl, onGrip }: BarProps) {
+export function NotchBar({ view, mood, expanded, muted, menuOpen, onToggleMute, onToggleMenu, onControl, onGrip }: BarProps) {
   const showInline = !expanded && !menuOpen && view.mode !== "idle";
   return (
     <header className="notch__bar">
       {view.busy && <span className="notch__scan" aria-hidden="true" />}
       <Grip onGrip={onGrip}>
-        <HodeyGlyph />
+        <HodeyFace mood={mood} size={HODEY_BAR_SIZE} />
         <span className={expanded || menuOpen ? "notch__eyebrow" : "notch__bar-title"}>{menuOpen ? COPY.hodeySettings : expanded ? (view.eyebrow ?? COPY.idleTitle) : view.title}</span>
       </Grip>
       {view.progress && !menuOpen && <StepDots {...view.progress} />}

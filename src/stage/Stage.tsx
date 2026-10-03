@@ -4,6 +4,7 @@ import type { BrowserShell } from "../lib/shell";
 import type { MouseButton } from "../providers/mock-perception";
 import { Notch } from "../components/notch/Notch";
 import { GuidanceOverlay } from "../components/overlay/GuidanceOverlay";
+import { HodeumMark } from "../components/shared/icons";
 import { TASK_PACKS } from "../task-packs";
 import { ExcelBackdrop, ExplorerBackdrop } from "./Backdrops";
 import { MockAppView } from "./MockAppView";
@@ -56,7 +57,10 @@ export function Stage({ env }: { env: StageEnvironment }) {
   return (
     <div className="stage">
       <header className="stage-bar">
-        <strong>Hodeum practice stage</strong>
+        <strong className="stage-brand">
+          <HodeumMark size={20} />
+          Hodeum practice stage
+        </strong>
         <nav className="stage-tabs" aria-label="Practice app">
           {APP_TABS.map((tab) => (
             <button key={tab.id} type="button" aria-pressed={tab.id === appId} onClick={() => select(tab.id)}>

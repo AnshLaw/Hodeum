@@ -12,11 +12,12 @@ const BASE: SVGProps<SVGSVGElement> = {
   "aria-hidden": true,
 };
 
-/** Hodey's mark: an eye looking up and to the right — at your screen. */
-export const HodeyGlyph = () => (
-  <svg {...BASE} className="glyph">
-    <circle cx="8" cy="8" r="6.25" />
-    <circle cx="10" cy="6" r="2.1" fill="var(--hd-accent)" stroke="none" />
+/** Hodeum's mark: an H whose crossbar climbs like stairs to an amber point (a Hode, step by step). */
+export const HodeumMark = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true" className="hodeum-mark">
+    <path d="M15 11v42M49 11v42" stroke="currentColor" strokeWidth="7.5" strokeLinecap="round" />
+    <path d="M15 41h11v-9h11v-9h12" stroke="currentColor" strokeWidth="5.5" strokeLinejoin="round" strokeLinecap="round" />
+    <circle cx="49" cy="23" r="6" fill="#ffb224" />
   </svg>
 );
 

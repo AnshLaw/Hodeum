@@ -19,6 +19,12 @@ body {
   font-size: 12.5px;
 }
 
+.stage-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .stage-tabs {
   display: flex;
   padding: 2px;

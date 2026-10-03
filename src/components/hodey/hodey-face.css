@@ -1,0 +1,298 @@
+/* Hodey's animated face. Coordinates are in the 64-unit head space; the face pivots on its centre. */
+.hodey {
+  --hodey-skin: #ffb224;
+  --hodey-shade: #ec9a00;
+  --hodey-ink: #1f1300;
+  --hodey-float: #f2f2f2;
+  flex: none;
+  overflow: visible;
+}
+
+.hodey__head {
+  fill: var(--hodey-skin);
+}
+
+.hodey__face {
+  transform-origin: 32px 33px;
+}
+
+.hodey__eyes rect,
+.hodey__ink {
+  fill: var(--hodey-ink);
+}
+
+.hodey__line {
+  fill: none;
+  stroke: var(--hodey-ink);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hodey__eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* ---- Sleeping / resting: slow breathing, z's drifting up ---- */
+
+.hodey__face--breathe {
+  animation: hodey-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes hodey-breathe {
+  50% {
+    transform: scale(1.035) translateY(0.6px);
+  }
+}
+
+.hodey__z {
+  fill: none;
+  stroke: var(--hodey-float);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  animation: hodey-z 2.4s ease-in-out infinite;
+}
+
+@keyframes hodey-z {
+  0% {
+    opacity: 0;
+    transform: translate(-3px, 4px);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(3px, -6px);
+  }
+}
+
+/* ---- Awake / speaking: natural blinks ---- */
+
+.hodey__eyes--blink {
+  animation: hodey-blink 3.6s infinite;
+}
+
+.hodey__eyes--blink-slow {
+  animation: hodey-blink 5.2s infinite;
+}
+
+@keyframes hodey-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+
+.hodey__mouth--talk {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hodey-talk 0.32s ease-in-out infinite alternate;
+}
+
+@keyframes hodey-talk {
+  from {
+    transform: scaleY(0.35);
+  }
+}
+
+/* ---- Listening: leans its ear toward you while sound flows in ---- */
+
+.hodey__face--lean {
+  animation: hodey-lean 0.5s var(--hd-ease, ease-out) both;
+}
+
+@keyframes hodey-lean {
+  to {
+    transform: rotate(7deg) translateX(1px);
+  }
+}
+
+.hodey__ear {
+  fill: var(--hodey-shade);
+}
+
+.hodey__ear-inner {
+  fill: none;
+  stroke: var(--hodey-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.hodey__eyes--right {
+  transform: translateX(3px);
+}
+
+.hodey__wave {
+  fill: none;
+  stroke: var(--hodey-float);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  opacity: 0;
+  animation: hodey-wave 1.1s ease-out infinite;
+}
+
+@keyframes hodey-wave {
+  0% {
+    opacity: 0;
+    transform: translateX(5px);
+  }
+  40% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+
+/* ---- Looking: eyes scanning the screen ---- */
+
+.hodey__eyes--scan {
+  animation: hodey-scan 1.8s ease-in-out infinite;
+}
+
+@keyframes hodey-scan {
+  0%,
+  100% {
+    transform: translateX(-3px);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+}
+
+/* ---- Thinking: eyes up, thought dots pulsing in turn ---- */
+
+.hodey__eyes--up {
+  transform: translate(-2px, -3px);
+}
+
+.hodey__mouth--ponder {
+  animation: hodey-ponder 1.4s ease-in-out infinite;
+}
+
+@keyframes hodey-ponder {
+  50% {
+    transform: translateX(2px);
+  }
+}
+
+.hodey__dot {
+  fill: var(--hodey-float);
+  opacity: 0.25;
+  animation: hodey-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes hodey-dot {
+  30% {
+    opacity: 1;
+  }
+}
+
+/* ---- Guiding: looks toward your screen and nods ---- */
+
+.hodey__eyes--down {
+  transform: translate(3px, 2px);
+}
+
+.hodey__face--nod {
+  animation: hodey-nod 0.9s var(--hd-ease, ease-out) 2;
+}
+
+@keyframes hodey-nod {
+  40% {
+    transform: translateY(3px) rotate(2deg);
+  }
+}
+
+/* ---- Correcting: a small "hmm" head shake ---- */
+
+.hodey__face--shake {
+  animation: hodey-shake 0.5s ease-in-out 2;
+}
+
+@keyframes hodey-shake {
+  25% {
+    transform: rotate(-6deg);
+  }
+  75% {
+    transform: rotate(6deg);
+  }
+}
+
+/* ---- Curious (Point & Ask): head tilted toward what you marked ---- */
+
+.hodey__face--tilt {
+  animation: hodey-tilt 0.45s var(--hd-ease, ease-out) both;
+}
+
+@keyframes hodey-tilt {
+  to {
+    transform: rotate(-9deg);
+  }
+}
+
+/* ---- Confused: a bead of sweat ---- */
+
+.hodey__sweat {
+  fill: #8fd0ff;
+  animation: hodey-sweat 1.6s ease-in infinite;
+}
+
+@keyframes hodey-sweat {
+  0% {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* ---- Celebrating: bounces with sparkles ---- */
+
+.hodey__face--bounce {
+  animation: hodey-bounce 0.6s var(--hd-ease, ease-out) infinite alternate;
+}
+
+@keyframes hodey-bounce {
+  to {
+    transform: translateY(-4px) scale(1.03);
+  }
+}
+
+.hodey__sparkle {
+  fill: var(--hodey-skin);
+  animation: hodey-sparkle 1.2s ease-in-out infinite;
+}
+
+@keyframes hodey-sparkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1) rotate(45deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hodey * {
+    animation: none !important;
+  }
+}

@@ -15,6 +15,8 @@ import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
 import { NOTCH_IDLE_HOVER_WIDTH, NOTCH_WIDTHS, isExpanded, notchView, stepItems } from "./notch-view";
+import { hodeyMood } from "../hodey/mood";
+import "../hodey/hodey-face.css";
 import "./notch.css";
 
 export interface NotchProps {
@@ -39,7 +41,7 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement> }) {
   return (
     <div className="notch-stage">
       <section ref={props.surfaceRef} className={classes.filter(Boolean).join(" ")} style={style} aria-label={COPY.idleTitle}>
-        <NotchBar view={view} expanded={expanded} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={onControl} onGrip={props.onGrip} />
+        <NotchBar view={view} mood={props.mood} expanded={expanded} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={onControl} onGrip={props.onGrip} />
         <div aria-live="polite">{body}</div>
       </section>
     </div>
@@ -63,6 +65,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice }: NotchProps) {
 
   const props: SurfaceProps = {
     view,
+    mood: hodeyMood(state, hovered),
     steps: stepItems(state),
     hovered,
     revealed,
