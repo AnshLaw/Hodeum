@@ -95,6 +95,15 @@ describe("staying in the right app", () => {
   });
 });
 
+describe("open-ended Hodes that name an app", () => {
+  it("brings that app forward and won't plan in another one", () => {
+    const begun = fold(initialState, { type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "add a table of contents in Word", openAllowed: true, app: "Word" });
+    expect(begun.effects).toEqual([{ type: "focusApp", app: "Word" }, { type: "observe" }]);
+    const t = step(begun.state, { type: "OBSERVED", observation: { ...HOME_SELECTED, app: "VS Code" } });
+    expect(t.state).toMatchObject({ waitingForApp: "Word", action: { speech: COPY.switchToApp("Word") } });
+  });
+});
+
 describe("showing guidance", () => {
   it("renders the overlay, speaks, and starts the stuck timer", () => {
     const t = step(reasoning(), { type: "ACTION_READY", requestId: 1, action: guideAction(), failures: [] });

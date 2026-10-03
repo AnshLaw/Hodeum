@@ -54,6 +54,10 @@ pub fn app_name(exe_stem: &str) -> String {
         "winword" => "Word".into(),
         "powerpnt" => "PowerPoint".into(),
         "code" => "VS Code".into(),
+        "chrome" => "Chrome".into(),
+        "msedge" => "Edge".into(),
+        "outlook" | "olk" => "Outlook".into(),
+        "notepad" => "Notepad".into(),
         _ => exe_stem.to_string(),
     }
 }

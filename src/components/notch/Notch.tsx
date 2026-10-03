@@ -5,8 +5,8 @@ import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
 import type { TaskPack } from "../../lib/types";
 import type { HodeRuntime } from "../../features/hode/runtime";
+import { goalEvent } from "../../features/hode/bridge";
 import { useHodeState } from "../../features/hode/use-hode";
-import { matchGoal } from "../../task-packs/match";
 import { DockMenu } from "./DockMenu";
 import { GoalForm } from "./GoalForm";
 import { useAutoDismiss, useControlHandler, useCoveringTarget, useHitRect, useNotchHover, useSettled } from "./hooks";
@@ -195,7 +195,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
       if (state.phase === "goal_entry") runtime.dispatch({ type: "DISMISS" });
     },
     onSubmitGoal: (goal) =>
-      runtime.dispatch({ type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed: visionStatus?.state === "ready" }),
+      runtime.dispatch(goalEvent(goal, packs, visionStatus?.state === "ready")),
   };
   if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} covering={covering} />;
   return <Sidebar {...props} side={dock.prefs.dock} surfaceRef={surfaceRef} />;

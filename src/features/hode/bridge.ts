@@ -3,8 +3,8 @@ import type { TaskPack } from "../../lib/types";
 import { HodeRecorder } from "../../data/recorder";
 import { PRESET_START_LEVEL, type Settings, type SettingsStore } from "../../data/settings";
 import type { HodeLog } from "../../data/types";
-import { matchGoal } from "../../task-packs/match";
-import { currentStep, type HodeState } from "./model";
+import { appFromGoal, matchGoal } from "../../task-packs/match";
+import { currentStep, type HodeEvent, type HodeState } from "./model";
 import type { HodeRuntime } from "./runtime";
 
 const MS_PER_SECOND = 1000;
@@ -31,11 +31,16 @@ export interface BridgeDeps {
   applyVoice: (voice: Settings["voice"]) => void;
 }
 
+/** A typed goal as an event: its task pack, or (when vision can plan) the app it names. */
+export function goalEvent(goal: string, packs: TaskPack[], openAllowed: boolean): HodeEvent {
+  return { type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed, app: appFromGoal(goal) };
+}
+
 /** Starts a Hode the app asked for, ending whatever is running first. */
 export function startFromApp(runtime: HodeRuntime, goal: string, packs: TaskPack[], openAllowed: boolean): void {
   if (runtime.getState().phase !== "idle") runtime.dispatch({ type: "END_HODE" });
   runtime.dispatch({ type: "START_HODE" });
-  runtime.dispatch({ type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed });
+  runtime.dispatch(goalEvent(goal, packs, openAllowed));
 }
 
 function applySettings(deps: BridgeDeps, settings: Settings): void {

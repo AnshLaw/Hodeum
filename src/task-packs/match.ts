@@ -28,3 +28,23 @@ export function matchGoal(goal: string, packs: TaskPack[]): TaskPack | undefined
   }
   return best?.pack;
 }
+
+/**
+ * Apps a goal can name, as Rust's `app_name` reports them. Everyday words ("word", "edge") only count
+ * when capitalised or after a cue like "in", so "pick the right word" doesn't open Microsoft Word.
+ */
+const APP_PATTERNS: [string, RegExp][] = [
+  ["Excel", /\bexcel\b|\bspreadsheet/i],
+  ["PowerPoint", /\bpower ?point\b/i],
+  ["Word", /\b(?:microsoft |ms )?Word\b|\b(?:in|using|open|with) word\b/],
+  ["File Explorer", /\b(?:file )?explorer\b/i],
+  ["Chrome", /\bchrome\b/i],
+  ["Edge", /\bmicrosoft edge\b|\b(?:in|using|open) edge\b/i],
+  ["Outlook", /\boutlook\b/i],
+  ["Notepad", /\bnotepad\b/i],
+];
+
+/** The app an open-ended goal is about, so Hodey brings it forward and stays in it. */
+export function appFromGoal(goal: string): string | undefined {
+  return APP_PATTERNS.find(([, pattern]) => pattern.test(goal))?.[0];
+}

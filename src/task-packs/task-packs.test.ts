@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import excelPivot from "./excel-pivot.json";
-import { TASK_PACKS, matchGoal } from "./index";
+import { TASK_PACKS, appFromGoal, matchGoal } from "./index";
 import { loadTaskPack } from "./schema";
 
 type RawPack = { steps: Array<{ skill: string; target: Record<string, unknown> }> };
@@ -43,5 +43,20 @@ describe("matchGoal", () => {
 
   it("returns undefined for an unrelated goal", () => {
     expect(matchGoal("write a poem", TASK_PACKS)).toBeUndefined();
+  });
+});
+
+describe("appFromGoal", () => {
+  it("finds the app a goal names", () => {
+    expect(appFromGoal("add a table of contents in Word")).toBe("Word");
+    expect(appFromGoal("how do I make slides in powerpoint")).toBe("PowerPoint");
+    expect(appFromGoal("rename a folder in file explorer")).toBe("File Explorer");
+    expect(appFromGoal("clear my chrome cache")).toBe("Chrome");
+  });
+
+  it("leaves goals without an app alone", () => {
+    expect(appFromGoal("teach me keyboard shortcuts")).toBeUndefined();
+    expect(appFromGoal("pick the right word for this")).toBeUndefined();
+    expect(appFromGoal("open the sidebar in edge")).toBe("Edge");
   });
 });

@@ -22,11 +22,12 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
   const goal = e.goal.trim();
   if (s.phase !== "goal_entry" || goal === "") return noop(s);
   if (!e.pack && e.openAllowed) {
-    return { state: { ...s, goal, open: true, level: "guide", notice: undefined, phase: "observing" }, effects: [{ type: "observe" }] };
+    const focus: HodeEffect[] = e.app ? [{ type: "focusApp", app: e.app }] : [];
+    return { state: { ...s, goal, app: e.app, open: true, level: "guide", notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
   }
   if (!e.pack) return { state: { ...s, goal, notice: COPY.noPack }, effects: [{ type: "say", text: COPY.noPack }] };
   // Bring the pack's app forward first, so Hodey reads Excel rather than whatever had focus.
-  const begun = beginStep({ ...s, goal, pack: e.pack, notice: undefined }, 0);
+  const begun = beginStep({ ...s, goal, pack: e.pack, app: e.pack.app, notice: undefined }, 0);
   return { ...begun, effects: [{ type: "focusApp", app: e.pack.app }, ...begun.effects] };
 }
 
@@ -37,7 +38,7 @@ export function sameApp(observed: string, expected: string): boolean {
 
 /** The learner is in another app: say so and point at nothing until they're back. */
 export function waitForApp(s: HodeState, observation: ScreenObservation): Transition {
-  const app = s.pack?.app ?? "";
+  const app = s.app ?? "";
   const speech = COPY.switchToApp(app);
   const action: TeachingAction = { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
   if (s.waitingForApp === app) return { state: { ...s, observation }, effects: [] };
@@ -46,7 +47,7 @@ export function waitForApp(s: HodeState, observation: ScreenObservation): Transi
 }
 
 export function inWrongApp(s: HodeState, observation: ScreenObservation): boolean {
-  return s.pack !== undefined && !sameApp(observation.app, s.pack.app);
+  return s.app !== undefined && !sameApp(observation.app, s.app);
 }
 
 export function beginStep(s: HodeState, stepIndex: number): Transition {

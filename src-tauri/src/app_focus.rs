@@ -70,5 +70,7 @@ mod tests {
         assert!(is_app("explorer", "File Explorer"));
         assert!(!is_app("Code", "Excel"));
         assert!(!is_app("", "Excel"));
+        assert!(is_app("msedge", "Edge"));
+        assert!(is_app("chrome", "Chrome"));
     }
 }

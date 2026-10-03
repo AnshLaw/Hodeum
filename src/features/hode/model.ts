@@ -54,7 +54,9 @@ export interface HodeState {
   learnedSkills: string[];
   /** An open-ended Hode: no task pack, planned and verified by the local vision model. */
   open: boolean;
-  /** The pack's app, while Hodey waits for the learner to open or switch to it. */
+  /** The app this Hode happens in (the pack's, or one an open goal names). */
+  app?: string;
+  /** That app, while Hodey waits for the learner to open or switch to it. */
   waitingForApp?: string;
 }
 
@@ -75,7 +77,7 @@ export const initialState: HodeState = {
 export type HodeEvent =
   | { type: "START_HODE" }
   /** `openAllowed`: no pack matched, but the local vision model is ready to plan step by step. */
-  | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean }
+  | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean; /** Named in an open goal. */ app?: string }
   /** `fallbackLevel`: where a never-practised skill starts (from the learner's help preset). */
   | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null; fallbackLevel?: AssistanceLevel }
   | { type: "OBSERVED"; observation: ScreenObservation }
