@@ -1,30 +1,35 @@
 use tauri_plugin_sql::{Migration, MigrationKind};
 
-/// Lives in the app config directory, never in the repository. Must match `src/providers/sqlite-skill-store.ts`.
+/// Lives in the app config directory, never in the repository. Must match `src/data/sql.ts`.
 pub const DATABASE_URL: &str = "sqlite:hodeum.db";
 
+/// The SQL lives in `migrations/` so the TypeScript store tests run against the same schema.
 pub fn migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        description: "create_skill_tables",
-        sql: "CREATE TABLE skills (
-                skill_id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                confidence REAL NOT NULL,
-                success_count INTEGER NOT NULL,
-                failure_count INTEGER NOT NULL,
-                last_assistance_level TEXT NOT NULL,
-                last_seen_at TEXT NOT NULL
-              );
-              CREATE TABLE step_attempts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                skill_id TEXT NOT NULL,
-                completed INTEGER NOT NULL,
-                mistakes INTEGER NOT NULL,
-                level TEXT NOT NULL,
-                escalated INTEGER NOT NULL,
-                at TEXT NOT NULL
-              );",
-        kind: MigrationKind::Up,
-    }]
+    vec![
+        Migration {
+            version: 1,
+            description: "create_skill_tables",
+            sql: include_str!("../migrations/0001_skills.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "create_learning_tables",
+            sql: include_str!("../migrations/0002_learning.sql"),
+            kind: MigrationKind::Up,
+        },
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::migrations;
+
+    /// sqlx checksums applied migrations: a CRLF checkout would make existing databases refuse to open.
+    #[test]
+    fn migrations_use_lf_line_endings() {
+        for migration in migrations() {
+            assert!(!migration.sql.contains('\r'), "migration {} has CRLF line endings", migration.version);
+        }
+    }
 }

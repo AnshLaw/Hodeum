@@ -1,16 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
-import { ActivityTracker, withScreenActivity } from "../lib/activity";
+import { ActivityTracker, mirrorRemoteActivity, withScreenActivity } from "../lib/activity";
 import { COPY } from "../lib/copy";
 import { UnavailableSpeechInput } from "../providers/speech/speech-input";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import { TauriShell } from "../lib/tauri-shell";
 import { Notch } from "../components/notch/Notch";
+import { connectHodeBridge } from "../features/hode/bridge";
 import type { HodePhase } from "../features/hode/model";
 import { HodeRuntime } from "../features/hode/runtime";
-import type { SkillStore } from "../providers/interfaces";
-import { MemorySkillStore } from "../providers/memory-skill-store";
+import { MemoryLearningStore } from "../data/memory-stores";
+import { MemorySettingsStore, type SettingsStore } from "../data/settings";
+import { openDatabase } from "../data/sql";
+import { SqliteLearningStore, SqliteSettingsStore } from "../data/sqlite-stores";
 import { NativePerception } from "../providers/native-perception";
-import { SqliteSkillStore } from "../providers/sqlite-skill-store";
 import { LocalReasoningProvider } from "../providers/local-reasoner";
 import { TaskPackReasoningProvider } from "../providers/task-pack-reasoner";
 import { QwenVisionProvider } from "../providers/vision/qwen-vision-provider";
@@ -23,19 +25,27 @@ import { mount } from "./mount";
 /** Learner input is only worth re-reading the screen for while guidance waits on the learner. */
 const WATCHING_PHASES: HodePhase[] = ["guiding", "reasoning"];
 
-async function openSkills(): Promise<{ skills: SkillStore; notice?: string }> {
+interface Stores {
+  learning: SqliteLearningStore | MemoryLearningStore;
+  settings: SettingsStore;
+  notice?: string;
+}
+
+async function openStores(): Promise<Stores> {
   try {
-    return { skills: await SqliteSkillStore.open() };
+    const db = await openDatabase();
+    return { learning: new SqliteLearningStore(db), settings: new SqliteSettingsStore(db) };
   } catch (error) {
-    console.error("Opening the skill database failed; progress is kept in memory for this session", error);
-    return { skills: new MemorySkillStore(), notice: COPY.progressNotSaved };
+    console.error("Opening the Hodeum database failed; progress is kept in memory for this session", error);
+    return { learning: new MemoryLearningStore(), settings: new MemorySettingsStore(), notice: COPY.progressNotSaved };
   }
 }
 
 async function boot(): Promise<void> {
   const bus = new TauriBus();
-  const { skills, notice } = await openSkills();
+  const { learning, settings, notice } = await openStores();
   const activity = new ActivityTracker();
+  mirrorRemoteActivity(bus, activity);
   const native = new NativePerception({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
   const perception = withScreenActivity(native, activity);
   const vision = new TauriVisionStatus();
@@ -44,14 +54,18 @@ async function boot(): Promise<void> {
     capture: () => activity.track("screen", () => invoke<CapturedFrame>("capture_active_window")),
   });
   const local = new LocalReasoningProvider(new TaskPackReasoningProvider(), qwen, () => vision.current().state === "ready");
-  const runtime = new HodeRuntime({
-    perception,
-    reasoners: [local],
-    skills,
-    bus,
-    tts: new WebSpeechTTSProvider(),
-  });
+  const tts = new WebSpeechTTSProvider();
+  const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts });
   runtime.subscribe(() => native.setWatching(WATCHING_PHASES.includes(runtime.getState().phase)));
+  connectHodeBridge({
+    runtime,
+    bus,
+    log: learning,
+    settings,
+    packs: TASK_PACKS,
+    openGoalsAllowed: () => vision.current().state === "ready",
+    applyVoice: (voice) => (tts.rate = voice.rate),
+  });
   mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={new UnavailableSpeechInput()} />);
 }
 
