@@ -68,6 +68,7 @@ export function activeChannels(state: ActivityState): ActivityChannel[] {
 export function withScreenActivity(perception: PerceptionAdapter, activity: ActivityTracker): PerceptionAdapter {
   return {
     observe: (region?: Rect): Promise<ScreenObservation> => activity.track("screen", () => perception.observe(region)),
+    focusApp: perception.focusApp?.bind(perception),
     onLearnerAction: (handler) =>
       perception.onLearnerAction((observation) => {
         // The adapter already re-read the screen to produce this observation: show it.

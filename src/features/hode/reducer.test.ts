@@ -57,13 +57,41 @@ describe("starting a Hode", () => {
   it("loads the first step's skill, then observes, then reasons", () => {
     const begun = fold(initialState, ...START);
     expect(begun.state.phase).toBe("observing");
-    expect(begun.effects).toEqual([{ type: "loadSkill", skillId: "excel.navigation.insert_tab" }]);
+    expect(begun.effects).toEqual([
+      { type: "focusApp", app: "Excel" },
+      { type: "loadSkill", skillId: "excel.navigation.insert_tab" },
+    ]);
     const loaded = step(begun.state, { type: "SKILL_LOADED", skillId: "excel.navigation.insert_tab", record: skillRecord("hint") });
     expect(loaded.state.level).toBe("hint");
     expect(types(loaded)).toEqual(["observe"]);
     const observed = step(loaded.state, { type: "OBSERVED", observation: HOME_SELECTED });
     expect(observed.state).toMatchObject({ phase: "reasoning", requestId: 1 });
     expect(observed.effects[0]).toMatchObject({ type: "reason", requestId: 1, context: { step: { id: "open-insert" } } });
+  });
+});
+
+describe("staying in the right app", () => {
+  const VS_CODE = { ...HOME_SELECTED, app: "VS Code", windowTitle: "notes.md - Visual Studio Code" };
+  const loaded = () => fold(initialState, ...START, { type: "SKILL_LOADED", skillId: "excel.navigation.insert_tab", record: null }).state;
+
+  it("asks the learner to switch instead of pointing into another app", () => {
+    const t = step(loaded(), { type: "OBSERVED", observation: VS_CODE });
+    expect(t.state).toMatchObject({ phase: "guiding", waitingForApp: "Excel", action: { kind: "clarify", speech: COPY.switchToApp("Excel") } });
+    expect(t.state.action?.target).toBeUndefined();
+    expect(types(t)).toEqual(["clearOverlay", "cancelStuckTimer", "say"]);
+  });
+
+  it("picks up as soon as the learner acts in the right app", () => {
+    const waiting = step(loaded(), { type: "OBSERVED", observation: VS_CODE }).state;
+    expect(step(waiting, { type: "LEARNER_ACTED", observation: VS_CODE }).effects).toEqual([]);
+    const back = step(waiting, { type: "LEARNER_ACTED", observation: HOME_SELECTED });
+    expect(back.state).toMatchObject({ phase: "reasoning", waitingForApp: undefined });
+    expect(types(back)).toEqual(["reason"]);
+  });
+
+  it("notices when the learner leaves the app mid-Hode", () => {
+    const t = step(guiding(), { type: "LEARNER_ACTED", observation: VS_CODE });
+    expect(t.state).toMatchObject({ waitingForApp: "Excel", action: { kind: "clarify" } });
   });
 });
 

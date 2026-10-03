@@ -29,6 +29,10 @@ export class NativePerception implements PerceptionAdapter {
     return this.bridge.invoke<ScreenObservation>("observe", { region: region ?? null });
   }
 
+  async focusApp(app: string): Promise<boolean> {
+    return (await this.bridge.invoke<{ title: string } | null>("focus_app", { app })) !== null;
+  }
+
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void {
     this.handlers.add(handler);
     return () => {

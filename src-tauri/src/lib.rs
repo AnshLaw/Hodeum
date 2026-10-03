@@ -1,3 +1,4 @@
+mod app_focus;
 mod app_window;
 mod chat_context;
 mod db;
@@ -85,7 +86,8 @@ pub fn run() {
             app_window::open_app_window,
             chat_context::list_windows,
             chat_context::last_app_window,
-            chat_context::capture_window
+            chat_context::capture_window,
+            app_focus::focus_app
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())

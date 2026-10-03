@@ -67,22 +67,51 @@ fn place(window: &WebviewWindow, rect: PxRect) -> Result<(), String> {
     window.set_position(PhysicalPosition::new(rect.x, rect.y)).map_err(|e| e.to_string())
 }
 
+/// How long, and how often, to keep the window where we put it while the shell applies a work-area change.
+const HOLD_FOR: Duration = Duration::from_millis(1500);
+const HOLD_POLL: Duration = Duration::from_millis(40);
+
+/// After the work area changes, Windows re-snaps full-height windows at a screen edge into the new
+/// area a moment later, which would push the sidebar beside its own reserved strip. Put it back.
+fn hold_position(app: AppHandle, rect: PxRect) {
+    thread::spawn(move || {
+        let Ok(window) = notch(&app) else { return };
+        let started = std::time::Instant::now();
+        while started.elapsed() < HOLD_FOR && !app.state::<DockState>().dragging.load(Ordering::SeqCst) {
+            thread::sleep(HOLD_POLL);
+            let moved = window.outer_position().is_ok_and(|p| (p.x, p.y) != (rect.x, rect.y));
+            if moved {
+                if let Err(error) = place(&window, rect) {
+                    eprintln!("couldn't keep the sidebar in place: {error}");
+                    return;
+                }
+            }
+        }
+    });
+}
+
 /// Moves the notch window to a dock; side docks with `reserve` become an app bar (copilot mode).
 #[tauri::command]
 pub fn set_dock(app: AppHandle, dock: Dock, reserve: bool, state: State<'_, DockState>) -> Result<(), String> {
     state.dragging.store(false, Ordering::SeqCst);
     let window = notch(&app)?;
-    let (full, work, scale) = monitor_rects(&window)?;
     if dock == Dock::Top || !reserve {
         state.release_space()?;
-        return place(&window, dock_rect(dock, full, work, scale));
+        // Read the work area only after giving our strip back, or we'd dock beside our own old reservation.
+        let (full, work, scale) = monitor_rects(&window)?;
+        let rect = dock_rect(dock, full, work, scale);
+        place(&window, rect)?;
+        hold_position(app.clone(), rect);
+        return Ok(());
     }
+    let (full, work, scale) = monitor_rects(&window)?;
     let width = dock_rect(dock, full, work, scale).width;
     let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
     let granted = state.appbar.reserve(hwnd, dock, full, width)?;
     place(&window, granted)?;
     // Copilot: maximized windows reflow on their own; move normal ones that overlap the sidebar.
     let strip = PxRect { y: work.y, height: work.height, ..granted };
+    hold_position(app.clone(), granted);
     state.arranged.make_room(strip, free_beside(dock, work, strip))
 }
 

@@ -28,6 +28,7 @@ export class HodeRuntime {
   private speech: AbortController | undefined;
   /** Skill writes are chained so the next step's read sees the previous step's outcome. */
   private pendingWrite: Promise<void> = Promise.resolve();
+  private focusing: Promise<void> = Promise.resolve();
   private muted = false;
   private fallbackLevel: AssistanceLevel = "demonstrate";
   private stuckMs: number | undefined;
@@ -89,6 +90,8 @@ export class HodeRuntime {
 
   private run(effect: HodeEffect): void {
     switch (effect.type) {
+      case "focusApp":
+        return this.focusApp(effect.app);
       case "loadSkill":
         return this.loadSkill(effect.skillId);
       case "observe":
@@ -121,8 +124,19 @@ export class HodeRuntime {
       );
   }
 
+  /** Observations wait for this, so the first read is of the app being brought forward. */
+  private focusApp(app: string): void {
+    const focus = this.deps.perception.focusApp?.(app) ?? Promise.resolve(false);
+    this.focusing = focus.then(
+      (found) => {
+        if (!found) console.info(`No ${app} window is open yet; Hodey will ask the learner to open it`);
+      },
+      (error) => console.error(`Couldn't bring ${app} forward`, error),
+    );
+  }
+
   private observe(region?: Rect): void {
-    this.deps.perception.observe(region).then(
+    this.focusing.then(() => this.deps.perception.observe(region)).then(
       (observation) => this.dispatch({ type: "OBSERVED", observation }),
       (error) => this.fail("Couldn't read the screen", error),
     );

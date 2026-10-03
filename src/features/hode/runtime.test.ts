@@ -140,3 +140,32 @@ describe("HodeRuntime end to end", () => {
     expect(h.state().phase).toBe("guiding");
   });
 });
+
+describe("bringing the pack's app forward", () => {
+  it("focuses the app before the first read of the screen", async () => {
+    const scene = new ExcelScene();
+    const perception = new MockPerception(() => scene);
+    const order: string[] = [];
+    let release: () => void = () => undefined;
+    vi.spyOn(perception, "focusApp").mockImplementation(async (app) => {
+      order.push(`focus ${app}`);
+      await new Promise<void>((resolve) => (release = resolve));
+      return true;
+    });
+    const observe = perception.observe.bind(perception);
+    vi.spyOn(perception, "observe").mockImplementation((region) => {
+      order.push("observe");
+      return observe(region);
+    });
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
+    runtime.dispatch({ type: "START_HODE" });
+    runtime.dispatch({ type: "GOAL_SUBMITTED", goal: GOAL, pack: matchGoal(GOAL, TASK_PACKS) });
+    await settle();
+    expect(order).toEqual(["focus Excel"]);
+    release();
+    await settle();
+    expect(order).toEqual(["focus Excel", "observe"]);
+    expect(runtime.getState().phase).toBe("guiding");
+  });
+});

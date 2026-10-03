@@ -1,6 +1,6 @@
 import { COPY } from "../../lib/copy";
 import { ASSISTANCE_LEVELS, type StepOutcome, type TaskStep } from "../../lib/types";
-import { beginStep, requestReason } from "./flow";
+import { beginStep, inWrongApp, requestReason, waitForApp } from "./flow";
 import {
   MAX_WRONG_ACTIONS,
   STUCK_MS,
@@ -55,6 +55,8 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
   if (s.open && (s.phase === "guiding" || s.phase === "reasoning")) return onOpenAction(s, e);
   const step = currentStep(s);
   if ((s.phase !== "guiding" && s.phase !== "reasoning") || !step) return noop(s);
+  if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
+  if (s.waitingForApp) return requestReason({ ...s, observation: e.observation, waitingForApp: undefined });
   const previous = s.observation;
   const next = { ...s, observation: e.observation };
   if (evaluateSignal(step.success, e.observation)) return completeStep(next, step);

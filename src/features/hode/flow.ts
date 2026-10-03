@@ -25,7 +25,28 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
     return { state: { ...s, goal, open: true, level: "guide", notice: undefined, phase: "observing" }, effects: [{ type: "observe" }] };
   }
   if (!e.pack) return { state: { ...s, goal, notice: COPY.noPack }, effects: [{ type: "say", text: COPY.noPack }] };
-  return beginStep({ ...s, goal, pack: e.pack, notice: undefined }, 0);
+  // Bring the pack's app forward first, so Hodey reads Excel rather than whatever had focus.
+  const begun = beginStep({ ...s, goal, pack: e.pack, notice: undefined }, 0);
+  return { ...begun, effects: [{ type: "focusApp", app: e.pack.app }, ...begun.effects] };
+}
+
+/** Same app, ignoring case. An unknown app name (unreadable process) never blocks guidance. */
+export function sameApp(observed: string, expected: string): boolean {
+  return observed === "" || observed.toLowerCase() === expected.toLowerCase();
+}
+
+/** The learner is in another app: say so and point at nothing until they're back. */
+export function waitForApp(s: HodeState, observation: ScreenObservation): Transition {
+  const app = s.pack?.app ?? "";
+  const speech = COPY.switchToApp(app);
+  const action: TeachingAction = { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
+  if (s.waitingForApp === app) return { state: { ...s, observation }, effects: [] };
+  const effects: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "say", text: speech }];
+  return { state: { ...s, phase: "guiding", observation, action, waitingForApp: app }, effects };
+}
+
+export function inWrongApp(s: HodeState, observation: ScreenObservation): boolean {
+  return s.pack !== undefined && !sameApp(observation.app, s.pack.app);
 }
 
 export function beginStep(s: HodeState, stepIndex: number): Transition {
@@ -55,7 +76,8 @@ export function onSkillLoaded(s: HodeState, e: EventOf<"SKILL_LOADED">): Transit
 
 export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {
   if (s.phase !== "observing") return noop(s);
-  return requestReason({ ...s, observation: e.observation });
+  if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
+  return requestReason({ ...s, observation: e.observation, waitingForApp: undefined });
 }
 
 function contextFor(s: HodeState, observation: ScreenObservation): TeachingContext {

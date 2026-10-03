@@ -52,6 +52,11 @@ impl Perception {
         }
     }
 
+    /// Makes `hwnd` the learner's app even while Hodeum itself has focus.
+    pub fn remember(&self, hwnd: isize) {
+        self.last_external.store(hwnd, std::sync::atomic::Ordering::SeqCst);
+    }
+
     /// The learner's app: the foreground window, or the last one before Hodeum took focus.
     pub fn learner_window(&self) -> Result<isize, String> {
         foreground::target_window(&self.last_external).map(|hwnd| hwnd.0 as isize)

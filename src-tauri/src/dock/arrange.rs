@@ -2,16 +2,14 @@
 
 use std::sync::Mutex;
 
-use windows::core::BOOL;
-use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetWindowRect, IsIconic, IsZoomed, SetWindowPos, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOZORDER,
+    GetWindowRect, IsIconic, IsZoomed, SetWindowPos, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOZORDER,
 };
 
 use super::geometry::PxRect;
-use crate::chat_context::is_switchable;
-use crate::perception::foreground::window_pid;
+use crate::chat_context::app_windows;
 
 /// Where a window sits once moved out of the way: shifted into `free`, and narrowed only if it can't fit.
 /// `None` when it doesn't overlap `strip` and can stay put.
@@ -67,25 +65,10 @@ fn set_rect(hwnd: HWND, r: PxRect) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-unsafe extern "system" fn collect(hwnd: HWND, list: LPARAM) -> BOOL {
-    // SAFETY: `list` is the &mut Vec passed to EnumWindows below, alive for the whole enumeration.
-    let windows = unsafe { &mut *(list.0 as *mut Vec<isize>) };
-    windows.push(hwnd.0 as isize);
-    BOOL(1)
-}
-
-/// Other apps' normal (not maximized or minimized) windows a learner could switch to.
+/// Other apps' normal (not maximized or minimized) windows.
 fn movable_windows() -> Result<Vec<HWND>, String> {
-    let mut all: Vec<isize> = Vec::new();
-    // SAFETY: the callback only pushes into `all`, which outlives the call.
-    unsafe { EnumWindows(Some(collect), LPARAM(&mut all as *mut Vec<isize> as isize)) }.map_err(|e| e.to_string())?;
-    let ours = std::process::id();
-    Ok(all
-        .into_iter()
-        .map(|h| HWND(h as *mut _))
-        // SAFETY: IsZoomed / IsIconic tolerate any handle.
-        .filter(|&h| window_pid(h) != ours && is_switchable(h) && !unsafe { IsZoomed(h) }.as_bool() && !unsafe { IsIconic(h) }.as_bool())
-        .collect())
+    // SAFETY: IsZoomed / IsIconic tolerate any handle.
+    Ok(app_windows()?.into_iter().filter(|&h| !unsafe { IsZoomed(h) }.as_bool() && !unsafe { IsIconic(h) }.as_bool()).collect())
 }
 
 struct Moved {

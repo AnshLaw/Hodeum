@@ -54,6 +54,8 @@ export interface HodeState {
   learnedSkills: string[];
   /** An open-ended Hode: no task pack, planned and verified by the local vision model. */
   open: boolean;
+  /** The pack's app, while Hodey waits for the learner to open or switch to it. */
+  waitingForApp?: string;
 }
 
 export const initialState: HodeState = {
@@ -100,6 +102,7 @@ export type HodeEvent =
 export type EventOf<T extends HodeEvent["type"]> = Extract<HodeEvent, { type: T }>;
 
 export type HodeEffect =
+  | { type: "focusApp"; app: string }
   | { type: "loadSkill"; skillId: string }
   | { type: "observe"; region?: Rect }
   | { type: "reason"; requestId: number; context: TeachingContext }

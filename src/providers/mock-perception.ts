@@ -34,6 +34,11 @@ export class MockPerception implements PerceptionAdapter {
     return this.snapshot(region);
   }
 
+  /** The stage can't switch apps for the learner: report whether the right practice app is showing. */
+  async focusApp(app: string): Promise<boolean> {
+    return this.currentApp().label.toLowerCase() === app.toLowerCase();
+  }
+
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void {
     this.handlers.add(handler);
     return () => {

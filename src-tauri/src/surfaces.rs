@@ -103,6 +103,15 @@ impl FocusReturn {
         Ok(())
     }
 
+    /// A pending hand-back now goes to `hwnd` (the app a Hode just brought forward) instead.
+    pub fn redirect(&self, hwnd: isize) -> Result<(), String> {
+        let mut saved = self.0.lock().map_err(|e| e.to_string())?;
+        if *saved != 0 {
+            *saved = hwnd;
+        }
+        Ok(())
+    }
+
     /// Hands keyboard focus back so the learner can keep working without an extra click.
     fn restore(&self) -> Result<(), String> {
         let saved = std::mem::take(&mut *self.0.lock().map_err(|e| e.to_string())?);

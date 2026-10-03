@@ -1,9 +1,10 @@
 use serde::Serialize;
 use tauri::State;
-use windows::Win32::Foundation::HWND;
+use windows::core::BOOL;
+use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindow, GetWindowLongPtrW, IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    EnumWindows, GetWindow, GetWindowLongPtrW, IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 use crate::perception::foreground::{exe_stem, window_pid, window_title};
@@ -45,6 +46,22 @@ pub fn is_switchable(hwnd: HWND) -> bool {
         let owned = GetWindow(hwnd, GW_OWNER).is_ok_and(|owner| !owner.is_invalid());
         alt_tab_eligible(visible, cloaked != 0, ex_style, owned)
     }
+}
+
+unsafe extern "system" fn collect(hwnd: HWND, list: LPARAM) -> BOOL {
+    // SAFETY: `list` is the &mut Vec passed to EnumWindows below, alive for the whole enumeration.
+    let windows = unsafe { &mut *(list.0 as *mut Vec<isize>) };
+    windows.push(hwnd.0 as isize);
+    BOOL(1)
+}
+
+/// Other apps' windows a learner could Alt+Tab to, front to back (EnumWindows walks the z-order).
+pub fn app_windows() -> Result<Vec<HWND>, String> {
+    let mut all: Vec<isize> = Vec::new();
+    // SAFETY: the callback only pushes into `all`, which outlives the call.
+    unsafe { EnumWindows(Some(collect), LPARAM(&mut all as *mut Vec<isize> as isize)) }.map_err(|e| e.to_string())?;
+    let ours = std::process::id();
+    Ok(all.into_iter().map(|h| HWND(h as *mut _)).filter(|&h| window_pid(h) != ours && is_switchable(h)).collect())
 }
 
 fn candidate(window: &xcap::Window, ours: u32) -> Result<Option<WindowInfo>, xcap::XCapError> {

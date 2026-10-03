@@ -43,6 +43,8 @@ export function Stage({ env }: { env: StageEnvironment }) {
   const select = (id: StageAppId) => {
     env.select(id);
     setAppId(id);
+    // Switching apps is a learner action: a Hode waiting for this app picks up.
+    env.perception.notifyLearnerAction();
   };
   const press = (elementId: string, button: MouseButton) => {
     app.press(elementId, button);
