@@ -16,6 +16,8 @@ import { ExplorerScene } from "./scenes/explorer";
 
 export type StageAppId = "excel" | "explorer";
 
+/** About what a UI Automation read plus reasoning takes on the real desktop. */
+const STAGE_LOOK_MS = 650;
 const STAGE_LIMITATION = "Chat uses the local vision model, which runs in the Hodeum desktop app. The practice stage has no model.";
 
 export interface StageEnvironment {
@@ -36,7 +38,7 @@ export function createStageEnvironment(): StageEnvironment {
   const apps = { excel: new ExcelScene(), explorer: new ExplorerScene() };
   let current: MockApp = apps.excel;
   const bus = new LocalBus();
-  const perception = new MockPerception(() => current);
+  const perception = new MockPerception(() => current, STAGE_LOOK_MS);
   const activity = new ActivityTracker();
   const learning = new MemoryLearningStore();
   const settings = new MemorySettingsStore();

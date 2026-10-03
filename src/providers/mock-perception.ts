@@ -23,9 +23,14 @@ export interface MockApp {
 export class MockPerception implements PerceptionAdapter {
   private readonly handlers = new Set<(observation: ScreenObservation) => void>();
 
-  constructor(private readonly currentApp: () => MockApp) {}
+  /** `latencyMs` mimics a real UI Automation read, so the stage shows Hodey's looking state. */
+  constructor(
+    private readonly currentApp: () => MockApp,
+    private readonly latencyMs = 0,
+  ) {}
 
   async observe(region?: Rect): Promise<ScreenObservation> {
+    if (this.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
     return this.snapshot(region);
   }
 

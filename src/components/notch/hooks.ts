@@ -61,6 +61,20 @@ export function useNotchHover(ref: RefObject<HTMLElement | null>, shell: NativeS
   return hovered;
 }
 
+/** True once `value` has held for `ms`; false the moment it doesn't. Keeps brief states from flickering. */
+export function useSettled(value: boolean, ms: number): boolean {
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!value) {
+      setSettled(false);
+      return;
+    }
+    const timer = setTimeout(() => setSettled(true), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return value && settled;
+}
+
 export function useAutoDismiss(active: boolean, runtime: HodeRuntime): void {
   useEffect(() => {
     if (!active) return;

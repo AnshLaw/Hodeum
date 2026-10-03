@@ -1,7 +1,7 @@
 import { COPY } from "../../lib/copy";
 import { currentStep, type HodeState } from "../../features/hode/model";
 
-export type NotchSize = "idle" | "compact" | "guidance" | "lesson" | "success";
+export type NotchSize = "idle" | "orb" | "compact" | "guidance" | "lesson" | "success";
 export type NotchMode = "idle" | "goal" | "status" | "guidance" | "answer" | "annotate" | "paused" | "error" | "success";
 export type NotchControl =
   | "start"
@@ -32,7 +32,7 @@ export interface NotchView {
 }
 
 /** Pill widths in CSS px, per PRD §8.2. Height follows content. */
-export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, compact: 380, guidance: 440, lesson: 500, success: 340 };
+export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, orb: 44, compact: 380, guidance: 440, lesson: 500, success: 340 };
 export const NOTCH_IDLE_HOVER_WIDTH = 304;
 
 const EXPANDED: NotchSize[] = ["guidance", "lesson", "success"];
@@ -96,7 +96,7 @@ export function notchView(s: HodeState): NotchView {
       return { mode: "goal", size: "lesson", title: COPY.startHode, detail: s.notice, busy: false, controls: [] };
     case "observing":
     case "reasoning":
-      return { mode: "status", size: "compact", title: COPY.looking, busy: true, controls: ["pause"] };
+      return { mode: "status", size: "orb", title: COPY.looking, busy: true, controls: ["pause"] };
     case "guiding":
       return guidanceView(s);
     case "answering":
@@ -110,6 +110,23 @@ export function notchView(s: HodeState): NotchView {
     case "success":
       return { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail: COPY.skillLearned, busy: false, controls: [], skills: s.learnedSkills.map(skillLabel) };
   }
+}
+
+export interface IslandContext {
+  /** Hodey has been busy long enough that shrinking won't flicker. */
+  settled: boolean;
+  hovered: boolean;
+  menuOpen: boolean;
+  /** The highlighted control sits under the card. */
+  peek: boolean;
+}
+
+/** The shape the top notch takes right now: the view's size, adjusted for hover, menu and peek. */
+export function islandSize(view: NotchView, context: IslandContext): NotchSize {
+  if (context.menuOpen) return "lesson";
+  if (view.size === "orb") return context.settled && !context.hovered ? "orb" : "compact";
+  if (context.peek) return "compact";
+  return view.size;
 }
 
 export type StepState = "done" | "current" | "todo";

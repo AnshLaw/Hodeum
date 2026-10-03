@@ -10,6 +10,7 @@ import type { SurfaceProps } from "./surface";
 
 const HODEY_TAB_SIZE = 42;
 const HODEY_BAR_SIZE = 40;
+const HODEY_BUSY_SIZE = 112;
 
 function StepList({ steps }: { steps: StepItem[] }) {
   return (
@@ -53,6 +54,15 @@ function SidebarBody(props: SurfaceProps) {
     return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   }
   if (view.mode === "idle") return <IdleStart onControl={onControl} notice={view.detail ?? props.bootNotice} />;
+  if (view.busy) {
+    return (
+      <div className="sidebar__busy" role="status">
+        <span className="notch__orb-ring sidebar__busy-ring" aria-hidden="true" />
+        <HodeyFace mood={props.mood} size={HODEY_BUSY_SIZE} />
+        <p className="notch__detail">{view.title}</p>
+      </div>
+    );
+  }
   return (
     <>
       <NotchContent view={view} expanded onControl={onControl} />

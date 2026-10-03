@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { COPY } from "../../lib/copy";
 import { initialState, type HodeState } from "../../features/hode/model";
 import { PACK, guideAction } from "../../features/hode/test-fixtures";
-import { notchView, skillLabel, stepItems } from "./notch-view";
+import { islandSize, notchView, skillLabel, stepItems } from "./notch-view";
 
 const guiding = (overrides: Partial<HodeState> = {}): HodeState => ({
   ...initialState,
@@ -37,6 +37,27 @@ describe("notchView", () => {
   it("lists learned skills on success", () => {
     const view = notchView({ ...initialState, phase: "success", learnedSkills: ["excel.pivot.create"] });
     expect(view.skills).toEqual(["Pivot · Create"]);
+  });
+});
+
+describe("islandSize", () => {
+  const looking = notchView({ ...initialState, phase: "reasoning" });
+  const quiet = { settled: true, hovered: false, menuOpen: false, peek: false };
+
+  it("shrinks to an orb while Hodey looks, keeping the status as its label", () => {
+    expect(looking).toMatchObject({ size: "orb", busy: true, title: COPY.looking });
+    expect(islandSize(looking, quiet)).toBe("orb");
+  });
+
+  it("stays a bar for brief work, on hover, and with the menu open", () => {
+    expect(islandSize(looking, { ...quiet, settled: false })).toBe("compact");
+    expect(islandSize(looking, { ...quiet, hovered: true })).toBe("compact");
+    expect(islandSize(looking, { ...quiet, menuOpen: true })).toBe("lesson");
+  });
+
+  it("steps aside to a bar while guidance covers the target", () => {
+    expect(islandSize(notchView(guiding()), { ...quiet, peek: true })).toBe("compact");
+    expect(islandSize(notchView(guiding()), quiet)).toBe("guidance");
   });
 });
 

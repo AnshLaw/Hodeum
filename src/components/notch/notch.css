@@ -22,10 +22,93 @@
   box-shadow: 0 10px 28px rgb(0 0 0 / 0.26);
   pointer-events: auto;
   interpolate-size: allow-keywords;
+  /* Transitions use the destination's timing: cards spring open, the orb and pill ease in. */
   transition:
-    width var(--hd-dur) var(--hd-ease),
-    height var(--hd-dur) var(--hd-ease),
-    border-radius var(--hd-dur) var(--hd-ease);
+    width 520ms var(--hd-spring),
+    height 520ms var(--hd-spring),
+    margin-top 420ms var(--hd-ease),
+    border-radius 420ms var(--hd-ease);
+}
+
+.notch--idle,
+.notch--compact {
+  transition-duration: var(--hd-dur);
+  transition-timing-function: var(--hd-ease);
+}
+
+/* Looking or thinking: the island pulls away from the edge into a circle around Hodey. */
+.notch--orb {
+  position: relative;
+  height: 44px;
+  min-height: 44px;
+  margin-top: 6px;
+  border-radius: 22px;
+  transition:
+    width 360ms var(--hd-shrink),
+    height 360ms var(--hd-shrink),
+    margin-top 360ms var(--hd-shrink),
+    border-radius 300ms var(--hd-shrink);
+}
+
+.notch__orb {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  animation: orb-in 260ms var(--hd-spring) 120ms both;
+}
+
+/* The face's viewBox leaves room for z's and waves on the right and top; recentre the head. */
+.notch__orb > svg {
+  transform: translate(2px, -2px);
+}
+
+@keyframes orb-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+.notch__orb-ring {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: conic-gradient(from 0turn, transparent 0 58%, var(--hd-accent));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  animation: orb-sweep 1.1s linear infinite;
+}
+
+@keyframes orb-sweep {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.privacy-dots--orb {
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  padding: 0;
+}
+
+.privacy-dots--orb i {
+  width: 5px;
+  height: 5px;
+  box-shadow: 0 0 0 1.5px var(--hd-black);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notch,
+  .notch--orb {
+    transition-duration: 1ms;
+  }
+
+  .notch__orb,
+  .notch__orb-ring {
+    animation: none;
+  }
 }
 
 .notch--idle {
@@ -712,4 +795,20 @@
   40% {
     transform: scale(1.025);
   }
+}
+
+/* Sidebar while Hodey looks: the orb, enlarged, in the middle of the panel. */
+.sidebar__busy {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 40px 16px;
+  animation: hd-fade-in 200ms ease both;
+}
+
+.sidebar__busy-ring {
+  inset: 32px auto auto;
+  width: 128px;
+  height: 128px;
 }

@@ -9,13 +9,14 @@ import { useHodeState } from "../../features/hode/use-hode";
 import { matchGoal } from "../../task-packs/match";
 import { DockMenu } from "./DockMenu";
 import { GoalForm } from "./GoalForm";
-import { useAutoDismiss, useControlHandler, useCoveringTarget, useHitRect, useNotchHover } from "./hooks";
+import { useAutoDismiss, useControlHandler, useCoveringTarget, useHitRect, useNotchHover, useSettled } from "./hooks";
 import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
-import { NOTCH_IDLE_HOVER_WIDTH, NOTCH_WIDTHS, isExpanded, notchView, stepItems } from "./notch-view";
-import { hodeyMood } from "../hodey/mood";
+import { NOTCH_IDLE_HOVER_WIDTH, NOTCH_WIDTHS, islandSize, notchView, stepItems, type NotchSize, type NotchView } from "./notch-view";
+import { HodeyFace } from "../hodey/HodeyFace";
+import { hodeyMood, type HodeyMood } from "../hodey/mood";
 import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
 import type { ActivityState, ActivityTracker } from "../../lib/activity";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
@@ -70,26 +71,52 @@ function useVisionStatus(source?: VisionStatusSource): VisionStatus | undefined 
   return status;
 }
 
+/** Hodey has to be busy this long before the notch shrinks to an orb, so quick reads don't flicker. */
+const ORB_DELAY_MS = 180;
+const ORB_FACE_SIZE = 40;
+const EXPANDED_SIZES: NotchSize[] = ["guidance", "lesson", "success"];
+
+/** Looking or thinking: just Hodey, in its current mood, with a sweeping ring. */
+function Orb({ mood, label, activity }: { mood: HodeyMood; label: string; activity: ActivityState }) {
+  return (
+    <div className="notch__orb" role="status" aria-label={label}>
+      <span className="notch__orb-ring" aria-hidden="true" />
+      <HodeyFace mood={mood} size={ORB_FACE_SIZE} />
+      <PrivacyDots activity={activity} className="privacy-dots--orb" />
+    </div>
+  );
+}
+
+function topBody(props: SurfaceProps, view: NotchView, size: NotchSize, peek: boolean) {
+  const { menuOpen, dock, onControl } = props;
+  if (menuOpen) return <DockMenu prefs={dock.prefs} vision={props.vision} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
+  if (view.mode === "goal") return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
+  if (peek) return null;
+  return <NotchContent view={view} expanded={EXPANDED_SIZES.includes(size)} fallbackDetail={props.bootNotice} onControl={onControl} />;
+}
+
+/** The dynamic island: one surface that morphs between pill, orb, bar and card as Hodey works. */
 function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering: boolean }) {
-  const { menuOpen, hovered, revealed, dock, onControl } = props;
+  const { menuOpen, hovered, revealed } = props;
+  const settled = useSettled(props.view.size === "orb", ORB_DELAY_MS);
   // Step aside to a slim bar while the highlighted control sits under the card; hovering brings it back.
   const peek = props.covering && !hovered && !menuOpen && props.view.mode === "guidance";
-  const view = peek ? { ...props.view, controls: [], progress: props.view.progress } : props.view;
-  const expanded = isExpanded(view) && !peek;
-  const width = menuOpen ? NOTCH_WIDTHS.lesson : peek ? NOTCH_WIDTHS.compact : NOTCH_WIDTHS[view.size];
-  const style = { "--notch-width": `${width}px`, "--notch-hover-width": `${NOTCH_IDLE_HOVER_WIDTH}px` } as CSSProperties;
-  const classes = ["notch", `notch--${peek ? "compact" : view.size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
-  let body;
-  if (menuOpen) body = <DockMenu prefs={dock.prefs} vision={props.vision} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
-  else if (view.mode === "goal") body = <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
-  else if (peek) body = null;
-  else body = <NotchContent view={view} expanded={expanded} fallbackDetail={props.bootNotice} onControl={onControl} />;
+  const size = islandSize(props.view, { settled, hovered, menuOpen, peek });
+  const view = peek ? { ...props.view, controls: [] } : props.view;
+  const style = { "--notch-width": `${NOTCH_WIDTHS[size]}px`, "--notch-hover-width": `${NOTCH_IDLE_HOVER_WIDTH}px` } as CSSProperties;
+  const classes = ["notch", `notch--${size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
   return (
     <div className="notch-stage">
       <section ref={props.surfaceRef} className={classes.filter(Boolean).join(" ")} style={style} aria-label={COPY.idleTitle}>
-        <NotchBar view={view} mood={props.mood} expanded={expanded} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={onControl} onGrip={props.onGrip} activity={props.activity} micStatus={props.micStatus} onToggleMic={props.onToggleMic} onOpenApp={props.onOpenApp} />
-        {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
-        <div aria-live="polite">{body}</div>
+        {size === "orb" ? (
+          <Orb mood={props.mood} label={view.title} activity={props.activity} />
+        ) : (
+          <>
+            <NotchBar view={view} mood={props.mood} expanded={EXPANDED_SIZES.includes(size)} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={props.onControl} onGrip={props.onGrip} activity={props.activity} micStatus={props.micStatus} onToggleMic={props.onToggleMic} onOpenApp={props.onOpenApp} />
+            {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
+            <div aria-live="polite">{topBody(props, view, size, peek)}</div>
+          </>
+        )}
         {!revealed && <PrivacyDots activity={props.activity} className="privacy-dots--sliver" />}
       </section>
     </div>

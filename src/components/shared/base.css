@@ -15,6 +15,9 @@
   --hd-font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --hd-font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --hd-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Growing shapes overshoot a touch and settle, like the Dynamic Island. */
+  --hd-spring: cubic-bezier(0.34, 1.32, 0.5, 1);
+  --hd-shrink: cubic-bezier(0.55, 0, 0.3, 1);
   --hd-dur: 380ms;
 }
 
