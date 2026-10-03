@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useState } from "react";
 import type { Bus } from "../lib/bus";
+import type { BrowserShell } from "../lib/shell";
 import type { MouseButton } from "../providers/mock-perception";
 import { Notch } from "../components/notch/Notch";
 import { GuidanceOverlay } from "../components/overlay/GuidanceOverlay";
@@ -15,18 +16,19 @@ const APP_TABS: { id: StageAppId; label: string }[] = [
   { id: "explorer", label: "File Explorer" },
 ];
 
-/** Mirrors the native Ctrl+Alt+H global shortcut inside the browser. */
-function useAnnotateHotkey(bus: Bus): void {
+/** Mirrors the native Ctrl+Alt+H (Point & Ask) and Ctrl+Alt+N (show/hide) shortcuts in the browser. */
+function useStageHotkeys(bus: Bus, shell: BrowserShell): void {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.altKey && event.code === "KeyH") {
-        event.preventDefault();
-        bus.emit("annotate:start", {});
-      }
+      if (!event.ctrlKey || !event.altKey) return;
+      if (event.code === "KeyH") bus.emit("annotate:start", {});
+      else if (event.code === "KeyN") shell.command("toggle-visibility");
+      else return;
+      event.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [bus]);
+  }, [bus, shell]);
 }
 
 /** Browser-only harness: a pretend desktop where the real notch, overlay, and runtime drive scripted apps. */
@@ -34,7 +36,7 @@ export function Stage({ env }: { env: StageEnvironment }) {
   const [appId, setAppId] = useState<StageAppId>("excel");
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const app = env.apps[appId];
-  useAnnotateHotkey(env.bus);
+  useStageHotkeys(env.bus, env.shell);
 
   const select = (id: StageAppId) => {
     env.select(id);
@@ -66,7 +68,7 @@ export function Stage({ env }: { env: StageEnvironment }) {
           Reset
         </button>
         <span className="stage-hint">
-          <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>H</kbd> Point &amp; Ask · right-click works in File Explorer
+          <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>H</kbd> Point &amp; Ask · <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>N</kbd> show/hide · drag via ⋯ menu
         </span>
       </header>
       <main className="stage-desktop" style={{ width: DESKTOP.width, height: DESKTOP.height }}>

@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import type { PointerEvent, ReactNode } from "react";
 import { COPY } from "../../lib/copy";
-import { CheckIcon, CloseIcon, CrosshairIcon, HodeyGlyph, IconButton, MutedIcon, PauseIcon, VolumeIcon } from "../shared/icons";
+import { CheckIcon, CloseIcon, CrosshairIcon, HodeyGlyph, IconButton, MoreIcon, MutedIcon, PauseIcon, VolumeIcon } from "../shared/icons";
 import type { NotchControl, NotchView } from "./notch-view";
 
 const LABELS: Record<NotchControl, string> = {
@@ -97,29 +97,50 @@ export function SkillChips({ skills }: { skills: string[] }) {
   );
 }
 
-interface BarProps {
+/** Hodey's face is the drag handle: press and drag it to another edge to re-dock. */
+export function Grip({ onGrip, children }: { onGrip: () => void; children: ReactNode }) {
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button === 0) onGrip();
+  };
+  return (
+    <span className="notch__grip" onPointerDown={onPointerDown}>
+      {children}
+    </span>
+  );
+}
+
+export interface BarProps {
   view: NotchView;
   expanded: boolean;
   muted: boolean;
+  menuOpen: boolean;
   onToggleMute: () => void;
+  onToggleMenu: () => void;
   onControl: OnControl;
+  onGrip: () => void;
 }
 
-export function NotchBar({ view, expanded, muted, onToggleMute, onControl }: BarProps) {
+export function NotchBar({ view, expanded, muted, menuOpen, onToggleMute, onToggleMenu, onControl, onGrip }: BarProps) {
+  const showInline = !expanded && !menuOpen && view.mode !== "idle";
   return (
     <header className="notch__bar">
       {view.busy && <span className="notch__scan" aria-hidden="true" />}
-      <HodeyGlyph />
-      <span className={expanded ? "notch__eyebrow" : "notch__bar-title"}>{expanded ? (view.eyebrow ?? COPY.idleTitle) : view.title}</span>
-      {view.progress && <StepDots {...view.progress} />}
+      <Grip onGrip={onGrip}>
+        <HodeyGlyph />
+        <span className={expanded || menuOpen ? "notch__eyebrow" : "notch__bar-title"}>{menuOpen ? COPY.hodeySettings : expanded ? (view.eyebrow ?? COPY.idleTitle) : view.title}</span>
+      </Grip>
+      {view.progress && !menuOpen && <StepDots {...view.progress} />}
       <span className="notch__spacer" />
-      {view.mode === "idle" && <IdleActions onControl={onControl} />}
-      {!expanded && view.mode !== "idle" && <ControlButtons controls={view.controls} onControl={onControl} />}
+      {view.mode === "idle" && !menuOpen && <IdleActions onControl={onControl} />}
+      {showInline && <ControlButtons controls={view.controls} onControl={onControl} />}
       {view.mode !== "idle" && (
         <IconButton label={muted ? COPY.unmute : COPY.mute} onClick={onToggleMute}>
           {muted ? <MutedIcon /> : <VolumeIcon />}
         </IconButton>
       )}
+      <IconButton label={COPY.hodeySettings} onClick={onToggleMenu} pressed={menuOpen}>
+        <MoreIcon />
+      </IconButton>
       <LocalBadge />
     </header>
   );

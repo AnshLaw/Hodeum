@@ -40,6 +40,29 @@ export function savePrefs(storage: WriteStorage, prefs: DockPrefs): void {
   }
 }
 
+/** Commands from the tray menu and Ctrl+Alt+N. Must match ids in src-tauri/src/tray.rs. */
+export type ShellCommand = "toggle-visibility" | "dock-top" | "dock-left" | "dock-right" | "pinned" | "auto";
+
+/** Showing again after Hide pins the notch, so it doesn't immediately tuck away under auto-hide. */
+export function applyCommand(prefs: DockPrefs, command: string): DockPrefs {
+  switch (command as ShellCommand) {
+    case "toggle-visibility":
+      return { ...prefs, visibility: prefs.visibility === "hidden" ? "pinned" : "hidden" };
+    case "dock-top":
+      return { ...prefs, dock: "top" };
+    case "dock-left":
+      return { ...prefs, dock: "left" };
+    case "dock-right":
+      return { ...prefs, dock: "right" };
+    case "pinned":
+    case "auto":
+      return { ...prefs, visibility: command as Visibility };
+    default:
+      console.error(`Unknown shell command: ${command}`);
+      return prefs;
+  }
+}
+
 /** A Hode in progress always needs the notch visible (unless the learner hid it outright). */
 export function hodeActive(phase: HodePhase): boolean {
   return phase !== "idle";

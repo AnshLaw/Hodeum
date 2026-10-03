@@ -59,9 +59,17 @@ export const CheckIcon = () => (
   </svg>
 );
 
-export function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+export const MoreIcon = () => (
+  <svg {...BASE}>
+    <circle cx="3.5" cy="8" r="1.1" fill="currentColor" />
+    <circle cx="8" cy="8" r="1.1" fill="currentColor" />
+    <circle cx="12.5" cy="8" r="1.1" fill="currentColor" />
+  </svg>
+);
+
+export function IconButton({ label, onClick, children, pressed }: { label: string; onClick: () => void; children: ReactNode; pressed?: boolean }) {
   return (
-    <button type="button" className="icon-btn" aria-label={label} title={label} onClick={onClick}>
+    <button type="button" className="icon-btn" aria-label={label} title={label} aria-pressed={pressed} onClick={onClick}>
       {children}
     </button>
   );

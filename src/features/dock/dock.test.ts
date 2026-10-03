@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_PREFS, loadPrefs, reservesSpace, savePrefs, shouldReveal } from "./dock";
+import { DEFAULT_PREFS, applyCommand, loadPrefs, reservesSpace, savePrefs, shouldReveal } from "./dock";
 
 const storage = (value: string | null) => ({ getItem: () => value });
 
@@ -22,6 +22,27 @@ describe("dock preferences", () => {
     let saved = "";
     savePrefs({ setItem: (_key, value) => (saved = value) }, { dock: "right", visibility: "pinned" });
     expect(loadPrefs(storage(saved))).toEqual({ dock: "right", visibility: "pinned" });
+  });
+});
+
+describe("applyCommand", () => {
+  const prefs = { dock: "top", visibility: "auto" } as const;
+
+  it("hides, then shows again pinned", () => {
+    const hidden = applyCommand(prefs, "toggle-visibility");
+    expect(hidden.visibility).toBe("hidden");
+    expect(applyCommand(hidden, "toggle-visibility").visibility).toBe("pinned");
+  });
+
+  it("moves the dock and changes visibility mode", () => {
+    expect(applyCommand(prefs, "dock-right").dock).toBe("right");
+    expect(applyCommand(prefs, "pinned").visibility).toBe("pinned");
+  });
+
+  it("ignores unknown commands", () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(applyCommand(prefs, "explode")).toBe(prefs);
+    errorLog.mockRestore();
   });
 });
 

@@ -7,8 +7,11 @@ import type { NotchControl } from "./notch-view";
 
 const SUCCESS_DISPLAY_MS = 2600;
 
-/** Keeps the native hit-test in sync with the pill as it animates, so only the pill captures clicks. */
-export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShell): void {
+/**
+ * Keeps the native hit-test in sync with the surface as it animates, so only it captures clicks.
+ * `layoutKey` changes when the surface element is swapped (top notch <-> sidebar).
+ */
+export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShell, layoutKey: string): void {
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -16,25 +19,29 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
     const report = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        // Includes transforms, so a tucked-away (auto-hidden) surface reports just its visible sliver.
         const { x, y, width, height } = element.getBoundingClientRect();
         shell.setNotchHitRect({ x, y, width, height }).catch(reportError("Couldn't update the notch hit area"));
       });
     };
     const observer = new ResizeObserver(report);
     observer.observe(element);
+    // Sliding in and out of auto-hide is a transform, which ResizeObserver doesn't see.
+    element.addEventListener("transitionend", report);
     report();
     return () => {
       observer.disconnect();
+      element.removeEventListener("transitionend", report);
       cancelAnimationFrame(frame);
     };
-  }, [ref, shell]);
+  }, [ref, shell, layoutKey]);
 }
 
 /**
  * Hover from both DOM pointer events (browser) and the native hit-test (Tauri), because a window
  * that ignores cursor events never receives pointerleave.
  */
-export function useNotchHover(ref: RefObject<HTMLElement | null>, shell: NativeShell): boolean {
+export function useNotchHover(ref: RefObject<HTMLElement | null>, shell: NativeShell, layoutKey: string): boolean {
   const [hovered, setHovered] = useState(false);
   useEffect(() => {
     const element = ref.current;
@@ -49,7 +56,7 @@ export function useNotchHover(ref: RefObject<HTMLElement | null>, shell: NativeS
       element.removeEventListener("pointerleave", leave);
       stopNative();
     };
-  }, [ref, shell]);
+  }, [ref, shell, layoutKey]);
   return hovered;
 }
 

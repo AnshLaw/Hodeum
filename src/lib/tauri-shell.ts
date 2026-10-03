@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { Dock } from "../features/dock/dock";
 import type { NativeShell } from "./shell";
 import { subscribeTauri } from "./tauri-bus";
 import type { MonitorInfo, Rect } from "./types";
@@ -22,5 +23,25 @@ export class TauriShell implements NativeShell {
 
   onNotchHover(handler: (inside: boolean) => void): () => void {
     return subscribeTauri<boolean>("notch:hover", handler);
+  }
+
+  setDock(dock: Dock, reserve: boolean): Promise<void> {
+    return invoke<void>("set_dock", { dock, reserve });
+  }
+
+  setNotchVisible(visible: boolean): Promise<void> {
+    return invoke<void>("set_notch_visible", { visible });
+  }
+
+  beginNotchDrag(): Promise<void> {
+    return invoke<void>("begin_notch_drag");
+  }
+
+  onDockSnapped(handler: (dock: Dock) => void): () => void {
+    return subscribeTauri<{ dock: Dock }>("dock:snapped", ({ dock }) => handler(dock));
+  }
+
+  onShellCommand(handler: (command: string) => void): () => void {
+    return subscribeTauri<{ command: string }>("shell:command", ({ command }) => handler(command));
   }
 }

@@ -1,15 +1,20 @@
-import { useRef, useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties, type Ref } from "react";
 import type { Bus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
+import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
 import type { TaskPack } from "../../lib/types";
 import type { HodeRuntime } from "../../features/hode/runtime";
 import { useHodeState } from "../../features/hode/use-hode";
 import { matchGoal } from "../../task-packs/match";
+import { DockMenu } from "./DockMenu";
 import { GoalForm } from "./GoalForm";
 import { useAutoDismiss, useControlHandler, useHitRect, useNotchHover } from "./hooks";
 import { NotchBar, NotchContent } from "./NotchParts";
-import { NOTCH_IDLE_HOVER_WIDTH, NOTCH_WIDTHS, isExpanded, notchView } from "./notch-view";
+import { Sidebar } from "./Sidebar";
+import type { SurfaceProps } from "./surface";
+import { useDock, useRevealed } from "./use-dock";
+import { NOTCH_IDLE_HOVER_WIDTH, NOTCH_WIDTHS, isExpanded, notchView, stepItems } from "./notch-view";
 import "./notch.css";
 
 export interface NotchProps {
@@ -21,39 +26,63 @@ export interface NotchProps {
   bootNotice?: string;
 }
 
-export function Notch({ runtime, bus, shell, packs, bootNotice }: NotchProps) {
-  const view = notchView(useHodeState(runtime));
-  const pillRef = useRef<HTMLElement>(null);
-  const [muted, setMuted] = useState(false);
-  const hovered = useNotchHover(pillRef, shell);
-  const onControl = useControlHandler(runtime, bus);
-  useHitRect(pillRef, shell);
-  useAutoDismiss(view.mode === "success", runtime);
-
-  const toggleMute = () => {
-    const next = !muted;
-    setMuted(next);
-    runtime.setMuted(next);
-  };
-  const submitGoal = (goal: string) => runtime.dispatch({ type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs) });
+function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement> }) {
+  const { view, menuOpen, hovered, revealed, dock, onControl } = props;
   const expanded = isExpanded(view);
-  const style = {
-    "--notch-width": `${NOTCH_WIDTHS[view.size]}px`,
-    "--notch-hover-width": `${NOTCH_IDLE_HOVER_WIDTH}px`,
-  } as CSSProperties;
-
+  const width = menuOpen ? NOTCH_WIDTHS.lesson : NOTCH_WIDTHS[view.size];
+  const style = { "--notch-width": `${width}px`, "--notch-hover-width": `${NOTCH_IDLE_HOVER_WIDTH}px` } as CSSProperties;
+  const classes = ["notch", `notch--${view.size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked"];
+  let body;
+  if (menuOpen) body = <DockMenu prefs={dock.prefs} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
+  else if (view.mode === "goal") body = <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
+  else body = <NotchContent view={view} expanded={expanded} fallbackDetail={props.bootNotice} onControl={onControl} />;
   return (
     <div className="notch-stage">
-      <section ref={pillRef} className={`notch notch--${view.size} notch--${view.mode}${hovered ? " notch--hovered" : ""}`} style={style} aria-label={COPY.idleTitle}>
-        <NotchBar view={view} expanded={expanded} muted={muted} onToggleMute={toggleMute} onControl={onControl} />
-        <div aria-live="polite">
-          {view.mode === "goal" ? (
-            <GoalForm packs={packs} shell={shell} notice={view.detail} onSubmit={submitGoal} onClose={() => onControl("dismiss")} />
-          ) : (
-            <NotchContent view={view} expanded={expanded} fallbackDetail={bootNotice} onControl={onControl} />
-          )}
-        </div>
+      <section ref={props.surfaceRef} className={classes.filter(Boolean).join(" ")} style={style} aria-label={COPY.idleTitle}>
+        <NotchBar view={view} expanded={expanded} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={onControl} onGrip={props.onGrip} />
+        <div aria-live="polite">{body}</div>
       </section>
     </div>
   );
+}
+
+/** Hodey's surface: a top-centre notch or a side sidebar, draggable between them, with auto-hide. */
+export function Notch({ runtime, bus, shell, packs, bootNotice }: NotchProps) {
+  const state = useHodeState(runtime);
+  const view = notchView(state);
+  const surfaceRef = useRef<HTMLElement>(null);
+  const [muted, setMuted] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const dock = useDock(shell, state.phase);
+  const layoutKey = dock.prefs.dock;
+  const hovered = useNotchHover(surfaceRef, shell, layoutKey);
+  const revealed = useRevealed(dock.prefs, hovered || menuOpen, state.phase);
+  const onControl = useControlHandler(runtime, bus);
+  useHitRect(surfaceRef, shell, `${layoutKey}:${revealed}`);
+  useAutoDismiss(view.mode === "success", runtime);
+
+  const props: SurfaceProps = {
+    view,
+    steps: stepItems(state),
+    hovered,
+    revealed,
+    muted,
+    menuOpen,
+    dock,
+    packs,
+    shell,
+    bootNotice,
+    onControl,
+    onToggleMute: () => {
+      runtime.setMuted(!muted);
+      setMuted(!muted);
+    },
+    onToggleMenu: () => setMenuOpen((open) => !open),
+    onGrip: () => {
+      shell.beginNotchDrag().catch(reportError("Couldn't start dragging Hodey"));
+    },
+    onSubmitGoal: (goal) => runtime.dispatch({ type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs) }),
+  };
+  if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} />;
+  return <Sidebar {...props} side={dock.prefs.dock} surfaceRef={surfaceRef} />;
 }

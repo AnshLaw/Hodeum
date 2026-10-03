@@ -94,3 +94,22 @@ export function notchView(s: HodeState): NotchView {
       return { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail: COPY.skillLearned, busy: false, controls: [], skills: s.learnedSkills.map(skillLabel) };
   }
 }
+
+export type StepState = "done" | "current" | "todo";
+
+export interface StepItem {
+  id: string;
+  objective: string;
+  state: StepState;
+}
+
+/** The whole Hode as a checklist, for the sidebar. */
+export function stepItems(s: HodeState): StepItem[] {
+  if (!s.pack) return [];
+  const finished = s.phase === "success";
+  return s.pack.steps.map((step, index) => ({
+    id: step.id,
+    objective: step.objective,
+    state: finished || index < s.stepIndex ? "done" : index === s.stepIndex ? "current" : "todo",
+  }));
+}

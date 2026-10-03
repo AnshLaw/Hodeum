@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { COPY } from "../../lib/copy";
 import { initialState, type HodeState } from "../../features/hode/model";
 import { PACK, guideAction } from "../../features/hode/test-fixtures";
-import { notchView, skillLabel } from "./notch-view";
+import { notchView, skillLabel, stepItems } from "./notch-view";
 
 const guiding = (overrides: Partial<HodeState> = {}): HodeState => ({
   ...initialState,
@@ -43,5 +43,16 @@ describe("notchView", () => {
 describe("skillLabel", () => {
   it("humanizes skill ids", () => {
     expect(skillLabel("excel.navigation.insert_tab")).toBe("Navigation · Insert tab");
+  });
+});
+
+describe("stepItems", () => {
+  it("is empty without a Hode", () => {
+    expect(stepItems(initialState)).toEqual([]);
+  });
+
+  it("marks finished, current, and upcoming steps", () => {
+    expect(stepItems(guiding({ stepIndex: 1 })).map((s) => s.state)).toEqual(["done", "current"]);
+    expect(stepItems({ ...guiding(), phase: "success" }).map((s) => s.state)).toEqual(["done", "done"]);
   });
 });
