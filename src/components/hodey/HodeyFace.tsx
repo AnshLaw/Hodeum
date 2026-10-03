@@ -3,8 +3,8 @@ import { MOOD_LABELS, type HodeyMood } from "./mood";
 
 /** Hodey's head is the notch's own silhouette: flat where it meets the screen edge, round below. */
 const HEAD = "M8 10h48v22a24 24 0 0 1-24 24A24 24 0 0 1 8 32z";
-/** Extra room around the 64-unit head for z's, the ear, thought dots, and sparkles. */
-const VIEW_BOX = "-8 -14 84 84";
+/** Extra room around the 64-unit head for z's, sound waves, thought dots, and sparkles. */
+const VIEW_BOX = "-8 -14 90 84";
 const DEFAULT_SIZE = 20;
 
 const OpenEyes = ({ className = "" }: { className?: string }) => (
@@ -37,18 +37,24 @@ function Sleeping(): ReactNode {
   );
 }
 
+/** Wavefronts from a voice off to the right, curving toward Hodey and fading as they arrive. */
+const SOUND_WAVES = [
+  { d: "M70 22q-5 9 0 18", delay: 0 },
+  { d: "M74 17q-7 14 0 28", delay: 0.4 },
+  { d: "M78 12q-9 19 0 38", delay: 0.8 },
+];
+
 function Listening(): ReactNode {
   return (
     <>
       <g className="hodey__face hodey__face--lean">
         <path className="hodey__head" d={HEAD} />
-        <path className="hodey__ear" d="M54 19c8-3 13 4 12 11-1 7-6 10-12 9" />
-        <path className="hodey__ear-inner" d="M57 24c4-1 6 2 5 5" />
         <OpenEyes className="hodey__eyes--right" />
         <ellipse className="hodey__ink" cx="35" cy="43" rx="3" ry="3.5" />
       </g>
-      <path className="hodey__wave" style={{ animationDelay: "0s" }} d="M71 22q4 7 0 14" />
-      <path className="hodey__wave" style={{ animationDelay: "0.35s" }} d="M75 18q6 11 0 22" />
+      {SOUND_WAVES.map((wave) => (
+        <path key={wave.d} className="hodey__wave" style={{ animationDelay: `${wave.delay}s` }} d={wave.d} />
+      ))}
     </>
   );
 }

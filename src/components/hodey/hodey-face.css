@@ -103,54 +103,55 @@
   }
 }
 
-/* ---- Listening: leans its ear toward you while sound flows in ---- */
+/* ---- Listening: tilts toward the voice with a small "mm-hm" bob while sound arrives ---- */
 
 .hodey__face--lean {
-  animation: hodey-lean 0.5s var(--hd-ease, ease-out) both;
+  animation:
+    hodey-lean 0.5s var(--hd-ease, ease-out) both,
+    hodey-attend 2.6s ease-in-out 0.5s infinite;
 }
 
 @keyframes hodey-lean {
   to {
-    transform: rotate(7deg) translateX(1px);
+    transform: rotate(8deg) translateX(1px);
   }
 }
 
-.hodey__ear {
-  fill: var(--hodey-shade);
-}
-
-.hodey__ear-inner {
-  fill: none;
-  stroke: var(--hodey-ink);
-  stroke-width: 2;
-  stroke-linecap: round;
-  opacity: 0.55;
+@keyframes hodey-attend {
+  0%,
+  100% {
+    transform: rotate(8deg) translateX(1px);
+  }
+  50% {
+    transform: rotate(4deg) translate(1px, 1.5px);
+  }
 }
 
 .hodey__eyes--right {
   transform: translateX(3px);
 }
 
+/* Waves start out by the speaker and travel left into Hodey, fading as they reach its face. */
 .hodey__wave {
   fill: none;
   stroke: var(--hodey-float);
   stroke-width: 2.6;
   stroke-linecap: round;
   opacity: 0;
-  animation: hodey-wave 1.1s ease-out infinite;
+  animation: hodey-wave 1.2s ease-in infinite;
 }
 
 @keyframes hodey-wave {
   0% {
     opacity: 0;
-    transform: translateX(5px);
+    transform: translateX(6px);
   }
-  40% {
-    opacity: 0.85;
+  35% {
+    opacity: 0.9;
   }
   100% {
     opacity: 0;
-    transform: translateX(-4px);
+    transform: translateX(-12px);
   }
 }
 
