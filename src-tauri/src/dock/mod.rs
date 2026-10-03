@@ -1,4 +1,5 @@
 pub mod appbar;
+pub mod arrange;
 pub mod geometry;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,6 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, 
 
 use crate::surfaces::NOTCH;
 use appbar::AppBar;
+use arrange::Arranged;
 use geometry::{dock_rect, snap_dock, Dock, PxRect};
 
 /// ~60 Hz: the window tracks the cursor smoothly while dragging.
@@ -18,8 +20,25 @@ const SNAPPED_EVENT: &str = "dock:snapped";
 
 #[derive(Default)]
 pub struct DockState {
-    pub appbar: AppBar,
+    appbar: AppBar,
+    arranged: Arranged,
     dragging: AtomicBool,
+}
+
+impl DockState {
+    /// Gives the sidebar's screen space back and returns moved windows to where they were.
+    pub fn release_space(&self) -> Result<(), String> {
+        self.appbar.release()?;
+        self.arranged.restore()
+    }
+}
+
+/// The work area left beside a granted sidebar strip.
+pub fn free_beside(dock: Dock, work: PxRect, strip: PxRect) -> PxRect {
+    match dock {
+        Dock::Right => PxRect { x: work.x, width: (strip.x - work.x).max(0) as u32, ..work },
+        _ => PxRect { x: strip.right(), width: (work.right() - strip.right()).max(0) as u32, ..work },
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -48,20 +67,23 @@ fn place(window: &WebviewWindow, rect: PxRect) -> Result<(), String> {
     window.set_position(PhysicalPosition::new(rect.x, rect.y)).map_err(|e| e.to_string())
 }
 
-/// Moves the notch window to a dock; side docks with `reserve` become an app bar.
+/// Moves the notch window to a dock; side docks with `reserve` become an app bar (copilot mode).
 #[tauri::command]
 pub fn set_dock(app: AppHandle, dock: Dock, reserve: bool, state: State<'_, DockState>) -> Result<(), String> {
     state.dragging.store(false, Ordering::SeqCst);
     let window = notch(&app)?;
     let (full, work, scale) = monitor_rects(&window)?;
     if dock == Dock::Top || !reserve {
-        state.appbar.release()?;
+        state.release_space()?;
         return place(&window, dock_rect(dock, full, work, scale));
     }
     let width = dock_rect(dock, full, work, scale).width;
     let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
     let granted = state.appbar.reserve(hwnd, dock, full, width)?;
-    place(&window, granted)
+    place(&window, granted)?;
+    // Copilot: maximized windows reflow on their own; move normal ones that overlap the sidebar.
+    let strip = PxRect { y: work.y, height: work.height, ..granted };
+    state.arranged.make_room(strip, free_beside(dock, work, strip))
 }
 
 #[tauri::command]
@@ -115,4 +137,19 @@ fn finish_drag(app: &AppHandle) -> Result<(), String> {
     let (full, _, _) = monitor_rects(&notch(app)?)?;
     let dock = snap_dock(cursor.x, full);
     app.emit(SNAPPED_EVENT, Snapped { dock }).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const WORK: PxRect = PxRect { x: 0, y: 0, width: 1920, height: 1040 };
+
+    #[test]
+    fn leaves_the_rest_of_the_work_area_beside_the_sidebar() {
+        let left = PxRect { x: 0, y: 0, width: 360, height: 1040 };
+        assert_eq!(free_beside(Dock::Left, WORK, left), PxRect { x: 360, y: 0, width: 1560, height: 1040 });
+        let right = PxRect { x: 1560, y: 0, width: 360, height: 1040 };
+        assert_eq!(free_beside(Dock::Right, WORK, right), PxRect { x: 0, y: 0, width: 1560, height: 1040 });
+    }
 }

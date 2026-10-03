@@ -1,11 +1,15 @@
 import { COPY } from "../../lib/copy";
-import type { Dock, DockPrefs, Visibility } from "../../features/dock/dock";
+import type { Dock, DockPrefs, SidebarStyle, Visibility } from "../../features/dock/dock";
 import type { VisionStatus } from "../../providers/vision/types";
 
 const DOCK_OPTIONS: [Dock, string][] = [
   ["top", COPY.dockTop],
   ["left", COPY.dockLeft],
   ["right", COPY.dockRight],
+];
+const SIDEBAR_OPTIONS: [SidebarStyle, string][] = [
+  ["copilot", COPY.sidebarCopilot],
+  ["floating", COPY.sidebarFloating],
 ];
 const IDLE_OPTIONS: [Exclude<Visibility, "hidden">, string][] = [
   ["pinned", COPY.alwaysShow],
@@ -63,6 +67,12 @@ export function DockMenu({ prefs, vision, onChange, onHide }: DockMenuProps) {
   return (
     <div className="notch__content dock-menu">
       <Segmented label={COPY.position} options={DOCK_OPTIONS} value={prefs.dock} onSelect={(dock) => onChange({ dock })} />
+      {prefs.dock !== "top" && (
+        <>
+          <Segmented label={COPY.sidebarStyle} options={SIDEBAR_OPTIONS} value={prefs.sidebar} onSelect={(sidebar) => onChange({ sidebar })} />
+          {prefs.sidebar === "copilot" && <p className="dock-menu__hint">{COPY.sidebarCopilotTip}</p>}
+        </>
+      )}
       <Segmented label={COPY.whenIdle} options={IDLE_OPTIONS} value={idle} onSelect={(visibility) => onChange({ visibility })} />
       <div className="dock-menu__footer">
         <button type="button" className="btn" onClick={onHide}>

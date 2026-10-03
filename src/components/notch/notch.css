@@ -27,7 +27,8 @@
     width 520ms var(--hd-spring),
     height 520ms var(--hd-spring),
     margin-top 420ms var(--hd-ease),
-    border-radius 420ms var(--hd-ease);
+    border-radius 420ms var(--hd-ease),
+    transform var(--hd-dur) var(--hd-ease);
 }
 
 .notch--idle,
@@ -47,7 +48,8 @@
     width 360ms var(--hd-shrink),
     height 360ms var(--hd-shrink),
     margin-top 360ms var(--hd-shrink),
-    border-radius 300ms var(--hd-shrink);
+    border-radius 300ms var(--hd-shrink),
+    transform var(--hd-dur) var(--hd-ease);
 }
 
 .notch__orb {
@@ -363,6 +365,9 @@
 .notch,
 .sidebar {
   --sliver: 5px;
+}
+
+.sidebar {
   transition:
     width var(--hd-dur) var(--hd-ease),
     height var(--hd-dur) var(--hd-ease),
@@ -521,6 +526,28 @@
   width: 100%;
   max-width: 360px;
   border-radius: 0;
+}
+
+/* Copilot: part of the desktop, flush to the edge, with a hairline where windows begin. */
+.sidebar--copilot.sidebar--active {
+  box-shadow: none;
+}
+
+.sidebar--copilot.sidebar--left.sidebar--active {
+  border-right: 1px solid var(--hd-line);
+}
+
+.sidebar--copilot.sidebar--right.sidebar--active {
+  border-left: 1px solid var(--hd-line);
+}
+
+/* Floating: a card hovering over windows, which keep their space. */
+.sidebar--floating.sidebar--active {
+  align-self: center;
+  width: 340px;
+  max-height: calc(100% - 20px);
+  margin: 0 10px;
+  border-radius: 18px;
 }
 
 .sidebar--collapsed {

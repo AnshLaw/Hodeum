@@ -32,7 +32,7 @@ pub fn alt_tab_eligible(visible: bool, cloaked: bool, ex_style: u32, owned: bool
     visible && !cloaked && !tool && (!owned || app_window)
 }
 
-fn is_switchable(hwnd: HWND) -> bool {
+pub fn is_switchable(hwnd: HWND) -> bool {
     let mut cloaked = 0u32;
     // SAFETY: all calls tolerate stale handles; `cloaked` is a u32 out-parameter of the size passed.
     unsafe {

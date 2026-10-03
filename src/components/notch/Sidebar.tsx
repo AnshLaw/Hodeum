@@ -71,11 +71,14 @@ function SidebarBody(props: SurfaceProps) {
   );
 }
 
-/** Side dock: a slim tab when idle, a full-height panel while a Hode runs. */
+/** Side dock: a slim tab when idle, a full-height panel while a Hode runs (or always, as a pinned copilot). */
 export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceRef: Ref<HTMLElement> }) {
   const { side, view, hovered, menuOpen, revealed, muted, surfaceRef } = props;
-  const collapsed = view.mode === "idle" && !hovered && !menuOpen;
-  const classes = ["sidebar", `sidebar--${side}`, collapsed ? "sidebar--collapsed" : "", view.mode !== "idle" ? "sidebar--active" : "", revealed ? "" : "sidebar--tucked"];
+  const { sidebar: style, visibility } = props.dock.prefs;
+  // A pinned copilot keeps its panel open: Windows has already given it the space.
+  const panelOpen = view.mode !== "idle" || (style === "copilot" && visibility === "pinned");
+  const collapsed = !panelOpen && !hovered && !menuOpen;
+  const classes = ["sidebar", `sidebar--${side}`, `sidebar--${style}`, collapsed ? "sidebar--collapsed" : "", panelOpen ? "sidebar--active" : "", revealed ? "" : "sidebar--tucked"];
   return (
     <div className={`sidebar-stage sidebar-stage--${side}`}>
       <aside ref={surfaceRef} className={classes.filter(Boolean).join(" ")} aria-label={COPY.idleTitle}>

@@ -4,13 +4,17 @@ export const DOCKS = ["top", "left", "right"] as const;
 export type Dock = (typeof DOCKS)[number];
 export const VISIBILITIES = ["pinned", "auto", "hidden"] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
+/** Copilot: a real side panel that windows move aside for. Floating: hovers over windows. */
+export const SIDEBAR_STYLES = ["copilot", "floating"] as const;
+export type SidebarStyle = (typeof SIDEBAR_STYLES)[number];
 
 export interface DockPrefs {
   dock: Dock;
   visibility: Visibility;
+  sidebar: SidebarStyle;
 }
 
-export const DEFAULT_PREFS: DockPrefs = { dock: "top", visibility: "auto" };
+export const DEFAULT_PREFS: DockPrefs = { dock: "top", visibility: "auto", sidebar: "copilot" };
 const PREFS_KEY = "hodeum.dock";
 
 type ReadStorage = Pick<Storage, "getItem">;
@@ -29,6 +33,7 @@ export function loadPrefs(storage: ReadStorage): DockPrefs {
   return {
     dock: DOCKS.includes(saved.dock as Dock) ? (saved.dock as Dock) : DEFAULT_PREFS.dock,
     visibility: VISIBILITIES.includes(saved.visibility as Visibility) ? (saved.visibility as Visibility) : DEFAULT_PREFS.visibility,
+    sidebar: SIDEBAR_STYLES.includes(saved.sidebar as SidebarStyle) ? (saved.sidebar as SidebarStyle) : DEFAULT_PREFS.sidebar,
   };
 }
 
@@ -41,7 +46,7 @@ export function savePrefs(storage: WriteStorage, prefs: DockPrefs): void {
 }
 
 /** Commands from the tray menu and Ctrl+Alt+N. Must match ids in src-tauri/src/tray.rs. */
-export type ShellCommand = "toggle-visibility" | "dock-top" | "dock-left" | "dock-right" | "pinned" | "auto";
+export type ShellCommand = "toggle-visibility" | "dock-top" | "dock-left" | "dock-right" | "pinned" | "auto" | "sidebar-copilot" | "sidebar-floating";
 
 /** Showing again after Hide pins the notch, so it doesn't immediately tuck away under auto-hide. */
 export function applyCommand(prefs: DockPrefs, command: string): DockPrefs {
@@ -57,6 +62,10 @@ export function applyCommand(prefs: DockPrefs, command: string): DockPrefs {
     case "pinned":
     case "auto":
       return { ...prefs, visibility: command as Visibility };
+    case "sidebar-copilot":
+      return { ...prefs, sidebar: "copilot" };
+    case "sidebar-floating":
+      return { ...prefs, sidebar: "floating" };
     default:
       console.error(`Unknown shell command: ${command}`);
       return prefs;
@@ -79,7 +88,11 @@ export function shouldReveal(visibility: Visibility, hovered: boolean, phase: Ho
   }
 }
 
-/** Side docks reserve screen space (an app bar) only while a Hode is active, so idle Hodey costs no width. */
-export function reservesSpace(dock: Dock, phase: HodePhase, visibility: Visibility): boolean {
-  return dock !== "top" && visibility !== "hidden" && hodeActive(phase);
+/**
+ * A copilot sidebar reserves its width (an app bar, with windows moved aside) while it's meant to be
+ * open: always when pinned, during a Hode under auto-hide. Floating sidebars and the top notch never do.
+ */
+export function reservesSpace(prefs: DockPrefs, phase: HodePhase): boolean {
+  if (prefs.dock === "top" || prefs.sidebar !== "copilot") return false;
+  return prefs.visibility === "pinned" || (prefs.visibility === "auto" && hodeActive(phase));
 }

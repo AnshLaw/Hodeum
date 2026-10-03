@@ -94,7 +94,7 @@ pub fn run() {
     app.run(|app, event| {
         // Never leave screen space reserved after Hodeum exits.
         if let RunEvent::Exit = event {
-            if let Err(error) = app.state::<dock::DockState>().appbar.release() {
+            if let Err(error) = app.state::<dock::DockState>().release_space() {
                 eprintln!("couldn't release the sidebar's screen space: {error}");
             }
             if let Err(error) = app.state::<vlm::Vlm>().stop() {

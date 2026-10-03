@@ -5,11 +5,11 @@ const storage = (value: string | null) => ({ getItem: () => value });
 
 describe("dock preferences", () => {
   it("defaults to the top notch with auto-hide", () => {
-    expect(loadPrefs(storage(null))).toEqual({ dock: "top", visibility: "auto" });
+    expect(loadPrefs(storage(null))).toEqual({ dock: "top", visibility: "auto", sidebar: "copilot" });
   });
 
   it("keeps valid fields and replaces invalid ones", () => {
-    expect(loadPrefs(storage(JSON.stringify({ dock: "left", visibility: "sideways" })))).toEqual({ dock: "left", visibility: "auto" });
+    expect(loadPrefs(storage(JSON.stringify({ dock: "left", visibility: "sideways" })))).toEqual({ dock: "left", visibility: "auto", sidebar: "copilot" });
   });
 
   it("survives corrupt storage", () => {
@@ -20,13 +20,13 @@ describe("dock preferences", () => {
 
   it("round-trips through storage", () => {
     let saved = "";
-    savePrefs({ setItem: (_key, value) => (saved = value) }, { dock: "right", visibility: "pinned" });
-    expect(loadPrefs(storage(saved))).toEqual({ dock: "right", visibility: "pinned" });
+    savePrefs({ setItem: (_key, value) => (saved = value) }, { dock: "right", visibility: "pinned", sidebar: "floating" });
+    expect(loadPrefs(storage(saved))).toEqual({ dock: "right", visibility: "pinned", sidebar: "floating" });
   });
 });
 
 describe("applyCommand", () => {
-  const prefs = { dock: "top", visibility: "auto" } as const;
+  const prefs = { dock: "top", visibility: "auto", sidebar: "copilot" } as const;
 
   it("hides, then shows again pinned", () => {
     const hidden = applyCommand(prefs, "toggle-visibility");
@@ -37,6 +37,7 @@ describe("applyCommand", () => {
   it("moves the dock and changes visibility mode", () => {
     expect(applyCommand(prefs, "dock-right").dock).toBe("right");
     expect(applyCommand(prefs, "pinned").visibility).toBe("pinned");
+    expect(applyCommand(prefs, "sidebar-floating").sidebar).toBe("floating");
   });
 
   it("ignores unknown commands", () => {
@@ -58,10 +59,16 @@ describe("visibility rules", () => {
     expect(shouldReveal("auto", false, "guiding")).toBe(true);
   });
 
-  it("reserves screen space only for an active Hode on a side dock", () => {
-    expect(reservesSpace("left", "guiding", "auto")).toBe(true);
-    expect(reservesSpace("left", "idle", "pinned")).toBe(false);
-    expect(reservesSpace("top", "guiding", "pinned")).toBe(false);
-    expect(reservesSpace("right", "guiding", "hidden")).toBe(false);
+  it("a copilot sidebar reserves space while pinned, or under auto-hide while a Hode runs", () => {
+    const copilot = { dock: "left", visibility: "auto", sidebar: "copilot" } as const;
+    expect(reservesSpace(copilot, "guiding")).toBe(true);
+    expect(reservesSpace(copilot, "idle")).toBe(false);
+    expect(reservesSpace({ ...copilot, visibility: "pinned" }, "idle")).toBe(true);
+    expect(reservesSpace({ ...copilot, visibility: "hidden" }, "guiding")).toBe(false);
+    expect(reservesSpace({ ...copilot, dock: "top" }, "guiding")).toBe(false);
+  });
+
+  it("a floating sidebar never reserves space", () => {
+    expect(reservesSpace({ dock: "right", visibility: "pinned", sidebar: "floating" }, "guiding")).toBe(false);
   });
 });

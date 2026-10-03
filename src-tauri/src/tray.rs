@@ -9,12 +9,14 @@ use crate::dock::DockState;
 pub const SHELL_COMMAND_EVENT: &str = "shell:command";
 const QUIT: &str = "quit";
 const OPEN_APP: &str = "open-app";
-const COMMANDS: [(&str, &str); 8] = [
+const COMMANDS: [(&str, &str); 10] = [
     (OPEN_APP, "Open Hodeum\tCtrl+Alt+J"),
     ("toggle-visibility", "Show / hide Hodey\tCtrl+Alt+N"),
     ("dock-top", "Top"),
     ("dock-left", "Left side"),
     ("dock-right", "Right side"),
+    ("sidebar-copilot", "Copilot (move windows aside)"),
+    ("sidebar-floating", "Floating"),
     ("pinned", "Always show"),
     ("auto", "Auto-hide"),
     (QUIT, "Quit Hodeum"),
@@ -39,8 +41,9 @@ fn item(app: &AppHandle, id: &str) -> tauri::Result<MenuItem<tauri::Wry>> {
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let dock = Submenu::with_items(app, "Position", true, &[&item(app, "dock-top")?, &item(app, "dock-left")?, &item(app, "dock-right")?])?;
     let visibility = Submenu::with_items(app, "Visibility", true, &[&item(app, "pinned")?, &item(app, "auto")?])?;
+    let sidebar = Submenu::with_items(app, "Sidebar style", true, &[&item(app, "sidebar-copilot")?, &item(app, "sidebar-floating")?])?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&item(app, OPEN_APP)?, &item(app, "toggle-visibility")?, &dock, &visibility, &separator, &item(app, QUIT)?])?;
+    let menu = Menu::with_items(app, &[&item(app, OPEN_APP)?, &item(app, "toggle-visibility")?, &dock, &sidebar, &visibility, &separator, &item(app, QUIT)?])?;
     let mut builder = TrayIconBuilder::with_id("hodeum").tooltip("Hodey").menu(&menu).on_menu_event(|app, event| {
         let id = event.id().as_ref();
         if id == QUIT {
@@ -62,7 +65,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
 
 /// Gives reserved screen space back before exiting.
 pub fn quit(app: &AppHandle) {
-    if let Err(error) = app.state::<DockState>().appbar.release() {
+    if let Err(error) = app.state::<DockState>().release_space() {
         eprintln!("couldn't release the sidebar's screen space: {error}");
     }
     app.exit(0);

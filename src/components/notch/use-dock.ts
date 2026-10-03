@@ -28,7 +28,7 @@ export function useDock(shell: NativeShell, phase: HodePhase): DockController {
     const storage = browserStorage();
     return storage ? loadPrefs(storage) : loadPrefs({ getItem: () => null });
   });
-  const reserve = reservesSpace(prefs.dock, phase, prefs.visibility);
+  const reserve = reservesSpace(prefs, phase);
 
   useEffect(() => {
     const storage = browserStorage();
