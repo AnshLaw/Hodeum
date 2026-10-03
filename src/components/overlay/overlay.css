@@ -1,0 +1,213 @@
+.overlay-root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  font-family: var(--hd-font);
+  pointer-events: none;
+}
+
+.guidance {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.spotlight {
+  fill: rgb(0 0 0 / 0.3);
+  fill-rule: evenodd;
+  animation: hd-fade-in 240ms ease both;
+}
+
+.hl {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hl-in 280ms var(--hd-ease) both;
+}
+
+@keyframes hl-in {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
+.hl rect {
+  fill: none;
+}
+
+.hl__under {
+  stroke: var(--hd-outline);
+  stroke-width: 6;
+}
+
+.hl__ring {
+  stroke: var(--hd-accent);
+  stroke-width: 2.5;
+}
+
+.hl--broad .hl__under {
+  stroke-opacity: 0.55;
+}
+
+.hl--broad .hl__ring {
+  stroke-dasharray: 7 5;
+}
+
+.hl__pulse {
+  stroke: var(--hd-accent);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hl-pulse 1.8s var(--hd-ease) 300ms infinite;
+}
+
+@keyframes hl-pulse {
+  from {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+}
+
+.arrow path {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.arrow__under {
+  stroke: var(--hd-outline);
+  stroke-width: 7;
+  animation: hd-fade-in 200ms ease 120ms both;
+}
+
+.arrow__line {
+  stroke: var(--hd-accent);
+  stroke-width: 3.5;
+  stroke-dasharray: 100;
+  animation: arrow-draw 420ms var(--hd-ease) 120ms both;
+}
+
+@keyframes arrow-draw {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.arrow .arrow__head {
+  fill: var(--hd-accent);
+  stroke: var(--hd-outline);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  animation: hd-fade-in 160ms ease 460ms both;
+}
+
+.pin rect {
+  fill: none;
+}
+
+.pin__under {
+  stroke: rgb(0 0 0 / 0.55);
+  stroke-width: 3.5;
+}
+
+.pin__line {
+  stroke: rgb(255 255 255 / 0.85);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+.label-chip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--hd-accent-ink);
+  white-space: nowrap;
+  background: var(--hd-accent);
+  box-shadow: 0 0 0 1.5px var(--hd-outline);
+  animation: hd-fade-in 200ms ease 160ms both;
+}
+
+.annotate {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  background: rgb(0 0 0 / 0.12);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  animation: hd-fade-in 140ms ease both;
+}
+
+.annotate__marks {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.annotate__marks :is(rect, circle) {
+  fill: rgb(255 178 36 / 0.1);
+  stroke: var(--hd-accent);
+  stroke-width: 2;
+}
+
+.annotate__marks polyline {
+  fill: none;
+  stroke: var(--hd-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.composer {
+  position: absolute;
+  padding: 12px;
+  border: 1px solid var(--hd-line);
+  border-radius: 12px;
+  color: var(--hd-text);
+  background: var(--hd-surface);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.42);
+  cursor: default;
+  animation: composer-in 200ms var(--hd-ease) both;
+}
+
+@keyframes composer-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+.composer__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--hd-text-2);
+}
+
+.composer__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip--focus {
+  border-style: dashed;
+}
+
+.composer__hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--hd-text-3);
+}

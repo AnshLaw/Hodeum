@@ -1,0 +1,276 @@
+.notch-stage {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  font-family: var(--hd-font);
+  color: var(--hd-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A hardware-like cutout: flush with the top edge, square on top, rounded below. */
+.notch {
+  width: var(--notch-width);
+  height: auto;
+  min-height: 34px;
+  overflow: hidden;
+  border-radius: 0 0 20px 20px;
+  font-size: 13px;
+  line-height: 1.4;
+  background: var(--hd-black);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.26);
+  pointer-events: auto;
+  interpolate-size: allow-keywords;
+  transition:
+    width var(--hd-dur) var(--hd-ease),
+    height var(--hd-dur) var(--hd-ease),
+    border-radius var(--hd-dur) var(--hd-ease);
+}
+
+.notch--idle {
+  border-radius: 0 0 16px 16px;
+}
+
+.notch--idle.notch--hovered,
+.notch--idle:focus-within {
+  width: var(--notch-hover-width);
+}
+
+.notch__bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px 0 13px;
+}
+
+.notch--compact .notch__bar {
+  height: 44px;
+  padding-left: 15px;
+}
+
+.notch--guidance .notch__bar,
+.notch--lesson .notch__bar,
+.notch--success .notch__bar {
+  height: 38px;
+  padding-left: 16px;
+}
+
+.glyph {
+  flex: none;
+  color: var(--hd-text);
+}
+
+.notch__bar-title {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.notch__eyebrow {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--hd-text-2);
+  white-space: nowrap;
+}
+
+.notch__spacer {
+  flex: 1;
+}
+
+.notch__scan {
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  overflow: hidden;
+}
+
+.notch__scan::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: var(--hd-accent);
+  animation: notch-scan 1.3s var(--hd-ease) infinite;
+}
+
+@keyframes notch-scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+.notch__content {
+  padding: 0 16px 14px;
+  animation: notch-content-in 240ms var(--hd-ease) 90ms both;
+}
+
+@keyframes notch-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.notch__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--hd-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-wrap: pretty;
+}
+
+.notch__title .check {
+  flex: none;
+  color: var(--hd-ok);
+}
+
+.notch__detail {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--hd-text-2);
+  text-wrap: pretty;
+}
+
+.notch__detail--warn {
+  color: var(--hd-accent);
+}
+
+.notch__subline {
+  margin: -6px 0 0;
+  padding: 0 14px 10px 37px;
+  font-size: 11.5px;
+  color: var(--hd-text-2);
+  animation: hd-fade-in 200ms ease both;
+}
+
+.notch__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.notch__inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.idle-actions {
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.notch--hovered .idle-actions,
+.notch--idle:focus-within .idle-actions {
+  display: flex;
+  animation: hd-fade-in 180ms ease 120ms both;
+}
+
+.local-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding-right: 6px;
+  font-size: 11px;
+  color: var(--hd-text-2);
+}
+
+.local-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--hd-ok);
+}
+
+.step-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.step-dots i {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.16);
+  transition: background 240ms ease;
+}
+
+.step-dots i[data-state="done"] {
+  background: var(--hd-accent);
+}
+
+.step-dots i[data-state="current"] {
+  background: rgb(255 255 255 / 0.62);
+}
+
+.skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skill-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 6px;
+  border-radius: 11px;
+  font-size: 11.5px;
+  color: var(--hd-text);
+  background: rgb(61 214 140 / 0.12);
+}
+
+.skill-chips .check {
+  width: 12px;
+  height: 12px;
+  color: var(--hd-ok);
+}
+
+.goal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: -2px;
+}
+
+.goal__label {
+  display: block;
+  margin: 8px 0 6px;
+  font-size: 12px;
+  color: var(--hd-text-2);
+}
+
+.goal__field {
+  display: flex;
+  gap: 6px;
+}
+
+.goal__field .btn {
+  height: 32px;
+}
+
+.goal__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}

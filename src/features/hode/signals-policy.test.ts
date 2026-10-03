@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { StateSignal } from "../../lib/types";
 import { applyOutcome, confidenceBand, escalate, nextStoredLevel, overlayFor, relax } from "./policy";
 import { becameTrue, evaluateSignal, nameMatches } from "./signals";
 import { DATA_SELECTED, HOME_SELECTED, INSERT_BOUNDS, guideAction } from "./test-fixtures";
@@ -25,7 +26,7 @@ describe("evaluateSignal", () => {
   });
 
   it("only reports a transition into the state", () => {
-    const signal = { kind: "element_selected", names: ["Data"] } as const;
+    const signal: StateSignal = { kind: "element_selected", names: ["Data"] };
     expect(becameTrue(signal, HOME_SELECTED, DATA_SELECTED)).toBe(true);
     expect(becameTrue(signal, DATA_SELECTED, DATA_SELECTED)).toBe(false);
     expect(becameTrue(signal, undefined, DATA_SELECTED)).toBe(true);
