@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.vite/
+.env
+.env.*
+!.env.example
+src-tauri/target/
+src-tauri/gen/
+*.db
+*.sqlite
+*.sqlite3
+*.gguf
+*.onnx
+*.wav
+*.png
+*.jpg
+*.jpeg
