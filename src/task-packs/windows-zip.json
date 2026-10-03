@@ -1,0 +1,57 @@
+{
+  "id": "windows-zip",
+  "title": "Zip files",
+  "app": "File Explorer",
+  "goalPhrases": ["zip files", "zip", "compress", "make a zip"],
+  "prerequisites": ["Open File Explorer and select the files you want to zip."],
+  "steps": [
+    {
+      "id": "open-menu",
+      "objective": "Right-click your selected files",
+      "skill": "windows.explorer.context_menu",
+      "target": { "names": ["Items View"], "role": "list", "label": "Your files" },
+      "speech": {
+        "demonstrate": "Right-click one of the files you selected. A menu will open.",
+        "guide": "Right-click your selected files.",
+        "hint": "Which mouse button shows more options?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Right-clicking opens a menu of actions for whatever you clicked.",
+      "success": { "kind": "element_visible", "names": ["Compress to..."] },
+      "mistakes": []
+    },
+    {
+      "id": "choose-compress",
+      "objective": "Choose Compress to…",
+      "skill": "windows.explorer.compress",
+      "target": { "names": ["Compress to..."], "role": "menu item" },
+      "speech": {
+        "demonstrate": "Choose Compress to… in the menu.",
+        "guide": "Choose Compress to…",
+        "hint": "Look for the option about making files smaller.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Compressing packs files into one smaller archive that's easy to share.",
+      "success": { "kind": "element_visible", "names": ["ZIP File"] },
+      "mistakes": []
+    },
+    {
+      "id": "choose-zip",
+      "objective": "Choose ZIP File",
+      "skill": "windows.explorer.compress",
+      "target": { "names": ["ZIP File"], "role": "menu item" },
+      "speech": {
+        "demonstrate": "Click ZIP File. Windows makes the archive right next to your files.",
+        "guide": "Click ZIP File.",
+        "hint": "Which format is the common one?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "ZIP works everywhere — any computer can open it without extra software.",
+      "success": { "kind": "element_visible", "names": ["*.zip"] },
+      "mistakes": []
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "id": "excel-pivot",
+  "title": "Make a PivotTable",
+  "app": "Excel",
+  "goalPhrases": ["pivot table", "pivottable", "pivot", "summarize data in excel"],
+  "prerequisites": ["Open the sales workbook and click any cell inside the table."],
+  "steps": [
+    {
+      "id": "open-insert",
+      "objective": "Open the Insert tab",
+      "skill": "excel.navigation.insert_tab",
+      "target": { "names": ["Insert"], "role": "tab item" },
+      "speech": {
+        "demonstrate": "Click the Insert tab at the top. I've highlighted it.",
+        "guide": "Open the Insert tab.",
+        "hint": "Which tab would you use to add something new?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Insert holds everything you can add to a sheet — charts, tables, and PivotTables.",
+      "success": { "kind": "element_selected", "names": ["Insert"] },
+      "mistakes": [
+        {
+          "signal": { "kind": "element_selected", "names": ["Data"] },
+          "correction": "You opened Data. Insert is further left, right after Home."
+        },
+        {
+          "signal": { "kind": "element_selected", "names": ["Formulas"] },
+          "correction": "That's Formulas. Insert is further left, right after Home."
+        }
+      ]
+    },
+    {
+      "id": "click-pivot",
+      "objective": "Click PivotTable",
+      "skill": "excel.pivot.create",
+      "target": { "names": ["PivotTable"], "role": "button" },
+      "speech": {
+        "demonstrate": "Now click PivotTable — the first button on the Insert ribbon.",
+        "guide": "Click PivotTable.",
+        "hint": "Look at the far left of this ribbon.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "A PivotTable summarizes rows of data into totals you can rearrange.",
+      "success": { "kind": "element_visible", "names": ["PivotTable from table or range", "Create PivotTable"] },
+      "mistakes": []
+    },
+    {
+      "id": "confirm-range",
+      "objective": "Confirm the range and click OK",
+      "skill": "excel.pivot.create",
+      "target": { "names": ["OK"], "role": "button" },
+      "speech": {
+        "demonstrate": "Excel picked your table's range for you. Click OK to create the PivotTable.",
+        "guide": "Click OK.",
+        "hint": "The range looks right — how do you confirm it?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "The dialog asks which cells to summarize; Excel fills it in from the cell you clicked.",
+      "success": { "kind": "element_visible", "names": ["PivotTable Fields"] },
+      "mistakes": []
+    },
+    {
+      "id": "add-region",
+      "objective": "Tick Region in the field list",
+      "skill": "excel.pivot.fields",
+      "target": { "names": ["Region"], "role": "check box" },
+      "speech": {
+        "demonstrate": "Tick Region in the PivotTable Fields list. It becomes your rows.",
+        "guide": "Tick the Region field.",
+        "hint": "Which field do you want to group by?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Each field you tick becomes rows, columns, or values in the summary.",
+      "success": { "kind": "element_selected", "names": ["Region"] },
+      "mistakes": [
+        {
+          "signal": { "kind": "element_selected", "names": ["Product"] },
+          "correction": "That's Product. For totals by region, tick Region."
+        }
+      ]
+    },
+    {
+      "id": "add-sales",
+      "objective": "Tick Sales to total it",
+      "skill": "excel.pivot.fields",
+      "target": { "names": ["Sales"], "role": "check box" },
+      "speech": {
+        "demonstrate": "Now tick Sales to total it for each region.",
+        "guide": "Tick the Sales field.",
+        "hint": "Which field holds the numbers to add up?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Number fields become values, so Excel adds them up for each row.",
+      "success": { "kind": "element_selected", "names": ["Sales"] },
+      "mistakes": []
+    }
+  ]
+}

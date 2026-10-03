@@ -1,5 +1,8 @@
-import { defineConfig } from "vite";
+import { resolve } from "node:path";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+
+const root = import.meta.dirname;
 
 export default defineConfig({
   plugins: [react()],
@@ -7,5 +10,18 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+  },
+  build: {
+    rollupOptions: {
+      // The practice stage (index.html) is dev-only; the app ships the two Tauri windows.
+      input: {
+        notch: resolve(root, "notch.html"),
+        overlay: resolve(root, "overlay.html"),
+      },
+    },
+  },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"],
   },
 });
