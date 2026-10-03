@@ -53,6 +53,7 @@ pub fn run() {
         .manage(hit_test::NotchHitRect::default())
         .manage(perception::Perception::start())
         .manage(dock::DockState::default())
+        .manage(surfaces::FocusReturn::default())
         .invoke_handler(tauri::generate_handler![
             surfaces::set_notch_hit_rect,
             surfaces::set_notch_activatable,

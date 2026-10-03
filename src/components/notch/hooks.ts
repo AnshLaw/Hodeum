@@ -3,6 +3,7 @@ import type { Bus } from "../../lib/bus";
 import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
 import type { HodeRuntime } from "../../features/hode/runtime";
+import { coversTarget, guidanceFootprint } from "./footprint";
 import type { NotchControl } from "./notch-view";
 
 const SUCCESS_DISPLAY_MS = 2600;
@@ -99,4 +100,33 @@ export function useControlHandler(runtime: HodeRuntime, bus: Bus): (control: Not
     },
     [runtime, bus],
   );
+}
+
+/** Whether the current highlight sits under the expanded top notch card (so the card should step aside). */
+export function useCoveringTarget(bus: Bus, shell: NativeShell, ref: RefObject<HTMLElement | null>, enabled: boolean): boolean {
+  const [covering, setCovering] = useState(false);
+  useEffect(() => {
+    if (!enabled) {
+      setCovering(false);
+      return;
+    }
+    let alive = true;
+    const offRender = bus.on("overlay:render", ({ primitives }) => {
+      shell
+        .notchOrigin()
+        .then((origin) => {
+          // The notch is centred in its container (the notch window in Tauri, the desktop layer in the stage).
+          const width = ref.current?.parentElement?.clientWidth ?? window.innerWidth;
+          if (alive) setCovering(coversTarget(guidanceFootprint(origin, width), primitives));
+        })
+        .catch(reportError("Couldn't check whether the notch covers the target"));
+    });
+    const offClear = bus.on("overlay:clear", () => setCovering(false));
+    return () => {
+      alive = false;
+      offRender();
+      offClear();
+    };
+  }, [bus, shell, ref, enabled]);
+  return covering;
 }

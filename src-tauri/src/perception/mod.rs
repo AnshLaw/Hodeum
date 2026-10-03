@@ -10,7 +10,10 @@ use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use base64::prelude::{Engine, BASE64_STANDARD};
-use tauri::State;
+use tauri::{AppHandle, State};
+
+use crate::dock::geometry::PxRect;
+use crate::surfaces;
 
 use model::{app_name, Observation, RectDto};
 use uia::UiaReader;
@@ -18,9 +21,12 @@ use uia::UiaReader;
 /// Logged so slow trees (large workbooks) show up during rehearsal.
 const SLOW_SNAPSHOT_MS: u128 = 300;
 
+/// An observation plus the monitor the learner's app is on, so the overlay can follow it.
+type Observed = (Observation, Option<PxRect>);
+
 struct Job {
     region: Option<RectDto>,
-    reply: mpsc::Sender<Result<Observation, String>>,
+    reply: mpsc::Sender<Result<Observed, String>>,
 }
 
 /// UI Automation needs a COM (MTA) thread of its own; all reads are serialized through it.
@@ -52,7 +58,7 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
-fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<RectDto>) -> Result<Observation, String> {
+fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<RectDto>) -> Result<Observed, String> {
     let started = Instant::now();
     let hwnd = foreground::target_window(last_external)?;
     let elements = reader.read(hwnd.0 as isize, region)?;
@@ -64,11 +70,12 @@ fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<
         eprintln!("couldn't read the app's process name: {error}");
         String::new()
     });
-    Ok(Observation { app: app_name(&stem), window_title: foreground::window_title(hwnd), elements, at: now_ms() })
+    let observation = Observation { app: app_name(&stem), window_title: foreground::window_title(hwnd), elements, at: now_ms() };
+    Ok((observation, foreground::monitor_rect(hwnd)))
 }
 
 #[tauri::command]
-pub async fn observe(region: Option<RectDto>, state: State<'_, Perception>) -> Result<Observation, String> {
+pub async fn observe(app: AppHandle, region: Option<RectDto>, state: State<'_, Perception>) -> Result<Observation, String> {
     let (reply, result) = mpsc::channel();
     state
         .jobs
@@ -76,9 +83,16 @@ pub async fn observe(region: Option<RectDto>, state: State<'_, Perception>) -> R
         .map_err(|e| e.to_string())?
         .send(Job { region, reply })
         .map_err(|_| "The screen reader stopped.".to_string())?;
-    tauri::async_runtime::spawn_blocking(move || result.recv().map_err(|_| "The screen reader stopped.".to_string())?)
+    let (observation, monitor) = tauri::async_runtime::spawn_blocking(move || result.recv().map_err(|_| "The screen reader stopped.".to_string())?)
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    if let Some(monitor) = monitor {
+        // Guidance must be drawn on the screen the learner's app is on.
+        if let Err(error) = surfaces::follow_monitor(&app, monitor) {
+            eprintln!("couldn't move the overlay to the app's monitor: {error}");
+        }
+    }
+    Ok(observation)
 }
 
 /// Downscaled PNG of the learner's app, base64-encoded, for the local vision model (sub-project 3).

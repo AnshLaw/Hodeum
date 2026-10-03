@@ -9,7 +9,7 @@ import { useHodeState } from "../../features/hode/use-hode";
 import { matchGoal } from "../../task-packs/match";
 import { DockMenu } from "./DockMenu";
 import { GoalForm } from "./GoalForm";
-import { useAutoDismiss, useControlHandler, useHitRect, useNotchHover } from "./hooks";
+import { useAutoDismiss, useControlHandler, useCoveringTarget, useHitRect, useNotchHover } from "./hooks";
 import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
@@ -28,15 +28,19 @@ export interface NotchProps {
   bootNotice?: string;
 }
 
-function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement> }) {
-  const { view, menuOpen, hovered, revealed, dock, onControl } = props;
-  const expanded = isExpanded(view);
-  const width = menuOpen ? NOTCH_WIDTHS.lesson : NOTCH_WIDTHS[view.size];
+function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering: boolean }) {
+  const { menuOpen, hovered, revealed, dock, onControl } = props;
+  // Step aside to a slim bar while the highlighted control sits under the card; hovering brings it back.
+  const peek = props.covering && !hovered && !menuOpen && props.view.mode === "guidance";
+  const view = peek ? { ...props.view, controls: [], progress: props.view.progress } : props.view;
+  const expanded = isExpanded(view) && !peek;
+  const width = menuOpen ? NOTCH_WIDTHS.lesson : peek ? NOTCH_WIDTHS.compact : NOTCH_WIDTHS[view.size];
   const style = { "--notch-width": `${width}px`, "--notch-hover-width": `${NOTCH_IDLE_HOVER_WIDTH}px` } as CSSProperties;
-  const classes = ["notch", `notch--${view.size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked"];
+  const classes = ["notch", `notch--${peek ? "compact" : view.size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
   let body;
   if (menuOpen) body = <DockMenu prefs={dock.prefs} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
   else if (view.mode === "goal") body = <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
+  else if (peek) body = null;
   else body = <NotchContent view={view} expanded={expanded} fallbackDetail={props.bootNotice} onControl={onControl} />;
   return (
     <div className="notch-stage">
@@ -62,6 +66,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice }: NotchProps) {
   const onControl = useControlHandler(runtime, bus);
   useHitRect(surfaceRef, shell, `${layoutKey}:${revealed}`);
   useAutoDismiss(view.mode === "success", runtime);
+  const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top");
 
   const props: SurfaceProps = {
     view,
@@ -86,6 +91,6 @@ export function Notch({ runtime, bus, shell, packs, bootNotice }: NotchProps) {
     },
     onSubmitGoal: (goal) => runtime.dispatch({ type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs) }),
   };
-  if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} />;
+  if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} covering={covering} />;
   return <Sidebar {...props} side={dock.prefs.dock} surfaceRef={surfaceRef} />;
 }

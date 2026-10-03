@@ -1,4 +1,5 @@
 import type { Dock } from "../features/dock/dock";
+import type { WindowOrigin } from "../components/notch/footprint";
 import type { MonitorInfo, Rect } from "./types";
 
 /** Native window behaviour the UI needs. Tauri implements it; the browser stage simulates it in-page. */
@@ -10,6 +11,10 @@ export interface NativeShell {
   /** Overlay captures the pointer and keyboard for Point & Ask. */
   setOverlayInteractive(interactive: boolean): Promise<void>;
   overlayMonitor(): Promise<MonitorInfo>;
+  /** Physical screen position and scale of the notch window (its CSS px map onto the screen from here). */
+  notchOrigin(): Promise<WindowOrigin>;
+  /** Fires when the overlay moves to another monitor (it follows the learner's app). */
+  onOverlayMoved(handler: () => void): () => void;
   onNotchHover(handler: (inside: boolean) => void): () => void;
   /** Moves the notch window to a dock; side docks with `reserve` claim screen space as an app bar. */
   setDock(dock: Dock, reserve: boolean): Promise<void>;
@@ -38,7 +43,16 @@ export class BrowserShell implements NativeShell {
     return PAGE_MONITOR;
   }
 
+  /** In the stage the notch layer and the overlay share the desktop's origin. */
+  async notchOrigin(): Promise<WindowOrigin> {
+    return { x: 0, y: 0, scale: 1 };
+  }
+
   onNotchHover(): () => void {
+    return () => undefined;
+  }
+
+  onOverlayMoved(): () => void {
     return () => undefined;
   }
 

@@ -20,11 +20,13 @@ function useOverlayMonitor(shell: NativeShell): MonitorInfo | undefined {
         .catch(reportError("Couldn't read the overlay's monitor"));
     };
     refresh();
-    // DPI and resolution changes resize the overlay window.
+    // DPI and resolution changes resize the overlay; following the app to another monitor moves it.
     window.addEventListener("resize", refresh);
+    const stopMoved = shell.onOverlayMoved(refresh);
     return () => {
       alive = false;
       window.removeEventListener("resize", refresh);
+      stopMoved();
     };
   }, [shell]);
   return monitor;

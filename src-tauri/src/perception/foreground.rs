@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 
 use windows::core::PWSTR;
 use windows::Win32::Foundation::{CloseHandle, HWND};
+use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
@@ -10,6 +11,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetAncestor, GetClassNameW, GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
     IsWindow, GA_ROOT,
 };
+
+use crate::dock::geometry::PxRect;
 
 const NO_TARGET: &str = "Click into the app you want to learn, then try again.";
 const TEXT_BUFFER: usize = 512;
@@ -60,6 +63,20 @@ pub fn exe_stem(hwnd: HWND) -> Result<String, String> {
     result.map_err(|e| e.to_string())?;
     let path = String::from_utf16_lossy(&buffer[..len as usize]);
     Ok(Path::new(&path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or(path))
+}
+
+/// Physical bounds of the monitor showing most of `hwnd`.
+pub fn monitor_rect(hwnd: HWND) -> Option<PxRect> {
+    // SAFETY: MonitorFromWindow tolerates any handle; MONITORINFO is correctly sized before the call.
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        if !GetMonitorInfoW(monitor, &mut info).as_bool() {
+            return None;
+        }
+        let r = info.rcMonitor;
+        Some(PxRect { x: r.left, y: r.top, width: (r.right - r.left).max(0) as u32, height: (r.bottom - r.top).max(0) as u32 })
+    }
 }
 
 /// The app the learner is working in: the foreground window, unless that's Hodeum itself or the

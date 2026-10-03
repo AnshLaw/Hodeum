@@ -1,5 +1,13 @@
 use serde::Serialize;
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewWindow};
+
+use std::sync::Mutex;
+
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
+
+use crate::dock::geometry::PxRect;
+use crate::perception::foreground::{root_window, window_pid};
 
 use crate::hit_test::{HitRect, NotchHitRect};
 
@@ -80,32 +88,86 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// The learner's app that had focus before Hodeum briefly took it (goal field, Point & Ask).
+#[derive(Default)]
+pub struct FocusReturn(Mutex<isize>);
+
+impl FocusReturn {
+    /// Remembers the current foreground window if it belongs to another app.
+    fn remember(&self) -> Result<(), String> {
+        // SAFETY: GetForegroundWindow has no preconditions.
+        let foreground = root_window(unsafe { GetForegroundWindow() });
+        if !foreground.is_invalid() && window_pid(foreground) != std::process::id() {
+            *self.0.lock().map_err(|e| e.to_string())? = foreground.0 as isize;
+        }
+        Ok(())
+    }
+
+    /// Hands keyboard focus back so the learner can keep working without an extra click.
+    fn restore(&self) -> Result<(), String> {
+        let saved = std::mem::take(&mut *self.0.lock().map_err(|e| e.to_string())?);
+        if saved != 0 {
+            // SAFETY: a stale handle simply fails; Hodeum is foreground here, so the switch is allowed.
+            let switched = unsafe { SetForegroundWindow(HWND(saved as *mut _)) };
+            if !switched.as_bool() {
+                eprintln!("couldn't return focus to the learner's app");
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Tells the overlay to re-read its monitor (scale and origin) after moving.
+const OVERLAY_MOVED_EVENT: &str = "overlay:moved";
+
+/// Moves the overlay onto `monitor` if it isn't already covering it.
+pub fn follow_monitor(app: &AppHandle, monitor: PxRect) -> Result<(), String> {
+    let overlay = window(app, OVERLAY)?;
+    let position = overlay.outer_position().map_err(|e| e.to_string())?;
+    let size = overlay.outer_size().map_err(|e| e.to_string())?;
+    let current = PxRect { x: position.x, y: position.y, width: size.width, height: size.height };
+    if current == monitor {
+        return Ok(());
+    }
+    overlay.set_position(PhysicalPosition::new(monitor.x, monitor.y)).map_err(|e| e.to_string())?;
+    overlay.set_size(PhysicalSize::new(monitor.width, monitor.height)).map_err(|e| e.to_string())?;
+    app.emit(OVERLAY_MOVED_EVENT, ()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn set_notch_hit_rect(rect: HitRect, state: State<'_, NotchHitRect>) -> Result<(), String> {
     state.set(rect)
 }
 
 #[tauri::command]
-pub fn set_notch_activatable(app: AppHandle, activatable: bool) -> Result<(), String> {
+pub fn set_notch_activatable(app: AppHandle, activatable: bool, focus: State<'_, FocusReturn>) -> Result<(), String> {
     let notch = window(&app, NOTCH)?;
+    if activatable {
+        focus.remember()?;
+    }
     notch.set_focusable(activatable).map_err(|e| e.to_string())?;
     if activatable {
-        notch.set_focus().map_err(|e| e.to_string())?;
+        notch.set_focus().map_err(|e| e.to_string())
+    } else {
+        focus.restore()
     }
-    Ok(())
 }
 
 #[tauri::command]
-pub fn set_overlay_interactive(app: AppHandle, interactive: bool) -> Result<(), String> {
+pub fn set_overlay_interactive(app: AppHandle, interactive: bool, focus: State<'_, FocusReturn>) -> Result<(), String> {
     let overlay = window(&app, OVERLAY)?;
+    if interactive {
+        focus.remember()?;
+    }
     overlay
         .set_ignore_cursor_events(!interactive)
         .map_err(|e| e.to_string())?;
     overlay.set_focusable(interactive).map_err(|e| e.to_string())?;
     if interactive {
-        overlay.set_focus().map_err(|e| e.to_string())?;
+        overlay.set_focus().map_err(|e| e.to_string())
+    } else {
+        focus.restore()
     }
-    Ok(())
 }
 
 #[tauri::command]

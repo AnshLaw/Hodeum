@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { WindowOrigin } from "../components/notch/footprint";
 import type { Dock } from "../features/dock/dock";
 import type { NativeShell } from "./shell";
 import { subscribeTauri } from "./tauri-bus";
@@ -19,6 +21,16 @@ export class TauriShell implements NativeShell {
 
   overlayMonitor(): Promise<MonitorInfo> {
     return invoke<MonitorInfo>("monitor_info");
+  }
+
+  async notchOrigin(): Promise<WindowOrigin> {
+    const window = getCurrentWindow();
+    const [position, scale] = await Promise.all([window.outerPosition(), window.scaleFactor()]);
+    return { x: position.x, y: position.y, scale };
+  }
+
+  onOverlayMoved(handler: () => void): () => void {
+    return subscribeTauri<null>("overlay:moved", () => handler());
   }
 
   onNotchHover(handler: (inside: boolean) => void): () => void {
