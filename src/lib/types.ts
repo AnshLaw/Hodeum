@@ -80,7 +80,8 @@ export interface ActionTarget {
   label: string;
 }
 
-export type TeachingActionKind = "guide" | "correct" | "answer" | "clarify";
+/** `complete` ends an open-ended Hode when the screen shows the goal is reached. */
+export type TeachingActionKind = "guide" | "correct" | "answer" | "clarify" | "complete";
 
 export interface TeachingAction {
   kind: TeachingActionKind;
@@ -113,6 +114,10 @@ export interface TeachingContext {
   focusRegion?: LearnerAnnotation;
   correction?: string;
   recentMistakes: number;
+  /** No task pack: the model plans one step at a time and judges when the goal is done. */
+  openGoal?: boolean;
+  /** The instruction the learner was last given (open-ended Hodes). */
+  lastInstruction?: string;
 }
 
 export type SkillStatus = "new" | "learning" | "mastered";

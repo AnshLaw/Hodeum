@@ -58,6 +58,7 @@ function guidanceView(s: HodeState): NotchView {
   const speech = s.action?.speech ?? "";
   const showObjective = speech === "" || (silent && s.action?.kind === "guide");
   const prerequisites = s.stepIndex === 0 ? s.pack?.prerequisites.join(" ") : undefined;
+  if (s.open) return openGuidanceView(s);
   return {
     mode: "guidance",
     size: "guidance",
@@ -68,6 +69,20 @@ function guidanceView(s: HodeState): NotchView {
     busy: false,
     controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "point", "pause", "end"],
     hintLabel: QUIET_LEVELS.has(s.level) ? COPY.needHint : COPY.hint,
+  };
+}
+
+/** Open-ended Hode: the goal is the eyebrow and there's no step list or Explain text. */
+function openGuidanceView(s: HodeState): NotchView {
+  return {
+    mode: "guidance",
+    size: "guidance",
+    eyebrow: COPY.openHode(s.goal),
+    title: s.action?.speech ?? "",
+    detail: s.notice,
+    busy: false,
+    controls: ["hint", "point", "pause", "end"],
+    hintLabel: COPY.needHint,
   };
 }
 

@@ -67,6 +67,7 @@ function overlayStyle(action: TeachingAction): OverlayStyle {
     case "answer":
       return "highlight";
     case "clarify":
+    case "complete":
       return "none";
     case "correct":
       return action.assistanceLevel === "demonstrate" ? "full" : "highlight";

@@ -228,3 +228,37 @@ describe("Point & Ask", () => {
     expect(t.effects).toEqual([{ type: "renderOverlay", primitives: [{ kind: "pin", bounds: INSERT_BOUNDS }] }]);
   });
 });
+
+describe("open-ended Hodes (no task pack, local vision plans)", () => {
+  const OPEN_START: HodeEvent[] = [{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "add a chart", openAllowed: true }];
+
+  it("starts observing instead of refusing when vision is available", () => {
+    const t = fold(initialState, ...OPEN_START);
+    expect(t.state).toMatchObject({ phase: "observing", open: true, goal: "add a chart", notice: undefined });
+    expect(types(t)).toEqual(["observe"]);
+  });
+
+  it("asks the model again after every learner action, passing the last instruction", () => {
+    const guided = fold(
+      initialState,
+      ...OPEN_START,
+      { type: "OBSERVED", observation: HOME_SELECTED },
+      { type: "ACTION_READY", requestId: 1, action: guideAction({ speech: "Open Insert." }), failures: [] },
+    ).state;
+    const acted = step(guided, { type: "LEARNER_ACTED", observation: INSERT_SELECTED });
+    expect(acted.effects[0]).toEqual({ type: "cancelStuckTimer" });
+    expect(acted.effects[1]).toMatchObject({ type: "reason", context: { openGoal: true, lastInstruction: "Open Insert." } });
+  });
+
+  it("finishes when the model says the goal is reached", () => {
+    const reasoning = fold(initialState, ...OPEN_START, { type: "OBSERVED", observation: HOME_SELECTED }).state;
+    const done = step(reasoning, { type: "ACTION_READY", requestId: 1, action: guideAction({ kind: "complete", speech: "Chart added. Nice!" }), failures: [] });
+    expect(done.state.phase).toBe("success");
+    expect(done.effects).toContainEqual({ type: "say", text: "Chart added. Nice!" });
+  });
+
+  it("still refuses an unknown goal when vision isn't ready", () => {
+    const t = fold(initialState, { type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "add a chart" });
+    expect(t.state).toMatchObject({ phase: "goal_entry", notice: COPY.noPack, open: false });
+  });
+});

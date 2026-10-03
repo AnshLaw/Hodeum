@@ -82,6 +82,30 @@ fn new_api_key() -> String {
     format!("{:016x}{:016x}", half(), half())
 }
 
+/// The TCP table stores the port in network byte order in the low 16 bits.
+pub fn port_from_row(local_port: u32) -> u16 {
+    u16::from_be(local_port as u16)
+}
+
+/// Which process is listening on `port` (IPv4), straight from the OS TCP table.
+fn listener_pid(port: u16) -> Option<u32> {
+    use windows::Win32::NetworkManagement::IpHelper::{GetExtendedTcpTable, MIB_TCPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_LISTENER};
+    use windows::Win32::Networking::WinSock::AF_INET;
+    let family = u32::from(AF_INET.0);
+    let mut size = 0u32;
+    // SAFETY: the first call only reports the required size; the second fills a buffer of that size.
+    unsafe {
+        GetExtendedTcpTable(None, &mut size, false, family, TCP_TABLE_OWNER_PID_LISTENER, 0);
+        let mut buffer = vec![0u8; size as usize];
+        if GetExtendedTcpTable(Some(buffer.as_mut_ptr().cast()), &mut size, false, family, TCP_TABLE_OWNER_PID_LISTENER, 0) != 0 {
+            return None;
+        }
+        let table = &*(buffer.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);
+        let rows = std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize);
+        rows.iter().find(|row| port_from_row(row.dwLocalPort) == port).map(|row| row.dwOwningPid)
+    }
+}
+
 /// Refuse to start if something else already listens on our port: we'd be sending screenshots to it.
 fn port_is_free() -> bool {
     TcpListener::bind((VLM_HOST, VLM_PORT)).is_ok()
@@ -158,8 +182,15 @@ fn run_once(app: &AppHandle, root: &Path) -> Result<RunEnd, String> {
             slot.take();
             return Ok(RunEnd::Exited(format!("llama-server exited ({status}); see {LOG_FILE}")));
         }
+        let child_pid = child.id();
         drop(slot);
-        if !ready && healthy() {
+        // Only ever trust the port while our own child owns it; anything else could be an impostor.
+        let owner = listener_pid(VLM_PORT);
+        if owner.is_some_and(|pid| pid != child_pid) {
+            vlm.stop()?;
+            return Ok(RunEnd::Exited(format!("another program took port {VLM_PORT}; the local vision model was stopped")));
+        }
+        if !ready && owner == Some(child_pid) && healthy() {
             ready = true;
             set_status(app, VlmStatus::Ready { endpoint: format!("http://{VLM_HOST}:{VLM_PORT}"), api_key: api_key.clone() });
         } else if !ready && started.elapsed() > READY_TIMEOUT {
@@ -224,6 +255,11 @@ mod tests {
     fn status_serializes_with_a_state_tag() {
         let json = serde_json::to_string(&VlmStatus::Ready { endpoint: "http://127.0.0.1:8737".into(), api_key: "k".into() }).unwrap();
         assert_eq!(json, r#"{"state":"ready","endpoint":"http://127.0.0.1:8737","api_key":"k"}"#);
+    }
+
+    #[test]
+    fn reads_ports_in_network_byte_order() {
+        assert_eq!(port_from_row(u32::from(8737u16.to_be())), 8737);
     }
 
     #[test]

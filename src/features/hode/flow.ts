@@ -21,6 +21,9 @@ export function onStartHode(s: HodeState): Transition {
 export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Transition {
   const goal = e.goal.trim();
   if (s.phase !== "goal_entry" || goal === "") return noop(s);
+  if (!e.pack && e.openAllowed) {
+    return { state: { ...s, goal, open: true, level: "guide", notice: undefined, phase: "observing" }, effects: [{ type: "observe" }] };
+  }
   if (!e.pack) return { state: { ...s, goal, notice: COPY.noPack }, effects: [{ type: "say", text: COPY.noPack }] };
   return beginStep({ ...s, goal, pack: e.pack, notice: undefined }, 0);
 }
@@ -66,6 +69,8 @@ function contextFor(s: HodeState, observation: ScreenObservation): TeachingConte
     focusRegion: s.question ?? s.focusRegion,
     correction: s.correction,
     recentMistakes: s.mistakes,
+    openGoal: s.open,
+    lastInstruction: s.open ? s.action?.speech : undefined,
   };
 }
 
@@ -83,6 +88,7 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   const withNotice = { ...s, notice: e.failures.length > 0 ? COPY.fallbackNotice : s.notice };
   const action = e.action;
   if (action.kind === "answer") return showAnswer(withNotice, action);
+  if (action.kind === "complete" && s.open) return finishOpenHode(withNotice, action);
   const band = action.target ? confidenceBand(action.target.confidence) : "uncertain";
   if (band === "uncertain" && !s.reobserved) {
     return { state: { ...withNotice, phase: "observing", reobserved: true }, effects: [{ type: "observe" }] };
@@ -97,6 +103,13 @@ function showGuidance(s: HodeState, action: TeachingAction): Transition {
   if (action.speech !== "") effects.push({ type: "say", text: action.speech });
   effects.push({ type: "startStuckTimer", ms: STUCK_MS });
   return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false }, effects };
+}
+
+function finishOpenHode(s: HodeState, action: TeachingAction): Transition {
+  return {
+    state: { ...s, phase: "success", action: undefined },
+    effects: [{ type: "cancelStuckTimer" }, { type: "clearOverlay" }, { type: "say", text: action.speech || COPY.hodeCompleteSpeech }],
+  };
 }
 
 function showAnswer(s: HodeState, action: TeachingAction): Transition {

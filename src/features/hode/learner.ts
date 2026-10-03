@@ -46,7 +46,13 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
   return withLeadingEffects(beginStep(finished, nextIndex), [...done, ...praise]);
 }
 
+/** Open-ended Hodes have no success signal to check, so every learner action asks the model what's next. */
+function onOpenAction(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
+  return withLeadingEffects(requestReason({ ...s, observation: e.observation }), [CANCEL_TIMER]);
+}
+
 export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
+  if (s.open && (s.phase === "guiding" || s.phase === "reasoning")) return onOpenAction(s, e);
   const step = currentStep(s);
   if ((s.phase !== "guiding" && s.phase !== "reasoning") || !step) return noop(s);
   const previous = s.observation;

@@ -34,6 +34,7 @@ export const COPY = {
   local: "Local",
   yourTurn: "Your turn",
   stepOf: (current: number, total: number) => `Step ${current} of ${total}`,
+  openHode: (goal: string) => `Hode · ${goal}`,
   clarify: "I'm not confident which control you need. Move your pointer near the area you're working in.",
   noPack: "I don't have a Hode for that yet. Try “make a pivot table” or “zip these files”.",
   hodeCompleteSpeech: "Hode complete. Nice work.",

@@ -6,7 +6,7 @@ export const BOX_SCALE = 1000;
 
 /** What the model must return; enforced by llama-server's json_schema and re-validated here. */
 export const visionReplySchema = z.object({
-  kind: z.enum(["guide", "answer", "clarify"]),
+  kind: z.enum(["guide", "answer", "clarify", "complete"]),
   speech: z.string().min(1).max(MAX_SPEECH_CHARS),
   /** Index into the numbered control list, or -1 when no listed control fits. */
   target_index: z.number().int().min(-1),
@@ -21,7 +21,7 @@ export type VisionReply = z.infer<typeof visionReplySchema>;
 export const VISION_REPLY_JSON_SCHEMA = {
   type: "object",
   properties: {
-    kind: { type: "string", enum: ["guide", "answer", "clarify"] },
+    kind: { type: "string", enum: ["guide", "answer", "clarify", "complete"] },
     speech: { type: "string", maxLength: MAX_SPEECH_CHARS },
     target_index: { type: "integer", minimum: -1 },
     bbox: { type: "array", items: { type: "number", minimum: 0, maximum: BOX_SCALE }, minItems: 4, maxItems: 4 },

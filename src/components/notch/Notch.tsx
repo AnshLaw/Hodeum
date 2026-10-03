@@ -104,7 +104,8 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision }: NotchP
     onGrip: () => {
       shell.beginNotchDrag().catch(reportError("Couldn't start dragging Hodey"));
     },
-    onSubmitGoal: (goal) => runtime.dispatch({ type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs) }),
+    onSubmitGoal: (goal) =>
+      runtime.dispatch({ type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed: visionStatus?.state === "ready" }),
   };
   if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} covering={covering} />;
   return <Sidebar {...props} side={dock.prefs.dock} surfaceRef={surfaceRef} />;

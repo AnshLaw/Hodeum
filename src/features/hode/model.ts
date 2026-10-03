@@ -52,6 +52,8 @@ export interface HodeState {
   reobserved: boolean;
   resumePhase?: HodePhase;
   learnedSkills: string[];
+  /** An open-ended Hode: no task pack, planned and verified by the local vision model. */
+  open: boolean;
 }
 
 export const initialState: HodeState = {
@@ -65,11 +67,13 @@ export const initialState: HodeState = {
   requestId: 0,
   reobserved: false,
   learnedSkills: [],
+  open: false,
 };
 
 export type HodeEvent =
   | { type: "START_HODE" }
-  | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack }
+  /** `openAllowed`: no pack matched, but the local vision model is ready to plan step by step. */
+  | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean }
   | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null }
   | { type: "OBSERVED"; observation: ScreenObservation }
   | { type: "ACTION_READY"; requestId: number; action: TeachingAction; failures: string[] }

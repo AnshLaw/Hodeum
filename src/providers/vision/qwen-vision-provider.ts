@@ -83,7 +83,7 @@ export function toAction(reply: VisionReply, candidates: UiElement[], frame: Cap
   return {
     kind,
     speech: reply.speech.trim(),
-    target: kind === "clarify" ? undefined : targetFrom(reply, candidates, frame),
+    target: kind === "clarify" || kind === "complete" ? undefined : targetFrom(reply, candidates, frame),
     skill: context.step?.skill ?? GENERAL_SKILL,
     assistanceLevel: context.assistanceLevel,
   };
