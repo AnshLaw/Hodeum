@@ -161,7 +161,12 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
     micStatus,
     toast,
     onToggleMic: toggleMic,
-    onOpenApp: openApp,
+    onOpenApp: () => {
+      // The notch grows into the app, then gets out of its way: goal entry continues on the app's home page.
+      openApp();
+      setMenuOpen(false);
+      if (state.phase === "goal_entry") runtime.dispatch({ type: "DISMISS" });
+    },
     onSubmitGoal: (goal) =>
       runtime.dispatch({ type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed: visionStatus?.state === "ready" }),
   };

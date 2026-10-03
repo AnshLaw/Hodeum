@@ -8,6 +8,7 @@ import { HodeumMark } from "../components/shared/icons";
 import { TASK_PACKS } from "../task-packs";
 import { ExcelBackdrop, ExplorerBackdrop } from "./Backdrops";
 import { MockAppView } from "./MockAppView";
+import { StageAppWindow } from "./StageAppWindow";
 import type { StageAppId, StageEnvironment } from "./environment";
 import { DESKTOP } from "./scenes/layout";
 import "./stage.css";
@@ -72,7 +73,7 @@ export function Stage({ env }: { env: StageEnvironment }) {
           Reset
         </button>
         <span className="stage-hint">
-          <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>H</kbd> Point &amp; Ask · <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>N</kbd> show/hide · drag via ⋯ menu
+          <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>H</kbd> Point &amp; Ask · <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>N</kbd> show/hide · <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>J</kbd> app
         </span>
       </header>
       <main className="stage-desktop" style={{ width: DESKTOP.width, height: DESKTOP.height }}>
@@ -82,6 +83,7 @@ export function Stage({ env }: { env: StageEnvironment }) {
         <div className="stage-layer stage-layer--overlay">
           <GuidanceOverlay bus={env.bus} shell={env.shell} />
         </div>
+        <StageAppWindow env={env} />
         <div className="stage-layer stage-layer--notch">
           <Notch runtime={env.runtime} bus={env.bus} shell={env.shell} packs={TASK_PACKS} activity={env.activity} speech={env.speech} />
         </div>

@@ -185,7 +185,7 @@ export function NotchBar(props: BarProps) {
           {muted ? <MutedIcon /> : <VolumeIcon />}
         </IconButton>
       )}
-      {(expanded || menuOpen) && (
+      {(expanded || menuOpen || view.mode === "idle") && (
         <IconButton label={COPY.openApp} onClick={props.onOpenApp}>
           <ExpandIcon />
         </IconButton>

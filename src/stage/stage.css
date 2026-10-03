@@ -335,3 +335,14 @@ body {
 .explorer-nav li[data-current="true"] {
   background: #e8e8e8;
 }
+
+/* The in-page Hodeum app window (the native app is its own window). */
+.stage-app {
+  position: absolute;
+  inset: 52px 40px 24px;
+  z-index: 150;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 12px;
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.55);
+}
