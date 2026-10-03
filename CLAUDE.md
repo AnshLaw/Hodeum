@@ -239,9 +239,11 @@ npm run typecheck
 npm run build
 npm run tauri:dev
 npm run tauri:build
+npm test                         # vitest: unit + end-to-end teaching loop
+cd src-tauri; cargo test --lib   # Rust geometry / hit-test
 ```
 
-Add focused test commands when the first state-machine slice lands. Do not add a test framework solely for ceremony; use the project’s existing tooling or the smallest stable choice.
+`npm run dev` serves the browser practice stage (`index.html`): real notch, overlay and runtime driving scripted Excel / File Explorer mocks. Use it to rehearse Gate 6 without native perception.
 
 ## Validation gates
 

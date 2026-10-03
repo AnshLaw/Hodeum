@@ -22,13 +22,13 @@ Out of scope here (later sub-projects): real UI Automation and screen capture (S
 
 Rust commands (`src-tauri/src/`):
 
-- `position_notch(width, height)` — resizes the notch and keeps it top-center on its monitor (physical px, DPI-aware).
+- `set_notch_hit_rect(rect)` — the pill's box; a Rust thread polls the cursor (~30 Hz) and makes the fixed-size notch window click-through outside it, emitting `notch:hover`.
 - `set_notch_activatable(bool)` — toggles `WS_EX_NOACTIVATE`. On only while a text field in the notch has focus, so clicking Hint/Pause never steals focus from the learner's app.
 - `set_overlay_interactive(bool)` — toggles `set_ignore_cursor_events` and focus for annotation mode.
 - `monitor_info()` — returns `{ id, x, y, width, height, scale }` for the overlay's monitor.
 - Global shortcut `Ctrl+Alt+H` (via `tauri-plugin-global-shortcut`) emits `annotate:start`.
 
-Notch resize rule: grow the window first, then animate content; animate content first, then shrink the window. No per-frame window resizing.
+Notch sizing (revised during implementation): the notch window is a fixed 600×340 logical px at the top-centre; the pill animates inside it with CSS, and the cursor hit-test makes the rest click-through. This removes window resizing entirely.
 
 ## 4. Message bus
 
@@ -124,7 +124,7 @@ Packs shipped: `excel-pivot.json` (select data → Insert tab → PivotTable →
 
 Pure reducer: `step(state, event) → { state, effects }`. A runtime executes effects against adapters; the reducer never touches I/O.
 
-**States:** `idle`, `goal_entry`, `observing`, `reasoning`, `guiding`, `verifying`, `recovering`, `answering`, `success`, `paused`.
+**States:** `idle`, `goal_entry`, `observing`, `reasoning`, `guiding`, `answering`, `annotating`, `recovering`, `success`, `paused`. (Verification is synchronous inside `LEARNER_ACTED`, so there is no separate `verifying` state.)
 
 **Events:** `START_HODE`, `GOAL_SUBMITTED`, `OBSERVED`, `ACTION_READY`, `LEARNER_ACTED`, `STUCK_TIMEOUT`, `HINT_REQUESTED`, `EXPLAIN_REQUESTED`, `LET_ME_TRY`, `ANNOTATION_SUBMITTED`, `PAUSE`, `RESUME`, `END_HODE`, `PROVIDER_FAILED`.
 
@@ -173,7 +173,7 @@ States and sizes per PRD §8.2 (idle ≈ 190×34, listening/thinking ≈ 280×44
 
 ## 12. Persistence
 
-`tauri-plugin-sql` (SQLite) with a migration creating `skills`, `hodes`, `step_attempts`. `SqliteSkillStore` implements `SkillStore`; `MemorySkillStore` for tests/dev. No screenshots stored.
+`tauri-plugin-sql` (SQLite) with a migration creating `skills` and `step_attempts` (`hodes` deferred until Hode history is built). `SqliteSkillStore` implements `SkillStore`; `MemorySkillStore` for tests/dev. No screenshots stored.
 
 ## 13. Dev stage
 
