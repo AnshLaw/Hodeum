@@ -48,7 +48,7 @@ function IdleStart({ onControl, notice }: Pick<SurfaceProps, "onControl"> & { no
 
 function SidebarBody(props: SurfaceProps) {
   const { view, menuOpen, dock, onControl } = props;
-  if (menuOpen) return <DockMenu prefs={dock.prefs} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
+  if (menuOpen) return <DockMenu prefs={dock.prefs} vision={props.vision} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
   if (view.mode === "goal") {
     return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   }

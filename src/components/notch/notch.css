@@ -552,3 +552,36 @@
 .notch__grip .hodey {
   margin: -10px 0 -10px -8px;
 }
+
+.dock-menu__vision {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--hd-line);
+  font-size: 11.5px;
+  color: var(--hd-text-2);
+}
+
+.dock-menu__vision::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--hd-text-3);
+}
+
+.dock-menu__vision[data-tone="ok"]::before {
+  background: var(--hd-ok);
+}
+
+.dock-menu__vision[data-tone="busy"]::before {
+  background: var(--hd-accent);
+  animation: hd-fade-in 0.9s ease-in-out infinite alternate;
+}
+
+.dock-menu__vision[data-tone="warn"] {
+  color: var(--hd-accent);
+}

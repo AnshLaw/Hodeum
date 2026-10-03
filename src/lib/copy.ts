@@ -53,5 +53,9 @@ export const COPY = {
   dragTip: "You can also drag Hodey by its face to the top or either side.",
   hodeySettings: "Hodey settings",
   steps: "Steps",
+  visionReady: "Local vision ready",
+  visionStarting: "Local vision is loading…",
+  visionMissing: "Local vision isn't installed. Run scripts/setup-local-ai.ps1.",
+  visionFailed: "Local vision stopped",
   progressNotSaved: "Progress won't be saved this session — the local database didn't open.",
 } as const;

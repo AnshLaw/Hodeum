@@ -1,6 +1,8 @@
 use std::fs::File;
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::collections::hash_map::RandomState;
+use std::hash::{BuildHasher, Hasher};
+use std::net::{TcpListener, TcpStream};
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -37,7 +39,8 @@ const STATUS_EVENT: &str = "vlm:status";
 pub enum VlmStatus {
     Missing { detail: String },
     Starting,
-    Ready { endpoint: String },
+    /// `api_key` is a per-launch secret; llama-server rejects requests without it.
+    Ready { endpoint: String, api_key: String },
     Failed { detail: String },
 }
 
@@ -63,21 +66,35 @@ impl Vlm {
     }
 }
 
-/// Where `models/` and `runtime/` live: `HODEUM_LOCAL_AI_DIR`, else the repository root (dev builds).
+/// Where `models/` and `runtime/` live: the repository root this build was compiled from.
+/// Deliberately not overridable by environment variables, so nothing can redirect which server binary runs.
 pub fn local_ai_root() -> PathBuf {
-    std::env::var_os("HODEUM_LOCAL_AI_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join(".."))
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+/// A fresh 128-bit secret per launch (RandomState is seeded from OS randomness).
+fn new_api_key() -> String {
+    let half = || {
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+        hasher.finish()
+    };
+    format!("{:016x}{:016x}", half(), half())
+}
+
+/// Refuse to start if something else already listens on our port: we'd be sending screenshots to it.
+fn port_is_free() -> bool {
+    TcpListener::bind((VLM_HOST, VLM_PORT)).is_ok()
 }
 
 pub fn missing_files(root: &Path) -> Vec<&'static str> {
     [SERVER_EXE, MODEL_FILE, MMPROJ_FILE].into_iter().filter(|file| !root.join(file).exists()).collect()
 }
 
-pub fn server_args(root: &Path) -> Vec<String> {
+pub fn server_args(root: &Path, api_key: &str) -> Vec<String> {
     let path = |file: &str| root.join(file).to_string_lossy().into_owned();
     let port = VLM_PORT.to_string();
-    let args = ["-m", &path(MODEL_FILE), "--mmproj", &path(MMPROJ_FILE), "--host", VLM_HOST, "--port", &port, "-ngl", GPU_LAYERS, "-c", CONTEXT_TOKENS];
+    let args = ["-m", &path(MODEL_FILE), "--mmproj", &path(MMPROJ_FILE), "--host", VLM_HOST, "--port", &port, "-ngl", GPU_LAYERS, "-c", CONTEXT_TOKENS, "--api-key", api_key];
     args.iter().map(|arg| arg.to_string()).collect()
 }
 
@@ -105,11 +122,14 @@ fn healthy() -> bool {
     response.starts_with("HTTP/1.1 200")
 }
 
-fn start_server(root: &Path) -> Result<Child, String> {
+fn start_server(root: &Path, api_key: &str) -> Result<Child, String> {
+    if !port_is_free() {
+        return Err(format!("port {VLM_PORT} is already in use by another program, so the local vision model won't start"));
+    }
     let log = File::create(root.join(LOG_FILE)).map_err(|e| format!("couldn't create {LOG_FILE}: {e}"))?;
     let errors = log.try_clone().map_err(|e| e.to_string())?;
     Command::new(root.join(SERVER_EXE))
-        .args(server_args(root))
+        .args(server_args(root, api_key))
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(errors))
         .creation_flags(CREATE_NO_WINDOW)
@@ -124,7 +144,8 @@ enum RunEnd {
 
 /// Waits for the model to load, then watches the process until it exits or is stopped.
 fn run_once(app: &AppHandle, root: &Path) -> Result<RunEnd, String> {
-    let child = start_server(root)?;
+    let api_key = new_api_key();
+    let child = start_server(root, &api_key)?;
     let vlm = app.state::<Vlm>();
     *vlm.child.lock().map_err(|e| e.to_string())? = Some(child);
     let started = Instant::now();
@@ -140,7 +161,7 @@ fn run_once(app: &AppHandle, root: &Path) -> Result<RunEnd, String> {
         drop(slot);
         if !ready && healthy() {
             ready = true;
-            set_status(app, VlmStatus::Ready { endpoint: format!("http://{VLM_HOST}:{VLM_PORT}") });
+            set_status(app, VlmStatus::Ready { endpoint: format!("http://{VLM_HOST}:{VLM_PORT}"), api_key: api_key.clone() });
         } else if !ready && started.elapsed() > READY_TIMEOUT {
             vlm.stop()?;
             return Ok(RunEnd::Exited(format!("the model didn't load within {}s; see {LOG_FILE}", READY_TIMEOUT.as_secs())));
@@ -190,17 +211,25 @@ mod tests {
 
     #[test]
     fn binds_loopback_only_and_offloads_to_gpu() {
-        let args = server_args(Path::new("C:/hodeum"));
+        let args = server_args(Path::new("C:/hodeum"), "secret");
         let value = |flag: &str| args.iter().position(|a| a == flag).map(|i| args[i + 1].clone());
         assert_eq!(value("--host").as_deref(), Some("127.0.0.1"));
         assert_eq!(value("--port").as_deref(), Some("8737"));
         assert_eq!(value("-ngl").as_deref(), Some("99"));
         assert!(value("--mmproj").unwrap().ends_with("mmproj-Qwen3VL-4B-Instruct-F16.gguf"));
+        assert_eq!(value("--api-key").as_deref(), Some("secret"));
     }
 
     #[test]
     fn status_serializes_with_a_state_tag() {
-        let json = serde_json::to_string(&VlmStatus::Ready { endpoint: "http://127.0.0.1:8737".into() }).unwrap();
-        assert_eq!(json, r#"{"state":"ready","endpoint":"http://127.0.0.1:8737"}"#);
+        let json = serde_json::to_string(&VlmStatus::Ready { endpoint: "http://127.0.0.1:8737".into(), api_key: "k".into() }).unwrap();
+        assert_eq!(json, r#"{"state":"ready","endpoint":"http://127.0.0.1:8737","api_key":"k"}"#);
+    }
+
+    #[test]
+    fn api_keys_are_long_and_unique_per_launch() {
+        let (a, b) = (new_api_key(), new_api_key());
+        assert_eq!(a.len(), 32);
+        assert_ne!(a, b);
     }
 }

@@ -1,5 +1,6 @@
 import { COPY } from "../../lib/copy";
 import type { Dock, DockPrefs, Visibility } from "../../features/dock/dock";
+import type { VisionStatus } from "../../providers/vision/types";
 
 const DOCK_OPTIONS: [Dock, string][] = [
   ["top", COPY.dockTop],
@@ -26,14 +27,38 @@ function Segmented<T extends string>({ label, options, value, onSelect }: { labe
   );
 }
 
+function visionLine(status: VisionStatus): { text: string; tone: "ok" | "busy" | "warn" } {
+  switch (status.state) {
+    case "ready":
+      return { text: COPY.visionReady, tone: "ok" };
+    case "starting":
+      return { text: COPY.visionStarting, tone: "busy" };
+    case "missing":
+      return { text: COPY.visionMissing, tone: "warn" };
+    case "failed":
+      return { text: `${COPY.visionFailed}: ${status.detail}`, tone: "warn" };
+  }
+}
+
+function VisionLine({ status }: { status: VisionStatus }) {
+  const { text, tone } = visionLine(status);
+  return (
+    <p className="dock-menu__vision" data-tone={tone}>
+      {text}
+    </p>
+  );
+}
+
 interface DockMenuProps {
   prefs: DockPrefs;
+  /** Absent in the browser stage, which has no local model. */
+  vision?: VisionStatus;
   onChange: (change: Partial<DockPrefs>) => void;
   onHide: () => void;
 }
 
 /** Where Hodey lives and how it behaves when idle. Rendered inside the notch so hit-testing stays exact. */
-export function DockMenu({ prefs, onChange, onHide }: DockMenuProps) {
+export function DockMenu({ prefs, vision, onChange, onHide }: DockMenuProps) {
   const idle = prefs.visibility === "hidden" ? "pinned" : prefs.visibility;
   return (
     <div className="notch__content dock-menu">
@@ -48,6 +73,7 @@ export function DockMenu({ prefs, onChange, onHide }: DockMenuProps) {
         </span>
       </div>
       <p className="dock-menu__hint">{COPY.dragTip}</p>
+      {vision && <VisionLine status={vision} />}
     </div>
   );
 }

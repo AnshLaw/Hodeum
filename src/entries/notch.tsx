@@ -9,7 +9,11 @@ import type { SkillStore } from "../providers/interfaces";
 import { MemorySkillStore } from "../providers/memory-skill-store";
 import { NativePerception } from "../providers/native-perception";
 import { SqliteSkillStore } from "../providers/sqlite-skill-store";
+import { LocalReasoningProvider } from "../providers/local-reasoner";
 import { TaskPackReasoningProvider } from "../providers/task-pack-reasoner";
+import { QwenVisionProvider } from "../providers/vision/qwen-vision-provider";
+import { TauriVisionStatus } from "../providers/vision/tauri-vision-status";
+import { connectionOf, type CapturedFrame } from "../providers/vision/types";
 import { WebSpeechTTSProvider } from "../providers/web-speech-tts";
 import { TASK_PACKS } from "../task-packs";
 import { mount } from "./mount";
@@ -30,15 +34,21 @@ async function boot(): Promise<void> {
   const bus = new TauriBus();
   const { skills, notice } = await openSkills();
   const perception = new NativePerception({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
+  const vision = new TauriVisionStatus();
+  const qwen = new QwenVisionProvider({
+    connection: () => connectionOf(vision.current()),
+    capture: () => invoke<CapturedFrame>("capture_active_window"),
+  });
+  const local = new LocalReasoningProvider(new TaskPackReasoningProvider(), qwen, () => vision.current().state === "ready");
   const runtime = new HodeRuntime({
     perception,
-    reasoners: [new TaskPackReasoningProvider()],
+    reasoners: [local],
     skills,
     bus,
     tts: new WebSpeechTTSProvider(),
   });
   runtime.subscribe(() => perception.setWatching(WATCHING_PHASES.includes(runtime.getState().phase)));
-  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} />);
+  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} />);
 }
 
 boot().catch((error) => console.error("Hodey failed to start", error));

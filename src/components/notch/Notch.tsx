@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type Ref } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
 import type { Bus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
 import { reportError } from "../../lib/errors";
@@ -16,6 +16,7 @@ import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
 import { NOTCH_IDLE_HOVER_WIDTH, NOTCH_WIDTHS, isExpanded, notchView, stepItems } from "./notch-view";
 import { hodeyMood } from "../hodey/mood";
+import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
 import "../hodey/hodey-face.css";
 import "./notch.css";
 
@@ -26,6 +27,18 @@ export interface NotchProps {
   packs: TaskPack[];
   /** Shown while idle when something degraded at boot (e.g. the skill database). */
   bootNotice?: string;
+  /** The local vision model's status (desktop app only). */
+  vision?: VisionStatusSource;
+}
+
+function useVisionStatus(source?: VisionStatusSource): VisionStatus | undefined {
+  const [status, setStatus] = useState(source?.current());
+  useEffect(() => {
+    if (!source) return;
+    setStatus(source.current());
+    return source.subscribe(setStatus);
+  }, [source]);
+  return status;
 }
 
 function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering: boolean }) {
@@ -38,7 +51,7 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
   const style = { "--notch-width": `${width}px`, "--notch-hover-width": `${NOTCH_IDLE_HOVER_WIDTH}px` } as CSSProperties;
   const classes = ["notch", `notch--${peek ? "compact" : view.size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
   let body;
-  if (menuOpen) body = <DockMenu prefs={dock.prefs} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
+  if (menuOpen) body = <DockMenu prefs={dock.prefs} vision={props.vision} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
   else if (view.mode === "goal") body = <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   else if (peek) body = null;
   else body = <NotchContent view={view} expanded={expanded} fallbackDetail={props.bootNotice} onControl={onControl} />;
@@ -53,8 +66,9 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
 }
 
 /** Hodey's surface: a top-centre notch or a side sidebar, draggable between them, with auto-hide. */
-export function Notch({ runtime, bus, shell, packs, bootNotice }: NotchProps) {
+export function Notch({ runtime, bus, shell, packs, bootNotice, vision }: NotchProps) {
   const state = useHodeState(runtime);
+  const visionStatus = useVisionStatus(vision);
   const view = notchView(state);
   const surfaceRef = useRef<HTMLElement>(null);
   const [muted, setMuted] = useState(false);
@@ -80,6 +94,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice }: NotchProps) {
     packs,
     shell,
     bootNotice,
+    vision: visionStatus,
     onControl,
     onToggleMute: () => {
       runtime.setMuted(!muted);
