@@ -24,9 +24,15 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - **Never steals focus**: clicks outside Hodey pass straight through to your app.
 - **Hodey has moods**: it sleeps when idle, listens as you type your goal, scans, thinks, nods while guiding, watches quietly when you work unaided, reacts to mistakes, and celebrates when you finish. All of it is animated and respects reduced-motion settings.
 
-**Local by default**: a deterministic task-pack planner behind a fallback router (cloud providers plug in ahead of it later), Windows voices for speech, and SQLite for skill progress.
+**Local vision (Qwen3-VL)**
+- A local `llama-server` (llama.cpp, CUDA) runs Qwen3-VL-4B on the GPU. Hodeum starts it, watches it, restarts it if it crashes, and shows its status in the ⋯ menu.
+- The deterministic task-pack planner answers first. The vision model is only asked when UI Automation can't find the step's control, or when you use Point & Ask. It then sees a screenshot of your app (kept in memory, 1280 px) plus the numbered list of controls, and must point at one of them. A box drawn from pixels alone only gets a broad highlight, never a precise arrow.
+- If the model is slow or unavailable, Hodey falls back to the planner and the Hode carries on.
+- The server listens only on 127.0.0.1, needs a fresh random key each launch, and won't start if another program already holds its port.
 
-Next: Qwen3-VL and the OmniParser detector (sub-project 3), Nemotron and MagpieTTS voice (4), and the opt-in Gemini, ElevenLabs and Backboard providers (5).
+**Local by default**: no cloud keys needed. Windows voices handle speech for now, and SQLite stores skill progress.
+
+Next: the OmniParser detector and open-ended goals (rest of sub-project 3), Nemotron and MagpieTTS voice (4), and the opt-in Gemini, ElevenLabs and Backboard providers (5).
 
 ## Run
 
@@ -34,6 +40,7 @@ Requirements: Node 20+, Rust stable (MSVC), WebView2.
 
 ```powershell
 npm install
+powershell -File scripts/setup-local-ai.ps1   # once: ~4 GB of model + llama.cpp CUDA into models/ and runtime/
 npm run dev          # practice stage at http://localhost:1420 (Excel + File Explorer mock apps)
 npm test             # unit + end-to-end teaching-loop tests
 npm run typecheck
