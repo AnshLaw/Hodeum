@@ -155,6 +155,26 @@
   }
 }
 
+/* Speaking: the same waves, travelling outward from Hodey instead of in. */
+.hodey__wave--out {
+  animation-name: hodey-wave-out;
+  animation-timing-function: ease-out;
+}
+
+@keyframes hodey-wave-out {
+  0% {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+
 /* ---- Looking: eyes scanning the screen ---- */
 
 .hodey__eyes--scan {

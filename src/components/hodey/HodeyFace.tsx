@@ -59,6 +59,28 @@ function Listening(): ReactNode {
   );
 }
 
+/** Outgoing wavefronts from Hodey's mouth side, travelling away and fading. */
+const VOICE_WAVES = [
+  { d: "M58 34q5 7 0 14", delay: 0 },
+  { d: "M62 30q7 11 0 22", delay: 0.35 },
+  { d: "M66 26q9 15 0 30", delay: 0.7 },
+];
+
+function Speaking(): ReactNode {
+  return (
+    <>
+      <g className="hodey__face">
+        <path className="hodey__head" d={HEAD} />
+        <OpenEyes className="hodey__eyes--blink" />
+        <ellipse className="hodey__ink hodey__mouth--talk" cx="33" cy="42" rx="5" ry="4" />
+      </g>
+      {VOICE_WAVES.map((wave) => (
+        <path key={wave.d} className="hodey__wave hodey__wave--out" style={{ animationDelay: `${wave.delay}s` }} d={wave.d} />
+      ))}
+    </>
+  );
+}
+
 function Thinking(): ReactNode {
   return (
     <>
@@ -106,12 +128,12 @@ const FACES: Record<HodeyMood, () => ReactNode> = {
   listening: Listening,
   thinking: Thinking,
   celebrating: Celebrating,
+  speaking: Speaking,
   awake: simpleFace("", <><OpenEyes className="hodey__eyes--blink" /><Smile /></>),
   looking: simpleFace("", <><OpenEyes className="hodey__eyes--scan" /><FlatMouth /></>),
   guiding: simpleFace("hodey__face--nod", <><OpenEyes className="hodey__eyes--down" /><Smile /></>),
   watching: simpleFace("", <><g className="hodey__eyes hodey__eyes--blink-slow"><rect x="24" y="24" width="6.5" height="7" rx="3.25" /><rect x="36" y="24" width="6.5" height="7" rx="3.25" /></g><path className="hodey__line" d="M28 41q5 4 10 0" /></>),
   correcting: simpleFace("hodey__face--shake", <><path className="hodey__line" d="M22 17l8-3M44 17l-8-3" /><OpenEyes /><WavyMouth /></>),
-  speaking: simpleFace("", <><OpenEyes className="hodey__eyes--blink" /><ellipse className="hodey__ink hodey__mouth--talk" cx="33" cy="42" rx="5" ry="4" /></>),
   curious: simpleFace("hodey__face--tilt", <><path className="hodey__line" d="M35 13l9-3" /><circle className="hodey__ink" cx="27" cy="26" r="5.5" /><circle className="hodey__ink" cx="39" cy="26" r="6.5" /><path className="hodey__line" d="M30 43q3 2 6 0" /></>),
   resting: simpleFace("hodey__face--breathe", <><ClosedEyes /><FlatMouth /></>),
   confused: simpleFace("", <><path className="hodey__line" d="M21 16l9 2M45 15l-8 3" /><circle className="hodey__ink" cx="27" cy="26" r="3" /><circle className="hodey__ink" cx="39" cy="26" r="3" /><WavyMouth /><path className="hodey__sweat" d="M52 14q3 5 0 7q-3-2 0-7z" /></>),
