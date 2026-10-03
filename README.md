@@ -18,7 +18,9 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - **Overlay** highlights follow your app to whichever monitor it's on, with DPI-aware coordinates.
 
 **Hodey, where you want it**
-- **Notch, sidebar, or hidden**: Hodey sits at the top centre, or on the left or right as a sidebar. Drag it by its face to re-dock, or use the ⋯ menu or the tray icon.
+- **Notch, sidebar, or hidden**: Hodey sits at the top centre, or on the left or right as a sidebar. Drag it by its face to re-dock, or use the ⋯ menu, the tray icon, or Settings.
+- **Dynamic island**: the top notch changes shape with what Hodey is doing. It's a pill when idle and shrinks to an orb around Hodey's face while it looks or thinks; the orb shows a sweeping ring and the green dot while it reads the screen. When the next step is ready it springs open into a card.
+- **Copilot sidebar** (default for side docks): a real side panel. Windows reserves its width and any normal windows overlapping it slide over; they move back when the panel closes, unless you've moved them since. Choose *Floating* to have the panel hover over your windows instead.
 - **Auto-hide** (default): Hodey tucks into a sliver at the screen edge when idle and slides back on hover or when a Hode needs you. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd> hides or shows it completely.
 - **No covering**: during a Hode, a side sidebar reserves its width so maximized apps move over. At the top, the card shrinks to a slim bar whenever the highlighted control sits beneath it.
 - **Never steals focus**: clicks outside Hodey pass straight through to your app.
@@ -36,7 +38,11 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - **Your Hodes**: every Hode as a timeline of steps, corrections, hints and questions.
 - **Learning paths**: task packs and every skill's mastery. Change how much help a skill gets, or reset it.
 - **Ask Hodey**: chat with the local Qwen3-VL. It attaches the app you were last in (or any window you pick), streams the answer, and can turn a question into a Hode. The screenshot stays in memory; the notch's green dot shows while it's taken.
-- **Settings**: voice, speaking speed, how long Hodey waits before helping, and the help preset for new skills. They apply to the notch right away.
+- **Settings**:
+  - **Hodey**: choose an on-device voice and preview it (online voices aren't offered, since they'd send Hodey's words to the cloud), set the speaking speed, how long Hodey waits before helping, and the help preset for new skills.
+  - **Look & feel**: system, dark or light theme; an accent colour; Hodey's colour; and an accessory (glasses, headphones, beanie). A live preview cycles through Hodey's moods.
+  - **Hodey on screen**: position, sidebar style and idle behaviour.
+  - Everything applies to the notch and overlay right away.
 
 **Local by default**: no cloud keys needed. Windows voices handle speech for now. SQLite (`hodeum.db` in the app config folder) stores skills, Hode history, chats and settings, never screenshots or audio. The local model server runs inside a Windows job object, so it stops with Hodeum even after a crash.
 

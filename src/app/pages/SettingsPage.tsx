@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { HELP_PRESETS, SETTINGS_LIMITS, type HelpPreset, type Settings } from "../../data/settings";
 import type { VisionStatus } from "../../providers/vision/types";
-import { useLiveQuery } from "../hooks";
 import type { AppServices } from "../services";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { Row } from "./settings/controls";
 import { OnScreenSettings } from "./settings/OnScreenSettings";
+import { useEditableSettings } from "./settings/use-settings";
 import { VoiceSettings } from "./settings/VoiceSettings";
 
 const PRESET_LABELS: Record<HelpPreset, { title: string; detail: string }> = {
@@ -89,36 +89,22 @@ function AboutSettings({ vision }: { vision?: VisionStatus }) {
 }
 
 export function SettingsPage({ services }: { services: AppServices }) {
-  const [loaded] = useLiveQuery(services.bus, () => services.settings.load(), []);
-  const [error, setError] = useState<string>();
+  const { settings, loadError, saveError, update } = useEditableSettings(services);
   const vision = useVision(services);
-  const update = (next: Settings) => {
-    services.settings.save(next).then(
-      () => {
-        setError(undefined);
-        services.bus.emit("settings:changed", {});
-        services.bus.emit("data:changed", {});
-      },
-      (e) => {
-        console.error("Couldn't save settings", e);
-        setError(e instanceof Error ? e.message : String(e));
-      },
-    );
-  };
   return (
     <div className="hpage">
       <header className="hpage__head">
         <h1>Settings</h1>
         <p className="hmuted">Changes apply to the notch right away.</p>
       </header>
-      {error && <p className="hchat__error" role="alert">Couldn't save: {error}</p>}
-      {loaded.state === "ready" && (
+      {saveError && <p className="hchat__error" role="alert">Couldn't save: {saveError}</p>}
+      {settings && (
         <>
-          <HodeySettings settings={loaded.value} update={update} />
-          <AppearanceSettings appearance={loaded.value.appearance} onChange={(appearance) => update({ ...loaded.value, appearance })} />
+          <HodeySettings settings={settings} update={update} />
+          <AppearanceSettings appearance={settings.appearance} onChange={(appearance) => update({ ...settings, appearance })} />
         </>
       )}
-      {loaded.state === "error" && <p className="hchat__error">Couldn't load settings: {loaded.message}</p>}
+      {loadError && <p className="hchat__error">Couldn't load settings: {loadError}</p>}
       <OnScreenSettings bus={services.bus} />
       <AboutSettings vision={vision} />
     </div>
