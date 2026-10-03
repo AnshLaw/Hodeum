@@ -1,7 +1,7 @@
 import type { ActionTarget, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
 import type { ReasoningProvider } from "../interfaces";
 import { buildMessages, fromImageBox, insideFrame, selectCandidates } from "./prompt";
-import { VISION_REPLY_JSON_SCHEMA, parseVisionReply, type VisionReply } from "./schema";
+import { parseVisionReply, replySchemaFor, type VisionReply } from "./schema";
 import type { CapturedFrame, VisionConnection } from "./types";
 
 /** A slow answer is worse than the deterministic fallback; the notch shows "looking" meanwhile. */
@@ -9,6 +9,8 @@ export const VISION_TIMEOUT_MS = 20_000;
 /** Boxes from pixels alone never earn a precise arrow (PRD §37): they draw a broad highlight at most. */
 export const VISUAL_CONFIDENCE_CAP = 0.8;
 const MAX_TOKENS = 200;
+/** A "target" covering most of the window points at nothing; better to draw no highlight at all. */
+const MAX_BOX_SHARE = 0.5;
 const TEMPERATURE = 0.2;
 const GENERAL_SKILL = "general.vision";
 
@@ -29,7 +31,7 @@ export class QwenVisionProvider implements ReasoningProvider {
   async reason(context: TeachingContext): Promise<TeachingAction> {
     const frame = await this.deps.capture();
     const candidates = selectCandidates(context);
-    const reply = await this.ask(buildMessages(context, candidates, frame));
+    const reply = await this.ask(buildMessages(context, candidates, frame), candidates.length > 0);
     return toAction(reply, candidates, frame, context);
   }
 
@@ -45,7 +47,7 @@ export class QwenVisionProvider implements ReasoningProvider {
     }
   }
 
-  private async ask(messages: unknown[]): Promise<VisionReply> {
+  private async ask(messages: unknown[], hasCandidates: boolean): Promise<VisionReply> {
     const connection = this.deps.connection();
     if (!connection) throw new Error("The local vision model isn't running.");
     const response = await (this.deps.fetch ?? fetch)(`${connection.endpoint}/v1/chat/completions`, {
@@ -56,7 +58,7 @@ export class QwenVisionProvider implements ReasoningProvider {
         messages,
         temperature: TEMPERATURE,
         max_tokens: MAX_TOKENS,
-        response_format: { type: "json_schema", json_schema: { name: "teaching_action", schema: VISION_REPLY_JSON_SCHEMA } },
+        response_format: { type: "json_schema", json_schema: { name: "teaching_action", schema: replySchemaFor(hasCandidates) } },
       }),
     });
     if (!response.ok) throw new Error(`The vision model answered ${response.status}: ${(await response.text()).slice(0, 160)}`);
@@ -74,7 +76,8 @@ function targetFrom(reply: VisionReply, candidates: UiElement[], frame: Captured
   }
   if (!reply.bbox) return undefined;
   const bounds = fromImageBox(reply.bbox, frame.rect);
-  if (!insideFrame(bounds, frame.rect)) return undefined;
+  const share = (bounds.width * bounds.height) / (frame.rect.width * frame.rect.height);
+  if (!insideFrame(bounds, frame.rect) || share > MAX_BOX_SHARE) return undefined;
   return { elementId: "vision-box", bounds, confidence: Math.min(reply.confidence, VISUAL_CONFIDENCE_CAP), label: "Here" };
 }
 

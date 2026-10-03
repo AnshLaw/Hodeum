@@ -80,6 +80,11 @@ describe("QwenVisionProvider", () => {
     expect(action.target?.bounds).toEqual({ x: 100, y: 50, width: 100, height: 50 });
   });
 
+  it("drops a box that covers most of the window instead of highlighting everything", async () => {
+    const action = await provider(fakeFetch({ kind: "guide", speech: "Select your data.", target_index: -1, bbox: [0, 0, 1000, 1000], confidence: 0.9 })).reason(ctx());
+    expect(action.target).toBeUndefined();
+  });
+
   it("marks guidance as a correction after a mistake", async () => {
     const action = await provider(fakeFetch({ kind: "guide", speech: "Insert is to the left.", target_index: 0, confidence: 0.9 })).reason(ctx({ correction: "You opened Data." }));
     expect(action.kind).toBe("correct");

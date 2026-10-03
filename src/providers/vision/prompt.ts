@@ -29,7 +29,8 @@ const ACTIONABLE_ROLES = new Set([
 const SYSTEM_PROMPT = [
   "You are Hodey, a patient teaching companion inside Windows. You teach; you never do the task for the learner.",
   "You see a screenshot of the learner's app and a numbered list of its on-screen controls.",
-  "Reply with JSON only. Keep speech to one or two short sentences, in plain words, quoting control labels exactly as they appear.",
+  "Reply with JSON only. Give exactly ONE action per reply (never \"then …\"); the learner does it, then you see the screen again.",
+  "Keep speech to one or two short sentences, in plain words, quoting control labels exactly as they appear.",
   "Never say you clicked, typed, or did anything. Ask the learner to do it.",
   "Point at a control by its number in target_index. Use -1 and a bbox (0-1000, relative to the image) only if no listed control fits.",
   "If you can't tell what the learner needs, use kind \"clarify\" and ask one short question.",
@@ -92,7 +93,7 @@ function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
     const box = toImageBox(region.shape.bounds, frame.rect).join(", ");
     lines.push(`The learner marked the area [${box}] and asks: <learner>${untrusted(context.utterance ?? "What is this?")}</learner>. Answer about that area with kind "answer".`);
   } else if (context.openGoal) {
-    lines.push("There is no fixed plan: decide the single next action toward the goal from what is on screen.");
+    lines.push("There is no fixed plan: decide the single next action toward the goal from what is on screen, and point at where to do it.");
     if (context.lastInstruction) lines.push(`You last told the learner: ${untrusted(context.lastInstruction)}. Check whether they did it.`);
     lines.push('If the screen shows the goal is achieved, reply kind "complete" with a short congratulation. Otherwise reply kind "guide".');
   } else {
@@ -113,8 +114,9 @@ function controlList(candidates: UiElement[], frame: CapturedFrame): string {
 /** OpenAI-style chat messages for llama-server, with the screenshot inline. */
 export function buildMessages(context: TeachingContext, candidates: UiElement[], frame: CapturedFrame) {
   const text = [...taskLines(context, frame), "", "Controls:", controlList(candidates, frame) || "(none found)"].join("\n");
+  const pointing = candidates.length === 0 ? " No controls were listed: always give a bbox around where the learner should act." : "";
   return [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: SYSTEM_PROMPT + pointing },
     {
       role: "user",
       content: [

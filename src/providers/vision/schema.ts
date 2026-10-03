@@ -31,6 +31,12 @@ export const VISION_REPLY_JSON_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+/** Without a control list the model must point by pixels, so `bbox` becomes mandatory. */
+export function replySchemaFor(hasCandidates: boolean) {
+  if (hasCandidates) return VISION_REPLY_JSON_SCHEMA;
+  return { ...VISION_REPLY_JSON_SCHEMA, required: [...VISION_REPLY_JSON_SCHEMA.required, "bbox"] };
+}
+
 export function parseVisionReply(content: string): VisionReply {
   let raw: unknown;
   try {
