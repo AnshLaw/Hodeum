@@ -95,14 +95,23 @@ pub async fn observe(app: AppHandle, region: Option<RectDto>, state: State<'_, P
     Ok(observation)
 }
 
-/// Downscaled PNG of the learner's app, base64-encoded, for the local vision model (sub-project 3).
+/// Mirrors `CapturedFrame` in `src/providers/vision/types.ts`.
+#[derive(serde::Serialize)]
+pub struct CapturedFrame {
+    /// Base64 PNG, longest side at most 1280 px.
+    png: String,
+    /// Where the captured window sits on screen, in physical px (to map model coordinates back).
+    rect: RectDto,
+}
+
+/// Downscaled capture of the learner's app for the local vision model. Kept in memory only.
 #[tauri::command]
-pub async fn capture_active_window(state: State<'_, Perception>) -> Result<String, String> {
+pub async fn capture_active_window(state: State<'_, Perception>) -> Result<CapturedFrame, String> {
     let last_external = state.last_external.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let hwnd = foreground::target_window(&last_external)?;
-        let png = capture::capture_png(hwnd.0 as isize)?;
-        Ok(BASE64_STANDARD.encode(png))
+        let capture = capture::capture_png(hwnd.0 as isize)?;
+        Ok(CapturedFrame { png: BASE64_STANDARD.encode(capture.png), rect: capture.rect })
     })
     .await
     .map_err(|e| e.to_string())?

@@ -2,6 +2,8 @@ use std::io::Cursor;
 
 use xcap::image::{imageops, imageops::FilterType, ImageFormat};
 
+use super::model::RectDto;
+
 /// Routine VLM input size from the PRD (§12): longest side about 1280 px.
 pub const MAX_CAPTURE_SIDE: u32 = 1280;
 
@@ -15,13 +17,26 @@ pub fn downscaled_size(width: u32, height: u32, max_side: u32) -> (u32, u32) {
     (fit(width), fit(height))
 }
 
+/// A downscaled window capture and where that window sits on screen (physical px).
+pub struct Capture {
+    pub png: Vec<u8>,
+    pub rect: RectDto,
+}
+
 /// Captures one window to PNG bytes in memory. Nothing is written to disk.
-pub fn capture_png(hwnd: isize) -> Result<Vec<u8>, String> {
+pub fn capture_png(hwnd: isize) -> Result<Capture, String> {
     let window = xcap::Window::all()
         .map_err(|e| e.to_string())?
         .into_iter()
         .find(|w| w.id().ok() == Some(hwnd as u32))
         .ok_or_else(|| "The app window to capture is no longer open.".to_string())?;
+    let err = |e: xcap::XCapError| e.to_string();
+    let rect = RectDto {
+        x: f64::from(window.x().map_err(err)?),
+        y: f64::from(window.y().map_err(err)?),
+        width: f64::from(window.width().map_err(err)?),
+        height: f64::from(window.height().map_err(err)?),
+    };
     let image = window.capture_image().map_err(|e| e.to_string())?;
     let (width, height) = downscaled_size(image.width(), image.height(), MAX_CAPTURE_SIDE);
     let image = if (width, height) == image.dimensions() {
@@ -31,7 +46,7 @@ pub fn capture_png(hwnd: isize) -> Result<Vec<u8>, String> {
     };
     let mut bytes = Cursor::new(Vec::new());
     image.write_to(&mut bytes, ImageFormat::Png).map_err(|e| e.to_string())?;
-    Ok(bytes.into_inner())
+    Ok(Capture { png: bytes.into_inner(), rect })
 }
 
 #[cfg(test)]

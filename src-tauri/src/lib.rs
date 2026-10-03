@@ -4,6 +4,7 @@ mod hit_test;
 mod perception;
 mod surfaces;
 mod tray;
+mod vlm;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, Shortcut, ShortcutState};
@@ -39,6 +40,7 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     tray::install(app)?;
     hit_test::spawn(app.clone());
     perception::input_hook::spawn(app.clone())?;
+    vlm::spawn(app.clone());
     Ok(())
 }
 
@@ -54,6 +56,7 @@ pub fn run() {
         .manage(perception::Perception::start())
         .manage(dock::DockState::default())
         .manage(surfaces::FocusReturn::default())
+        .manage(vlm::Vlm::default())
         .invoke_handler(tauri::generate_handler![
             surfaces::set_notch_hit_rect,
             surfaces::set_notch_activatable,
@@ -63,7 +66,8 @@ pub fn run() {
             perception::capture_active_window,
             dock::set_dock,
             dock::set_notch_visible,
-            dock::begin_notch_drag
+            dock::begin_notch_drag,
+            vlm::vlm_status
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())
@@ -74,6 +78,9 @@ pub fn run() {
         if let RunEvent::Exit = event {
             if let Err(error) = app.state::<dock::DockState>().appbar.release() {
                 eprintln!("couldn't release the sidebar's screen space: {error}");
+            }
+            if let Err(error) = app.state::<vlm::Vlm>().stop() {
+                eprintln!("{error}");
             }
         }
     });
