@@ -3,15 +3,21 @@ use std::io::{Read, Write};
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 use std::net::{TcpListener, TcpStream};
+use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
+use windows::Win32::Foundation::HANDLE;
+use windows::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+};
 
 /// The local vision model server (llama.cpp) listens only on loopback.
 pub const VLM_HOST: &str = "127.0.0.1";
@@ -47,12 +53,36 @@ pub enum VlmStatus {
 pub struct Vlm {
     status: Mutex<VlmStatus>,
     child: Mutex<Option<Child>>,
+    /// Kill-on-close job holding the server. Its handle is never closed: Windows closes it when
+    /// Hodeum exits, even by crash or Task Manager, which kills the server with it.
+    job: OnceLock<Result<isize, String>>,
 }
 
 impl Default for Vlm {
     fn default() -> Self {
-        Self { status: Mutex::new(VlmStatus::Starting), child: Mutex::new(None) }
+        Self { status: Mutex::new(VlmStatus::Starting), child: Mutex::new(None), job: OnceLock::new() }
     }
+}
+
+fn kill_on_close_job() -> Result<isize, String> {
+    // SAFETY: the info struct is fully initialized and its exact size is passed.
+    unsafe {
+        let job = CreateJobObjectW(None, None).map_err(|e| format!("couldn't create a job object: {e}"))?;
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let size = std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, (&info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(), size)
+            .map_err(|e| format!("couldn't configure the job object: {e}"))?;
+        Ok(job.0 as isize)
+    }
+}
+
+/// Ties the server's lifetime to Hodeum's so a crash never leaves it holding the GPU and port.
+fn bind_to_app(vlm: &Vlm, child: &Child) -> Result<(), String> {
+    let job = vlm.job.get_or_init(kill_on_close_job).clone()?;
+    // SAFETY: both handles are valid for this call; the child handle is owned by `child`.
+    unsafe { AssignProcessToJobObject(HANDLE(job as *mut _), HANDLE(child.as_raw_handle())) }
+        .map_err(|e| format!("couldn't tie llama-server to Hodeum: {e}"))
 }
 
 impl Vlm {
@@ -169,8 +199,13 @@ enum RunEnd {
 /// Waits for the model to load, then watches the process until it exits or is stopped.
 fn run_once(app: &AppHandle, root: &Path) -> Result<RunEnd, String> {
     let api_key = new_api_key();
-    let child = start_server(root, &api_key)?;
+    let mut child = start_server(root, &api_key)?;
     let vlm = app.state::<Vlm>();
+    if let Err(reason) = bind_to_app(&vlm, &child) {
+        // An untied server could outlive Hodeum and hold the port; don't run one.
+        child.kill().map_err(|e| format!("{reason}; also couldn't stop llama-server: {e}"))?;
+        return Err(reason);
+    }
     *vlm.child.lock().map_err(|e| e.to_string())? = Some(child);
     let started = Instant::now();
     let mut ready = false;

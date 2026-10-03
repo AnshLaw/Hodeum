@@ -13,8 +13,9 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // The practice stage (index.html) is dev-only; the app ships the two Tauri windows.
+      // The practice stage (index.html) is dev-only; the app ships the Tauri windows.
       input: {
+        app: resolve(root, "app.html"),
         notch: resolve(root, "notch.html"),
         overlay: resolve(root, "overlay.html"),
       },

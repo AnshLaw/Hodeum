@@ -907,3 +907,11 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* The native, frameless app window: rounded like the stage frame, square when maximized. */
+.native-app {
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 10px;
+}

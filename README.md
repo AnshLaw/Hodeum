@@ -30,7 +30,15 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - If the model is slow or unavailable, Hodey falls back to the planner and the Hode carries on.
 - The server listens only on 127.0.0.1, needs a fresh random key each launch, and won't start if another program already holds its port.
 
-**Local by default**: no cloud keys needed. Windows voices handle speech for now, and SQLite stores skill progress.
+**Hodeum app**
+- Open it from the notch's expand button, the tray, or <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>J</kbd>. It grows out of the notch and folds back into it when closed. Closing only hides it; Hodey keeps running.
+- **Home**: start a Hode, continue the live one, and see streak, skills mastered, minutes learning, recent Hodes and what to practise next.
+- **Your Hodes**: every Hode as a timeline of steps, corrections, hints and questions.
+- **Learning paths**: task packs and every skill's mastery. Change how much help a skill gets, or reset it.
+- **Ask Hodey**: chat with the local Qwen3-VL. It attaches the app you were last in (or any window you pick), streams the answer, and can turn a question into a Hode. The screenshot stays in memory; the notch's green dot shows while it's taken.
+- **Settings**: voice, speaking speed, how long Hodey waits before helping, and the help preset for new skills. They apply to the notch right away.
+
+**Local by default**: no cloud keys needed. Windows voices handle speech for now. SQLite (`hodeum.db` in the app config folder) stores skills, Hode history, chats and settings, never screenshots or audio. The local model server runs inside a Windows job object, so it stops with Hodeum even after a crash.
 
 Next: the OmniParser detector and open-ended goals (rest of sub-project 3), Nemotron and MagpieTTS voice (4), and the opt-in Gemini, ElevenLabs and Backboard providers (5).
 
@@ -72,8 +80,11 @@ src/providers/       reasoning, perception, TTS, skill stores behind interfaces
 src/task-packs/      JSON packs + schema + goal matching
 src/features/dock/   dock + visibility preferences and rules
 src/components/      notch + sidebar, Hodey's face, overlay (+ Point & Ask), shared UI
+src/app/             desktop app: pages, services boundary, unfold transition
+src/data/            learning history, stats, settings, SQLite + memory stores
 src/stage/           browser practice stage and scripted mock apps
-src-tauri/src/       windows, hit-test, docking + app bar, tray, perception (UIA, input hook, capture), SQLite
+src-tauri/src/       windows, hit-test, docking + app bar, tray, perception (UIA, input hook, capture), app window, chat context, SQLite
+src-tauri/migrations/ SQLite schema, shared with the TypeScript store tests
 ```
 
 See [`CLAUDE.md`](./CLAUDE.md) for priorities and architecture rules, and `docs/superpowers/` for the spec and plan.

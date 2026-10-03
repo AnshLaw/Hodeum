@@ -42,6 +42,21 @@
         "focusable": false,
         "shadow": false,
         "visible": false
+      },
+      {
+        "label": "hodeum_app",
+        "url": "app.html",
+        "title": "Hodeum",
+        "width": 1120,
+        "height": 740,
+        "minWidth": 860,
+        "minHeight": 560,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "resizable": true,
+        "center": true,
+        "visible": false
       }
     ],
     "security": {

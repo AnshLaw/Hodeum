@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOME_SELECTED } from "../features/hode/test-fixtures";
 import type { PerceptionAdapter } from "../providers/interfaces";
-import { ACTIVITY_LINGER_MS, ActivityTracker, activeChannels, withScreenActivity } from "./activity";
+import { ACTIVITY_LINGER_MS, ActivityTracker, activeChannels, mirrorRemoteActivity, trackRemote, withScreenActivity } from "./activity";
+import { LocalBus } from "./bus";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -63,6 +64,24 @@ describe("withScreenActivity", () => {
     expect(tracker.current().screen).toBe(true);
     release();
     await pending;
+    vi.advanceTimersByTime(ACTIVITY_LINGER_MS);
+    expect(tracker.current().screen).toBe(false);
+  });
+});
+
+describe("remote activity", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("lights the notch's dots for work done in another window, until it settles", async () => {
+    const bus = new LocalBus();
+    const tracker = new ActivityTracker();
+    mirrorRemoteActivity(bus, tracker);
+    let finish: (value: string) => void = () => undefined;
+    const work = trackRemote(bus, "screen", () => new Promise<string>((resolve) => (finish = resolve)));
+    expect(tracker.current().screen).toBe(true);
+    finish("frame");
+    expect(await work).toBe("frame");
     vi.advanceTimersByTime(ACTIVITY_LINGER_MS);
     expect(tracker.current().screen).toBe(false);
   });

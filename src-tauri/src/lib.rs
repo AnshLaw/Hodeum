@@ -1,3 +1,5 @@
+mod app_window;
+mod chat_context;
 mod db;
 mod dock;
 mod hit_test;
@@ -12,14 +14,25 @@ use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, Shortcut, Shortcu
 const ANNOTATE_SHORTCUT: &str = "ctrl+alt+h";
 const ANNOTATE_EVENT: &str = "annotate:start";
 const VISIBILITY_SHORTCUT: &str = "ctrl+alt+n";
+const APP_SHORTCUT: &str = "ctrl+alt+j";
+
+fn matches(shortcut: &Shortcut, text: &str) -> bool {
+    match text.parse::<Shortcut>() {
+        Ok(parsed) => parsed == *shortcut,
+        Err(error) => {
+            eprintln!("invalid shortcut {text}: {error}");
+            false
+        }
+    }
+}
 
 fn on_shortcut(app: &AppHandle, shortcut: &Shortcut) {
-    let visibility: Shortcut = match VISIBILITY_SHORTCUT.parse() {
-        Ok(parsed) => parsed,
-        Err(error) => return eprintln!("invalid shortcut {VISIBILITY_SHORTCUT}: {error}"),
-    };
-    if *shortcut == visibility {
+    if matches(shortcut, VISIBILITY_SHORTCUT) {
         tray::emit_command(app, "toggle-visibility");
+    } else if matches(shortcut, APP_SHORTCUT) {
+        if let Err(error) = app_window::show(app, None) {
+            eprintln!("couldn't open the Hodeum app: {error}");
+        }
     } else if let Err(error) = app.emit(ANNOTATE_EVENT, serde_json::json!({})) {
         eprintln!("failed to emit {ANNOTATE_EVENT}: {error}");
     }
@@ -28,7 +41,7 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut) {
 fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     app.plugin(
         ShortcutBuilder::new()
-            .with_shortcuts([ANNOTATE_SHORTCUT, VISIBILITY_SHORTCUT])?
+            .with_shortcuts([ANNOTATE_SHORTCUT, VISIBILITY_SHORTCUT, APP_SHORTCUT])?
             .with_handler(|app, shortcut, event| {
                 if event.state == ShortcutState::Pressed {
                     on_shortcut(app, shortcut);
@@ -37,6 +50,7 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             .build(),
     )?;
     surfaces::setup(app)?;
+    app_window::keep_alive(app)?;
     tray::install(app)?;
     hit_test::spawn(app.clone());
     perception::input_hook::spawn(app.clone())?;
@@ -67,7 +81,11 @@ pub fn run() {
             dock::set_dock,
             dock::set_notch_visible,
             dock::begin_notch_drag,
-            vlm::vlm_status
+            vlm::vlm_status,
+            app_window::open_app_window,
+            chat_context::list_windows,
+            chat_context::last_app_window,
+            chat_context::capture_window
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())

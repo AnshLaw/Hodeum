@@ -1,4 +1,5 @@
 import type { PerceptionAdapter } from "../providers/interfaces";
+import type { Bus } from "./bus";
 import type { Rect, ScreenObservation } from "./types";
 
 /** What Hodey is touching right now, shown as privacy dots (like iPhone's Dynamic Island). */
@@ -74,4 +75,28 @@ export function withScreenActivity(perception: PerceptionAdapter, activity: Acti
         handler(observation);
       }),
   };
+}
+
+/** Runs `work` in another window (the app) while the notch, which owns the dots, shows the channel. */
+export async function trackRemote<T>(bus: Bus, channel: ActivityChannel, work: () => Promise<T>): Promise<T> {
+  const id = crypto.randomUUID();
+  bus.emit("activity:remote", { id, channel, active: true });
+  try {
+    return await work();
+  } finally {
+    bus.emit("activity:remote", { id, channel, active: false });
+  }
+}
+
+/** The notch side of `trackRemote`. Returns a disposer. */
+export function mirrorRemoteActivity(bus: Bus, tracker: ActivityTracker): () => void {
+  const ends = new Map<string, () => void>();
+  return bus.on("activity:remote", ({ id, channel, active }) => {
+    if (active) {
+      ends.set(id, tracker.begin(channel));
+      return;
+    }
+    ends.get(id)?.();
+    ends.delete(id);
+  });
 }

@@ -43,6 +43,19 @@ impl Perception {
         thread::spawn(move || worker(receiver, worker_last));
         Self { jobs: Mutex::new(jobs), last_external }
     }
+
+    /// Notes the learner's app before Hodeum's own window takes focus, so chat can look at it.
+    pub fn remember_learner_window(&self) {
+        // Err only means no app has had focus yet; there is nothing to remember then.
+        if let Err(reason) = foreground::target_window(&self.last_external) {
+            eprintln!("no learner app to remember: {reason}");
+        }
+    }
+
+    /// The learner's app: the foreground window, or the last one before Hodeum took focus.
+    pub fn learner_window(&self) -> Result<isize, String> {
+        foreground::target_window(&self.last_external).map(|hwnd| hwnd.0 as isize)
+    }
 }
 
 fn worker(jobs: mpsc::Receiver<Job>, last_external: Arc<AtomicIsize>) {
@@ -107,12 +120,12 @@ pub struct CapturedFrame {
 /// Downscaled capture of the learner's app for the local vision model. Kept in memory only.
 #[tauri::command]
 pub async fn capture_active_window(state: State<'_, Perception>) -> Result<CapturedFrame, String> {
-    let last_external = state.last_external.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let hwnd = foreground::target_window(&last_external)?;
-        let capture = capture::capture_png(hwnd.0 as isize)?;
-        Ok(CapturedFrame { png: BASE64_STANDARD.encode(capture.png), rect: capture.rect })
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    let hwnd = state.learner_window()?;
+    tauri::async_runtime::spawn_blocking(move || capture_frame(hwnd)).await.map_err(|e| e.to_string())?
+}
+
+/// One window, downscaled and base64-encoded in memory. Blocking.
+pub fn capture_frame(hwnd: isize) -> Result<CapturedFrame, String> {
+    let capture = capture::capture_png(hwnd)?;
+    Ok(CapturedFrame { png: BASE64_STANDARD.encode(capture.png), rect: capture.rect })
 }

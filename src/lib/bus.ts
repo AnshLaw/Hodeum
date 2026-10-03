@@ -1,3 +1,4 @@
+import type { ActivityChannel } from "./activity";
 import type { LearnerAnnotation, OverlayPrimitive } from "./types";
 
 type Empty = Record<string, never>;
@@ -18,6 +19,8 @@ export interface BusEvents {
   "hode:end": Empty;
   /** Ask the notch to broadcast a fresh summary (an app window just opened). */
   "hode:summary-request": Empty;
+  /** Another window (the app) is using a privacy channel; the notch shows its dot. */
+  "activity:remote": { id: string; channel: ActivityChannel; active: boolean };
 }
 
 export interface HodeSummary {

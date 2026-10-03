@@ -24,6 +24,7 @@
   box-sizing: border-box;
 }
 
+html:has(> body.transparent-window),
 body.transparent-window,
 body.transparent-window #root {
   margin: 0;

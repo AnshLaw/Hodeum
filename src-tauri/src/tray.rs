@@ -8,7 +8,9 @@ use crate::dock::DockState;
 /// Commands the notch's dock controller applies; it owns the preferences.
 pub const SHELL_COMMAND_EVENT: &str = "shell:command";
 const QUIT: &str = "quit";
-const COMMANDS: [(&str, &str); 7] = [
+const OPEN_APP: &str = "open-app";
+const COMMANDS: [(&str, &str); 8] = [
+    (OPEN_APP, "Open Hodeum\tCtrl+Alt+J"),
     ("toggle-visibility", "Show / hide Hodey\tCtrl+Alt+N"),
     ("dock-top", "Top"),
     ("dock-left", "Left side"),
@@ -38,11 +40,15 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let dock = Submenu::with_items(app, "Position", true, &[&item(app, "dock-top")?, &item(app, "dock-left")?, &item(app, "dock-right")?])?;
     let visibility = Submenu::with_items(app, "Visibility", true, &[&item(app, "pinned")?, &item(app, "auto")?])?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&item(app, "toggle-visibility")?, &dock, &visibility, &separator, &item(app, QUIT)?])?;
+    let menu = Menu::with_items(app, &[&item(app, OPEN_APP)?, &item(app, "toggle-visibility")?, &dock, &visibility, &separator, &item(app, QUIT)?])?;
     let mut builder = TrayIconBuilder::with_id("hodeum").tooltip("Hodey").menu(&menu).on_menu_event(|app, event| {
         let id = event.id().as_ref();
         if id == QUIT {
             quit(app);
+        } else if id == OPEN_APP {
+            if let Err(error) = crate::app_window::show(app, None) {
+                eprintln!("couldn't open the Hodeum app: {error}");
+            }
         } else {
             emit_command(app, id);
         }
