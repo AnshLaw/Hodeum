@@ -15,3 +15,8 @@ src-tauri/gen/
 *.png
 *.jpg
 *.jpeg
+
+# App icons are source assets
+!src-tauri/icons/**
+src-tauri/icons/android/
+src-tauri/icons/ios/

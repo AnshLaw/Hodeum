@@ -12,16 +12,36 @@
   "app": {
     "windows": [
       {
-        "label": "main_notch",
-        "title": "Hodeum",
-        "width": 520,
-        "height": 380,
+        "label": "guidance_overlay",
+        "url": "overlay.html",
+        "title": "Hodey guidance",
+        "width": 800,
+        "height": 600,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "resizable": false,
-        "focus": false
+        "focus": false,
+        "focusable": false,
+        "shadow": false,
+        "visible": false
+      },
+      {
+        "label": "main_notch",
+        "url": "notch.html",
+        "title": "Hodey",
+        "width": 600,
+        "height": 340,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "focus": false,
+        "focusable": false,
+        "shadow": false,
+        "visible": false
       }
     ],
     "security": {

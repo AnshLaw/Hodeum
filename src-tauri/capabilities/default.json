@@ -1,10 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default Hodeum desktop permissions",
-  "windows": ["main_notch"],
-  "permissions": [
-    "core:default",
-    "opener:default"
-  ]
+  "description": "Hodeum notch and guidance overlay permissions",
+  "windows": ["main_notch", "guidance_overlay"],
+  "permissions": ["core:default", "sql:default", "sql:allow-execute"]
 }
