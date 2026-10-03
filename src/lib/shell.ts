@@ -22,6 +22,8 @@ export interface NativeShell {
   /** Starts a native drag; the shell reports the dock to snap to via `onDockSnapped`. */
   beginNotchDrag(): Promise<void>;
   onDockSnapped(handler: (dock: Dock) => void): () => void;
+  /** Opens the Hodeum desktop app, unfolding from `from` (the notch's screen rect, CSS px of the notch window). */
+  openApp(from: Rect): Promise<void>;
   /** Tray menu and Ctrl+Alt+N commands (see `applyCommand`). */
   onShellCommand(handler: (command: string) => void): () => void;
 }
@@ -31,6 +33,7 @@ export const PAGE_MONITOR: MonitorInfo = { x: 0, y: 0, width: 0, height: 0, scal
 /** Browser practice stage: everything lives in one page, so window management is a no-op. */
 export class BrowserShell implements NativeShell {
   private readonly commandHandlers = new Set<(command: string) => void>();
+  private readonly openAppHandlers = new Set<(from: Rect) => void>();
 
   async setNotchHitRect(): Promise<void> {}
   async setNotchActivatable(): Promise<void> {}
@@ -38,6 +41,18 @@ export class BrowserShell implements NativeShell {
   async setDock(): Promise<void> {}
   async setNotchVisible(): Promise<void> {}
   async beginNotchDrag(): Promise<void> {}
+
+  /** The stage shows the app in-page; it listens via `onOpenApp`. */
+  async openApp(from: Rect): Promise<void> {
+    this.openAppHandlers.forEach((handler) => handler(from));
+  }
+
+  onOpenApp(handler: (from: Rect) => void): () => void {
+    this.openAppHandlers.add(handler);
+    return () => {
+      this.openAppHandlers.delete(handler);
+    };
+  }
 
   async overlayMonitor(): Promise<MonitorInfo> {
     return PAGE_MONITOR;

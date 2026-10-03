@@ -585,3 +585,131 @@
 .dock-menu__vision[data-tone="warn"] {
   color: var(--hd-accent);
 }
+
+/* ---- Privacy dots (iOS colours: green = screen, orange = mic, blue = cloud) ---- */
+
+.privacy-dots {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  padding: 0 2px;
+}
+
+.privacy-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: privacy-in 220ms var(--hd-ease) both;
+}
+
+.privacy-dots i[data-channel="screen"] {
+  background: #30d158;
+}
+
+.privacy-dots i[data-channel="mic"] {
+  background: #ff9f0a;
+}
+
+.privacy-dots i[data-channel="cloud"] {
+  background: #0a84ff;
+}
+
+@keyframes privacy-in {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
+/* While tucked away, the dots ride on the visible sliver so the learner always knows. */
+.privacy-dots--sliver {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  height: var(--sliver, 5px);
+}
+
+.privacy-dots--sliver i {
+  width: 4px;
+  height: 4px;
+}
+
+.notch,
+.sidebar {
+  position: relative;
+}
+
+.sidebar--left .privacy-dots--sliver,
+.sidebar--right .privacy-dots--sliver {
+  top: 50%;
+  bottom: auto;
+  flex-direction: column;
+}
+
+/* ---- Mic ---- */
+
+.mic-btn[data-unavailable] {
+  opacity: 0.55;
+}
+
+.mic-btn--live {
+  position: relative;
+  color: #ff9f0a;
+}
+
+.mic-btn--live::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1.5px solid #ff9f0a;
+  border-radius: 50%;
+  animation: mic-pulse 1.4s var(--hd-ease) infinite;
+}
+
+@keyframes mic-pulse {
+  from {
+    opacity: 0.8;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+/* ---- Toast ---- */
+
+.notch__toast {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 12px;
+  color: var(--hd-accent);
+  animation: notch-swap 260ms var(--hd-ease) both;
+}
+
+/* ---- Smoother changes: new instructions cross-fade in with a slight lift and blur ---- */
+
+.notch__title,
+.notch__detail {
+  animation: notch-swap 300ms var(--hd-ease) both;
+}
+
+@keyframes notch-swap {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+    transform: translateY(3px);
+  }
+}
+
+.notch--success {
+  animation: notch-celebrate 520ms var(--hd-ease) both;
+}
+
+@keyframes notch-celebrate {
+  40% {
+    transform: scale(1.025);
+  }
+}

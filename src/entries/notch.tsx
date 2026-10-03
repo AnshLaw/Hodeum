@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
+import { ActivityTracker, withScreenActivity } from "../lib/activity";
 import { COPY } from "../lib/copy";
+import { UnavailableSpeechInput } from "../providers/speech/speech-input";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import { TauriShell } from "../lib/tauri-shell";
 import { Notch } from "../components/notch/Notch";
@@ -33,11 +35,13 @@ async function openSkills(): Promise<{ skills: SkillStore; notice?: string }> {
 async function boot(): Promise<void> {
   const bus = new TauriBus();
   const { skills, notice } = await openSkills();
-  const perception = new NativePerception({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
+  const activity = new ActivityTracker();
+  const native = new NativePerception({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
+  const perception = withScreenActivity(native, activity);
   const vision = new TauriVisionStatus();
   const qwen = new QwenVisionProvider({
     connection: () => connectionOf(vision.current()),
-    capture: () => invoke<CapturedFrame>("capture_active_window"),
+    capture: () => activity.track("screen", () => invoke<CapturedFrame>("capture_active_window")),
   });
   const local = new LocalReasoningProvider(new TaskPackReasoningProvider(), qwen, () => vision.current().state === "ready");
   const runtime = new HodeRuntime({
@@ -47,8 +51,8 @@ async function boot(): Promise<void> {
     bus,
     tts: new WebSpeechTTSProvider(),
   });
-  runtime.subscribe(() => perception.setWatching(WATCHING_PHASES.includes(runtime.getState().phase)));
-  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} />);
+  runtime.subscribe(() => native.setWatching(WATCHING_PHASES.includes(runtime.getState().phase)));
+  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={new UnavailableSpeechInput()} />);
 }
 
 boot().catch((error) => console.error("Hodey failed to start", error));

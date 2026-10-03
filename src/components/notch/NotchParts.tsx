@@ -1,8 +1,10 @@
 import type { PointerEvent, ReactNode } from "react";
+import { activeChannels, type ActivityChannel, type ActivityState } from "../../lib/activity";
+import type { SpeechInputStatus } from "../../providers/speech/speech-input";
 import { COPY } from "../../lib/copy";
 import { HodeyFace } from "../hodey/HodeyFace";
 import type { HodeyMood } from "../hodey/mood";
-import { CheckIcon, CloseIcon, CrosshairIcon, IconButton, MoreIcon, MutedIcon, PauseIcon, VolumeIcon } from "../shared/icons";
+import { CheckIcon, CloseIcon, CrosshairIcon, ExpandIcon, EyeIcon, IconButton, MicIcon, MoreIcon, MutedIcon, PauseIcon, RepeatIcon, VolumeIcon } from "../shared/icons";
 import type { NotchControl, NotchView } from "./notch-view";
 
 const LABELS: Record<NotchControl, string> = {
@@ -17,6 +19,8 @@ const LABELS: Record<NotchControl, string> = {
   retry: COPY.retry,
   dismiss: COPY.gotIt,
   cancel_annotate: COPY.cancel,
+  repeat: COPY.repeat,
+  look_again: COPY.lookAgain,
 };
 /** Hodey's face in the notch bar, in CSS px. */
 const HODEY_BAR_SIZE = 38;
@@ -30,6 +34,10 @@ function iconFor(control: NotchControl): ReactNode {
       return <PauseIcon />;
     case "end":
       return <CloseIcon />;
+    case "repeat":
+      return <RepeatIcon />;
+    case "look_again":
+      return <EyeIcon />;
     default:
       return null;
   }
@@ -113,6 +121,34 @@ export function Grip({ onGrip, children }: { onGrip: () => void; children: React
   );
 }
 
+const PRIVACY_LABELS: Record<ActivityChannel, string> = {
+  screen: COPY.privacyScreen,
+  mic: COPY.privacyMic,
+  cloud: COPY.privacyCloud,
+};
+
+/** Green = reading the screen, orange = mic on, blue = cloud. Only shown while active, like iOS. */
+export function PrivacyDots({ activity, className = "" }: { activity: ActivityState; className?: string }) {
+  const channels = activeChannels(activity);
+  if (channels.length === 0) return null;
+  return (
+    <span className={`privacy-dots ${className}`} role="status" aria-label={channels.map((c) => PRIVACY_LABELS[c]).join(", ")}>
+      {channels.map((channel) => (
+        <i key={channel} data-channel={channel} title={PRIVACY_LABELS[channel]} />
+      ))}
+    </span>
+  );
+}
+
+export function MicButton({ status, onToggle }: { status: SpeechInputStatus; onToggle: () => void }) {
+  const listening = status === "listening";
+  return (
+    <button type="button" className={`icon-btn mic-btn${listening ? " mic-btn--live" : ""}`} aria-pressed={listening} aria-label={listening ? COPY.micStop : COPY.mic} title={listening ? COPY.micStop : COPY.mic} data-unavailable={status === "unavailable" || undefined} onClick={onToggle}>
+      <MicIcon />
+    </button>
+  );
+}
+
 export interface BarProps {
   view: NotchView;
   mood: HodeyMood;
@@ -123,9 +159,14 @@ export interface BarProps {
   onToggleMenu: () => void;
   onControl: OnControl;
   onGrip: () => void;
+  activity: ActivityState;
+  micStatus: SpeechInputStatus;
+  onToggleMic: () => void;
+  onOpenApp: () => void;
 }
 
-export function NotchBar({ view, mood, expanded, muted, menuOpen, onToggleMute, onToggleMenu, onControl, onGrip }: BarProps) {
+export function NotchBar(props: BarProps) {
+  const { view, mood, expanded, muted, menuOpen, onToggleMute, onToggleMenu, onControl, onGrip } = props;
   const showInline = !expanded && !menuOpen && view.mode !== "idle";
   return (
     <header className="notch__bar">
@@ -138,14 +179,21 @@ export function NotchBar({ view, mood, expanded, muted, menuOpen, onToggleMute, 
       <span className="notch__spacer" />
       {view.mode === "idle" && !menuOpen && <IdleActions onControl={onControl} />}
       {showInline && <ControlButtons controls={view.controls} onControl={onControl} />}
+      <MicButton status={props.micStatus} onToggle={props.onToggleMic} />
       {view.mode !== "idle" && (
         <IconButton label={muted ? COPY.unmute : COPY.mute} onClick={onToggleMute}>
           {muted ? <MutedIcon /> : <VolumeIcon />}
         </IconButton>
       )}
+      {(expanded || menuOpen) && (
+        <IconButton label={COPY.openApp} onClick={props.onOpenApp}>
+          <ExpandIcon />
+        </IconButton>
+      )}
       <IconButton label={COPY.hodeySettings} onClick={onToggleMenu} pressed={menuOpen}>
         <MoreIcon />
       </IconButton>
+      <PrivacyDots activity={props.activity} />
       <LocalBadge />
     </header>
   );
@@ -156,11 +204,16 @@ export function NotchContent({ view, expanded, fallbackDetail, onControl }: { vi
   if (!expanded) return detail ? <p className="notch__subline">{detail}</p> : null;
   return (
     <div className="notch__content">
-      <p className="notch__title">
+      {/* Keyed by text so each new instruction animates in instead of swapping silently. */}
+      <p key={view.title} className="notch__title">
         {view.mode === "success" && <CheckIcon />}
         {view.title}
       </p>
-      {detail && <p className="notch__detail">{detail}</p>}
+      {detail && (
+        <p key={detail} className="notch__detail">
+          {detail}
+        </p>
+      )}
       {view.skills && <SkillChips skills={view.skills} />}
       {view.controls.length > 0 && <ControlButtons controls={view.controls} hintLabel={view.hintLabel} onControl={onControl} spread />}
     </div>

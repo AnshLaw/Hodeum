@@ -88,6 +88,21 @@ export function onExplainRequested(s: HodeState): Transition {
   return { state: { ...s, explanation: step.explain }, effects: [{ type: "say", text: step.explain }] };
 }
 
+export function onRepeat(s: HodeState): Transition {
+  const speech = s.action?.speech ?? "";
+  if ((s.phase !== "guiding" && s.phase !== "answering") || speech === "") return noop(s);
+  return { state: s, effects: [{ type: "say", text: speech }] };
+}
+
+/** Fresh eyes on the current screen: drop the old observation and reason again. */
+export function onLookAgain(s: HodeState): Transition {
+  if (s.phase !== "guiding" && s.phase !== "recovering") return noop(s);
+  return {
+    state: { ...s, phase: "observing", reobserved: false, notice: undefined },
+    effects: [CANCEL_TIMER, { type: "observe" }],
+  };
+}
+
 export function onLetMeTry(s: HodeState): Transition {
   if (s.phase !== "guiding") return noop(s);
   const observeIndex = ASSISTANCE_LEVELS.indexOf("observe");

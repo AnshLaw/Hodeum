@@ -1,6 +1,8 @@
 import type { NativeShell } from "../../lib/shell";
 import type { TaskPack } from "../../lib/types";
 import type { DockController } from "./use-dock";
+import type { ActivityState } from "../../lib/activity";
+import type { SpeechInputStatus } from "../../providers/speech/speech-input";
 import type { HodeyMood } from "../hodey/mood";
 import type { VisionStatus } from "../../providers/vision/types";
 import type { NotchControl, NotchView, StepItem } from "./notch-view";
@@ -24,4 +26,10 @@ export interface SurfaceProps {
   onToggleMenu: () => void;
   onGrip: () => void;
   onSubmitGoal: (goal: string) => void;
+  activity: ActivityState;
+  micStatus: SpeechInputStatus;
+  /** A short message (e.g. why the mic can't start) shown for a few seconds. */
+  toast?: string;
+  onToggleMic: () => void;
+  onOpenApp: () => void;
 }

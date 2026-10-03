@@ -262,3 +262,23 @@ describe("open-ended Hodes (no task pack, local vision plans)", () => {
     expect(t.state).toMatchObject({ phase: "goal_entry", notice: COPY.noPack, open: false });
   });
 });
+
+describe("repeat and look again", () => {
+  it("repeats the current instruction aloud", () => {
+    const t = step(guiding(), { type: "REPEAT" });
+    expect(t.effects).toEqual([{ type: "say", text: "Click Insert. I highlighted it." }]);
+  });
+
+  it("re-reads the screen on request, from guidance or after a failure", () => {
+    const fromGuiding = step(guiding(), { type: "LOOK_AGAIN" });
+    expect(fromGuiding.state.phase).toBe("observing");
+    expect(types(fromGuiding)).toEqual(["cancelStuckTimer", "observe"]);
+    const failed = step(reasoning(), { type: "PROVIDER_FAILED", requestId: 1, message: "boom" }).state;
+    expect(step(failed, { type: "LOOK_AGAIN" }).state).toMatchObject({ phase: "observing", notice: undefined });
+  });
+
+  it("ignores both while idle", () => {
+    expect(step(initialState, { type: "REPEAT" }).state).toBe(initialState);
+    expect(step(initialState, { type: "LOOK_AGAIN" }).state).toBe(initialState);
+  });
+});

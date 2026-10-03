@@ -68,6 +68,34 @@ export const MoreIcon = () => (
   </svg>
 );
 
+export const RepeatIcon = () => (
+  <svg {...BASE}>
+    <path d="M3.5 8a4.5 4.5 0 0 1 7.7-3.2L12.5 6" />
+    <path d="M12.5 2.8V6H9.3" />
+    <path d="M12.5 8a4.5 4.5 0 0 1-7.7 3.2L3.5 10" />
+  </svg>
+);
+
+export const EyeIcon = () => (
+  <svg {...BASE}>
+    <path d="M1.8 8s2.3-4.2 6.2-4.2S14.2 8 14.2 8s-2.3 4.2-6.2 4.2S1.8 8 1.8 8z" />
+    <circle cx="8" cy="8" r="1.9" />
+  </svg>
+);
+
+export const MicIcon = () => (
+  <svg {...BASE}>
+    <rect x="5.8" y="1.8" width="4.4" height="7.6" rx="2.2" />
+    <path d="M3.6 7.6a4.4 4.4 0 0 0 8.8 0M8 12v2.2" />
+  </svg>
+);
+
+export const ExpandIcon = () => (
+  <svg {...BASE}>
+    <path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" />
+  </svg>
+);
+
 export function IconButton({ label, onClick, children, pressed }: { label: string; onClick: () => void; children: ReactNode; pressed?: boolean }) {
   return (
     <button type="button" className="icon-btn" aria-label={label} title={label} aria-pressed={pressed} onClick={onClick}>

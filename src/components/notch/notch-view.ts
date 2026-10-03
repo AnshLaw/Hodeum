@@ -14,7 +14,9 @@ export type NotchControl =
   | "end"
   | "retry"
   | "dismiss"
-  | "cancel_annotate";
+  | "cancel_annotate"
+  | "repeat"
+  | "look_again";
 
 export interface NotchView {
   mode: NotchMode;
@@ -67,7 +69,7 @@ function guidanceView(s: HodeState): NotchView {
     detail: s.explanation ?? s.notice ?? prerequisites,
     progress: { current: s.stepIndex, total },
     busy: false,
-    controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "point", "pause", "end"],
+    controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "repeat", "look_again", "point", "pause", "end"],
     hintLabel: QUIET_LEVELS.has(s.level) ? COPY.needHint : COPY.hint,
   };
 }
@@ -81,7 +83,7 @@ function openGuidanceView(s: HodeState): NotchView {
     title: s.action?.speech ?? "",
     detail: s.notice,
     busy: false,
-    controls: ["hint", "point", "pause", "end"],
+    controls: ["hint", "repeat", "look_again", "point", "pause", "end"],
     hintLabel: COPY.needHint,
   };
 }
@@ -98,13 +100,13 @@ export function notchView(s: HodeState): NotchView {
     case "guiding":
       return guidanceView(s);
     case "answering":
-      return { mode: "answer", size: "guidance", eyebrow: COPY.pointAndAsk, title: s.action?.speech ?? "", busy: false, controls: ["dismiss"] };
+      return { mode: "answer", size: "guidance", eyebrow: COPY.pointAndAsk, title: s.action?.speech ?? "", busy: false, controls: ["dismiss", "repeat"] };
     case "annotating":
       return { mode: "annotate", size: "compact", title: COPY.annotateTitle, detail: COPY.annotateDetail, busy: false, controls: ["cancel_annotate"] };
     case "paused":
       return { mode: "paused", size: "compact", title: COPY.paused, busy: false, controls: ["resume", "end"] };
     case "recovering":
-      return { mode: "error", size: "guidance", eyebrow: COPY.idleTitle, title: COPY.somethingWrong, detail: s.notice, busy: false, controls: ["retry", "end"] };
+      return { mode: "error", size: "guidance", eyebrow: COPY.idleTitle, title: COPY.somethingWrong, detail: s.notice, busy: false, controls: ["retry", "look_again", "end"] };
     case "success":
       return { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail: COPY.skillLearned, busy: false, controls: [], skills: s.learnedSkills.map(skillLabel) };
   }

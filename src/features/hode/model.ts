@@ -81,6 +81,10 @@ export type HodeEvent =
   | { type: "STUCK_TIMEOUT" }
   | { type: "HINT_REQUESTED" }
   | { type: "EXPLAIN_REQUESTED" }
+  /** Speak the current instruction or answer again. */
+  | { type: "REPEAT" }
+  /** The learner asks Hodey to re-read the screen now (PRD §11 "look again"). */
+  | { type: "LOOK_AGAIN" }
   | { type: "LET_ME_TRY" }
   | { type: "ANNOTATE_START" }
   | { type: "ANNOTATE_CANCEL" }

@@ -83,7 +83,7 @@ export function Stage({ env }: { env: StageEnvironment }) {
           <GuidanceOverlay bus={env.bus} shell={env.shell} />
         </div>
         <div className="stage-layer stage-layer--notch">
-          <Notch runtime={env.runtime} bus={env.bus} shell={env.shell} packs={TASK_PACKS} />
+          <Notch runtime={env.runtime} bus={env.bus} shell={env.shell} packs={TASK_PACKS} activity={env.activity} speech={env.speech} />
         </div>
       </main>
     </div>

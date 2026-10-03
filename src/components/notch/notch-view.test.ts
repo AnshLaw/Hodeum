@@ -31,7 +31,7 @@ describe("notchView", () => {
   });
 
   it("surfaces the failure message with recovery controls", () => {
-    expect(notchView({ ...initialState, phase: "recovering", notice: "boom" })).toMatchObject({ mode: "error", detail: "boom", controls: ["retry", "end"] });
+    expect(notchView({ ...initialState, phase: "recovering", notice: "boom" })).toMatchObject({ mode: "error", detail: "boom", controls: ["retry", "look_again", "end"] });
   });
 
   it("lists learned skills on success", () => {

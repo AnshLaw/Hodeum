@@ -1,4 +1,6 @@
+import { ActivityTracker, withScreenActivity } from "../lib/activity";
 import { LocalBus } from "../lib/bus";
+import { UnavailableSpeechInput, type SpeechInput } from "../providers/speech/speech-input";
 import { BrowserShell } from "../lib/shell";
 import { HodeRuntime } from "../features/hode/runtime";
 import { MemorySkillStore } from "../providers/memory-skill-store";
@@ -16,6 +18,8 @@ export interface StageEnvironment {
   shell: BrowserShell;
   perception: MockPerception;
   runtime: HodeRuntime;
+  activity: ActivityTracker;
+  speech: SpeechInput;
   select(id: StageAppId): void;
 }
 
@@ -25,8 +29,9 @@ export function createStageEnvironment(): StageEnvironment {
   let current: MockApp = apps.excel;
   const bus = new LocalBus();
   const perception = new MockPerception(() => current);
+  const activity = new ActivityTracker();
   const runtime = new HodeRuntime({
-    perception,
+    perception: withScreenActivity(perception, activity),
     reasoners: [new TaskPackReasoningProvider()],
     skills: new MemorySkillStore(),
     bus,
@@ -38,6 +43,8 @@ export function createStageEnvironment(): StageEnvironment {
     shell: new BrowserShell(),
     perception,
     runtime,
+    activity,
+    speech: new UnavailableSpeechInput(),
     select(id) {
       current = apps[id];
     },

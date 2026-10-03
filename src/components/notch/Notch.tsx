@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type Ref, type RefObject } from "react";
 import type { Bus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
 import { reportError } from "../../lib/errors";
@@ -17,6 +17,9 @@ import { useDock, useRevealed } from "./use-dock";
 import { NOTCH_IDLE_HOVER_WIDTH, NOTCH_WIDTHS, isExpanded, notchView, stepItems } from "./notch-view";
 import { hodeyMood } from "../hodey/mood";
 import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
+import type { ActivityState, ActivityTracker } from "../../lib/activity";
+import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
+import { PrivacyDots } from "./NotchParts";
 import "../hodey/hodey-face.css";
 import "./notch.css";
 
@@ -29,6 +32,32 @@ export interface NotchProps {
   bootNotice?: string;
   /** The local vision model's status (desktop app only). */
   vision?: VisionStatusSource;
+  activity: ActivityTracker;
+  speech: SpeechInput;
+}
+
+const TOAST_MS = 4000;
+
+function useActivity(tracker: ActivityTracker): ActivityState {
+  const [state, setState] = useState(tracker.current());
+  useEffect(() => tracker.subscribe(setState), [tracker]);
+  return state;
+}
+
+function useSpeechStatus(speech: SpeechInput): SpeechInputStatus {
+  const [status, setStatus] = useState(speech.status());
+  useEffect(() => speech.onStatus(setStatus), [speech]);
+  return status;
+}
+
+function useToast(): [string | undefined, (message: string) => void] {
+  const [toast, setToast] = useState<string>();
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(undefined), TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
+  return [toast, setToast];
 }
 
 function useVisionStatus(source?: VisionStatusSource): VisionStatus | undefined {
@@ -58,15 +87,37 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
   return (
     <div className="notch-stage">
       <section ref={props.surfaceRef} className={classes.filter(Boolean).join(" ")} style={style} aria-label={COPY.idleTitle}>
-        <NotchBar view={view} mood={props.mood} expanded={expanded} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={onControl} onGrip={props.onGrip} />
+        <NotchBar view={view} mood={props.mood} expanded={expanded} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={onControl} onGrip={props.onGrip} activity={props.activity} micStatus={props.micStatus} onToggleMic={props.onToggleMic} onOpenApp={props.onOpenApp} />
+        {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
         <div aria-live="polite">{body}</div>
+        {!revealed && <PrivacyDots activity={props.activity} className="privacy-dots--sliver" />}
       </section>
     </div>
   );
 }
 
+/** Mic toggling (with a toast when it can't start) and opening the app from the notch's rect. */
+function useNotchActions(speech: SpeechInput, shell: NativeShell, surfaceRef: RefObject<HTMLElement | null>) {
+  const micStatus = useSpeechStatus(speech);
+  const [toast, showToast] = useToast();
+  const toggleMic = () => {
+    if (micStatus === "unavailable") return showToast(speech.unavailableReason() ?? COPY.voiceNotInstalled);
+    const change = micStatus === "listening" ? speech.stop() : speech.start();
+    change.catch((error) => {
+      console.error("Couldn't change the microphone", error);
+      showToast(error instanceof Error ? error.message : String(error));
+    });
+  };
+  const openApp = () => {
+    const box = surfaceRef.current?.getBoundingClientRect();
+    const from = box ? { x: box.x, y: box.y, width: box.width, height: box.height } : { x: 0, y: 0, width: 0, height: 0 };
+    shell.openApp(from).catch(reportError("Couldn't open the Hodeum app"));
+  };
+  return { micStatus, toast, toggleMic, openApp };
+}
+
 /** Hodey's surface: a top-centre notch or a side sidebar, draggable between them, with auto-hide. */
-export function Notch({ runtime, bus, shell, packs, bootNotice, vision }: NotchProps) {
+export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity: tracker, speech }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
   const view = notchView(state);
@@ -81,10 +132,12 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision }: NotchP
   useHitRect(surfaceRef, shell, `${layoutKey}:${revealed}`);
   useAutoDismiss(view.mode === "success", runtime);
   const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top");
+  const activity = useActivity(tracker);
+  const { micStatus, toast, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
 
   const props: SurfaceProps = {
     view,
-    mood: hodeyMood(state, hovered),
+    mood: micStatus === "listening" ? "listening" : hodeyMood(state, hovered),
     steps: stepItems(state),
     hovered,
     revealed,
@@ -104,6 +157,11 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision }: NotchP
     onGrip: () => {
       shell.beginNotchDrag().catch(reportError("Couldn't start dragging Hodey"));
     },
+    activity,
+    micStatus,
+    toast,
+    onToggleMic: toggleMic,
+    onOpenApp: openApp,
     onSubmitGoal: (goal) =>
       runtime.dispatch({ type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed: visionStatus?.state === "ready" }),
   };
