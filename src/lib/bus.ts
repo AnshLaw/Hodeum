@@ -1,4 +1,5 @@
 import type { ActivityChannel } from "./activity";
+import type { DockPrefs } from "../features/dock/dock";
 import type { LearnerAnnotation, OverlayPrimitive } from "./types";
 
 type Empty = Record<string, never>;
@@ -21,6 +22,11 @@ export interface BusEvents {
   "hode:summary-request": Empty;
   /** Another window (the app) is using a privacy channel; the notch shows its dot. */
   "activity:remote": { id: string; channel: ActivityChannel; active: boolean };
+  /** Where Hodey lives, broadcast by the notch (which owns it) whenever it changes or is asked. */
+  "dock:prefs": DockPrefs;
+  "dock:prefs-request": Empty;
+  /** Ask the notch to move or restyle Hodey, e.g. from the app's settings. */
+  "dock:change": Partial<DockPrefs>;
 }
 
 export interface HodeSummary {

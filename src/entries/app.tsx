@@ -8,6 +8,7 @@ import { MemoryChatStore, MemoryLearningStore } from "../data/memory-stores";
 import { MemorySettingsStore } from "../data/settings";
 import { openDatabase } from "../data/sql";
 import { SqliteChatStore, SqliteLearningStore, SqliteSettingsStore } from "../data/sqlite-stores";
+import { connectAppearance } from "../lib/appearance";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import type { Rect } from "../lib/types";
 import { QwenChatProvider } from "../providers/vision/qwen-chat-provider";
@@ -89,6 +90,7 @@ async function boot(): Promise<void> {
   const bus = new TauriBus();
   const vision = new TauriVisionStatus();
   const stores = await openStores();
+  connectAppearance(stores.settings, bus, document.documentElement);
   const base: Omit<AppServices, "window"> = {
     ...stores,
     bus,

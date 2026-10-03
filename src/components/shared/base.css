@@ -1,8 +1,10 @@
 :root {
+  /* Translucent fills and lines are this colour at low alpha; flips to black in light surfaces. */
+  --hd-fg-rgb: 255 255 255;
   --hd-black: #000;
   --hd-surface: #0c0c0c;
   --hd-surface-2: #171717;
-  --hd-line: rgb(255 255 255 / 0.1);
+  --hd-line: rgb(var(--hd-fg-rgb) / 0.1);
   --hd-text: #f2f2f2;
   --hd-text-2: #a3a3a3;
   --hd-text-3: #6b6b6b;
@@ -45,14 +47,14 @@ body.transparent-window #root {
   font-size: 12px;
   font-weight: 600;
   color: var(--hd-text);
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--hd-fg-rgb) / 0.08);
   cursor: pointer;
   white-space: nowrap;
   transition: background 120ms ease, transform 120ms ease;
 }
 
 .btn:hover {
-  background: rgb(255 255 255 / 0.14);
+  background: rgb(var(--hd-fg-rgb) / 0.14);
 }
 
 .btn:active {
@@ -96,7 +98,7 @@ body.transparent-window #root {
 
 .icon-btn:hover {
   color: var(--hd-text);
-  background: rgb(255 255 255 / 0.1);
+  background: rgb(var(--hd-fg-rgb) / 0.1);
 }
 
 .chip {
@@ -114,7 +116,7 @@ body.transparent-window #root {
 
 .chip:hover {
   color: var(--hd-text);
-  border-color: rgb(255 255 255 / 0.24);
+  border-color: rgb(var(--hd-fg-rgb) / 0.24);
 }
 
 .field {

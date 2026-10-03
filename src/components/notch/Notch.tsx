@@ -151,7 +151,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
   const surfaceRef = useRef<HTMLElement>(null);
   const [muted, setMuted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const dock = useDock(shell, state.phase);
+  const dock = useDock(shell, state.phase, bus);
   const layoutKey = dock.prefs.dock;
   const hovered = useNotchHover(surfaceRef, shell, layoutKey);
   const revealed = useRevealed(dock.prefs, hovered || menuOpen, state.phase);

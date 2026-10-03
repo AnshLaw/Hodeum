@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ActivityTracker, mirrorRemoteActivity, withScreenActivity } from "../lib/activity";
+import { connectAppearance } from "../lib/appearance";
 import { COPY } from "../lib/copy";
 import { UnavailableSpeechInput } from "../providers/speech/speech-input";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
@@ -46,6 +47,7 @@ async function boot(): Promise<void> {
   const { learning, settings, notice } = await openStores();
   const activity = new ActivityTracker();
   mirrorRemoteActivity(bus, activity);
+  connectAppearance(settings, bus, document.documentElement);
   const native = new NativePerception({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
   const perception = withScreenActivity(native, activity);
   const vision = new TauriVisionStatus();
@@ -64,7 +66,10 @@ async function boot(): Promise<void> {
     settings,
     packs: TASK_PACKS,
     openGoalsAllowed: () => vision.current().state === "ready",
-    applyVoice: (voice) => (tts.rate = voice.rate),
+    applyVoice: (voice) => {
+      tts.rate = voice.rate;
+      tts.voiceName = voice.name;
+    },
   });
   mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={new UnavailableSpeechInput()} />);
 }

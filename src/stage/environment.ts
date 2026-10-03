@@ -1,4 +1,5 @@
 import { ActivityTracker, withScreenActivity } from "../lib/activity";
+import { connectAppearance } from "../lib/appearance";
 import { LocalBus } from "../lib/bus";
 import { BrowserShell } from "../lib/shell";
 import { connectHodeBridge } from "../features/hode/bridge";
@@ -45,7 +46,11 @@ export function createStageEnvironment(): StageEnvironment {
   const chats = new MemoryChatStore();
   const tts = new WebSpeechTTSProvider();
   const runtime = new HodeRuntime({ perception: withScreenActivity(perception, activity), reasoners: [new TaskPackReasoningProvider()], skills: learning, bus, tts });
-  connectHodeBridge({ runtime, bus, log: learning, settings, packs: TASK_PACKS, openGoalsAllowed: () => false, applyVoice: (voice) => (tts.rate = voice.rate) });
+  connectHodeBridge({ runtime, bus, log: learning, settings, packs: TASK_PACKS, openGoalsAllowed: () => false, applyVoice: (voice) => {
+      tts.rate = voice.rate;
+      tts.voiceName = voice.name;
+    } });
+  connectAppearance(settings, bus, document.documentElement);
   return {
     apps,
     bus,

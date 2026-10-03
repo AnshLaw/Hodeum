@@ -834,8 +834,14 @@
   animation: hd-fade-in 200ms ease both;
 }
 
+/* Head centred in its svg (as in the orb), then the ring centred on the head. */
+.sidebar__busy > svg {
+  transform: translate(6px, -6px);
+}
+
 .sidebar__busy-ring {
-  inset: 32px auto auto;
+  inset: 34px 0 auto;
   width: 128px;
   height: 128px;
+  margin: 0 auto;
 }

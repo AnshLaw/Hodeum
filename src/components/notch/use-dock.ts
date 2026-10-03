@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { reportError } from "../../lib/errors";
+import type { Bus } from "../../lib/bus";
 import type { NativeShell } from "../../lib/shell";
 import type { HodePhase } from "../../features/hode/model";
 import { applyCommand, loadPrefs, reservesSpace, savePrefs, shouldReveal, type DockPrefs } from "../../features/dock/dock";
@@ -22,8 +23,15 @@ export interface DockController {
   command(command: string): void;
 }
 
+/** Lets the app window show and change where Hodey lives. */
+function useDockBroadcast(bus: Bus, prefs: DockPrefs, update: (change: Partial<DockPrefs>) => void): void {
+  useEffect(() => bus.emit("dock:prefs", prefs), [bus, prefs]);
+  useEffect(() => bus.on("dock:prefs-request", () => bus.emit("dock:prefs", prefs)), [bus, prefs]);
+  useEffect(() => bus.on("dock:change", update), [bus, update]);
+}
+
 /** Owns dock + visibility preferences and mirrors them onto the native window. */
-export function useDock(shell: NativeShell, phase: HodePhase): DockController {
+export function useDock(shell: NativeShell, phase: HodePhase, bus: Bus): DockController {
   const [prefs, setPrefs] = useState<DockPrefs>(() => {
     const storage = browserStorage();
     return storage ? loadPrefs(storage) : loadPrefs({ getItem: () => null });
@@ -46,6 +54,7 @@ export function useDock(shell: NativeShell, phase: HodePhase): DockController {
 
   useEffect(() => shell.onDockSnapped((dock) => update({ dock })), [shell, update]);
   useEffect(() => shell.onShellCommand(command), [shell, command]);
+  useDockBroadcast(bus, prefs, update);
   return { prefs, update, command };
 }
 

@@ -1,8 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { HELP_PRESETS, SETTINGS_LIMITS, type HelpPreset, type Settings } from "../../data/settings";
 import type { VisionStatus } from "../../providers/vision/types";
 import { useLiveQuery } from "../hooks";
 import type { AppServices } from "../services";
+import { AppearanceSettings } from "./settings/AppearanceSettings";
+import { Row } from "./settings/controls";
+import { OnScreenSettings } from "./settings/OnScreenSettings";
+import { VoiceSettings } from "./settings/VoiceSettings";
 
 const PRESET_LABELS: Record<HelpPreset, { title: string; detail: string }> = {
   beginner: { title: "Beginner", detail: "Hodey shows each step and points at it." },
@@ -17,18 +21,6 @@ const VISION_TEXT: Record<VisionStatus["state"], string> = {
   failed: "Stopped. Restart Hodeum to try again.",
 };
 
-function Row({ label, detail, children }: { label: string; detail?: string; children: ReactNode }) {
-  return (
-    <div className="hsetting">
-      <span className="hsetting__text">
-        <strong>{label}</strong>
-        {detail && <span className="hmuted">{detail}</span>}
-      </span>
-      {children}
-    </div>
-  );
-}
-
 function useVision(services: AppServices): VisionStatus | undefined {
   const [status, setStatus] = useState(services.vision?.current());
   useEffect(() => services.vision?.subscribe(setStatus), [services.vision]);
@@ -39,12 +31,7 @@ function HodeySettings({ settings, update }: { settings: Settings; update: (next
   return (
     <section className="hcard">
       <h2>Hodey</h2>
-      <Row label="Speak instructions" detail="Hodey reads each step aloud. You can also mute from the notch.">
-        <input type="checkbox" className="hswitch" checked={settings.voice.enabled} onChange={(e) => update({ ...settings, voice: { ...settings.voice, enabled: e.target.checked } })} aria-label="Speak instructions" />
-      </Row>
-      <Row label="Speaking speed" detail={`${settings.voice.rate.toFixed(2)}×`}>
-        <input type="range" min={SETTINGS_LIMITS.MIN_RATE} max={SETTINGS_LIMITS.MAX_RATE} step={0.05} value={settings.voice.rate} onChange={(e) => update({ ...settings, voice: { ...settings.voice, rate: Number(e.target.value) } })} aria-label="Speaking speed" />
-      </Row>
+      <VoiceSettings voice={settings.voice} onChange={(voice) => update({ ...settings, voice })} />
       <Row label="Wait before offering help" detail={`${settings.stuckSeconds} seconds without progress`}>
         <input type="range" min={SETTINGS_LIMITS.MIN_STUCK_SECONDS} max={SETTINGS_LIMITS.MAX_STUCK_SECONDS} step={1} value={settings.stuckSeconds} onChange={(e) => update({ ...settings, stuckSeconds: Number(e.target.value) })} aria-label="Wait before offering help" />
       </Row>
@@ -125,8 +112,14 @@ export function SettingsPage({ services }: { services: AppServices }) {
         <p className="hmuted">Changes apply to the notch right away.</p>
       </header>
       {error && <p className="hchat__error" role="alert">Couldn't save: {error}</p>}
-      {loaded.state === "ready" && <HodeySettings settings={loaded.value} update={update} />}
+      {loaded.state === "ready" && (
+        <>
+          <HodeySettings settings={loaded.value} update={update} />
+          <AppearanceSettings appearance={loaded.value.appearance} onChange={(appearance) => update({ ...loaded.value, appearance })} />
+        </>
+      )}
       {loaded.state === "error" && <p className="hchat__error">Couldn't load settings: {loaded.message}</p>}
+      <OnScreenSettings bus={services.bus} />
       <AboutSettings vision={vision} />
     </div>
   );

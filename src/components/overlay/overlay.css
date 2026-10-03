@@ -155,7 +155,7 @@
 }
 
 .annotate__marks :is(rect, circle) {
-  fill: rgb(255 178 36 / 0.1);
+  fill: color-mix(in srgb, var(--hd-accent) 10%, transparent);
   stroke: var(--hd-accent);
   stroke-width: 2;
 }

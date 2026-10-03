@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { LocalBus, type HodeSummary } from "../../lib/bus";
 import { MemoryLearningStore } from "../../data/memory-stores";
-import { MemorySettingsStore } from "../../data/settings";
+import { DEFAULT_SETTINGS, MemorySettingsStore } from "../../data/settings";
 import { MockPerception } from "../../providers/mock-perception";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
 import { ExcelScene } from "../../stage/scenes/excel";
@@ -60,9 +60,9 @@ describe("connectHodeBridge", () => {
 
   it("applies saved settings to the runtime and voice", async () => {
     const { bus, settings, applyVoice } = setup();
-    await settings.save({ voice: { enabled: false, rate: 1.3 }, help: "confident", stuckSeconds: 20 });
+    await settings.save({ ...DEFAULT_SETTINGS, voice: { enabled: false, rate: 1.3, name: "zira" }, help: "confident", stuckSeconds: 20 });
     bus.emit("settings:changed", {});
     await settle();
-    expect(applyVoice).toHaveBeenLastCalledWith({ enabled: false, rate: 1.3 });
+    expect(applyVoice).toHaveBeenLastCalledWith({ enabled: false, rate: 1.3, name: "zira" });
   });
 });

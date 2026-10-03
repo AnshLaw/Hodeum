@@ -1,8 +1,9 @@
 /* Hodey's animated face. Coordinates are in the 64-unit head space; the face pivots on its centre. */
+/* Colours come from the learner's choice (applyAppearance sets --hd-hodey-*); amber by default. */
 .hodey {
-  --hodey-skin: #ffb224;
-  --hodey-shade: #ec9a00;
-  --hodey-ink: #1f1300;
+  --hodey-skin: var(--hd-hodey-skin, #ffb224);
+  --hodey-shade: var(--hd-hodey-shade, #ec9a00);
+  --hodey-ink: var(--hd-hodey-ink, #1f1300);
   --hodey-float: #f2f2f2;
   flex: none;
   overflow: visible;
@@ -316,4 +317,72 @@
   .hodey * {
     animation: none !important;
   }
+}
+
+/* ---- Accessories: all drawn, one shown by an ancestor's data-hodey-accessory ---- */
+
+/* Custom properties inherit, so the nearest data-hodey-accessory wins (a preview tile over the window's choice). */
+[data-hodey-accessory] {
+  --hodey-glasses: none;
+  --hodey-headphones: none;
+  --hodey-beanie: none;
+}
+
+[data-hodey-accessory="glasses"] {
+  --hodey-glasses: inline;
+}
+
+[data-hodey-accessory="headphones"] {
+  --hodey-headphones: inline;
+}
+
+[data-hodey-accessory="beanie"] {
+  --hodey-beanie: inline;
+}
+
+.hodey__acc--glasses {
+  display: var(--hodey-glasses, none);
+}
+
+.hodey__acc--headphones {
+  display: var(--hodey-headphones, none);
+}
+
+.hodey__acc--beanie {
+  display: var(--hodey-beanie, none);
+}
+
+.hodey__acc--glasses circle {
+  fill: rgb(255 255 255 / 0.18);
+  stroke: var(--hodey-ink);
+  stroke-width: 2.4;
+}
+
+.hodey__acc--glasses path {
+  fill: none;
+  stroke: var(--hodey-ink);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.hodey__acc--headphones rect {
+  fill: #26262b;
+  stroke: var(--hodey-float);
+  stroke-width: 1.5;
+}
+
+.hodey__acc-band {
+  fill: none;
+  stroke: #26262b;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.hodey__acc--beanie path,
+.hodey__acc--beanie circle {
+  fill: var(--hd-hodey-hat, #e5484d);
+}
+
+.hodey__acc--beanie rect {
+  fill: color-mix(in srgb, var(--hd-hodey-hat, #e5484d) 78%, black);
 }

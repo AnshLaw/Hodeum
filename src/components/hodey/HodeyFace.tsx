@@ -14,6 +14,30 @@ const OpenEyes = ({ className = "" }: { className?: string }) => (
   </g>
 );
 
+/**
+ * Every accessory is drawn inside the face group (so it follows nods and leans) and hidden by default;
+ * `data-hodey-accessory` on any ancestor shows one. See hodey-face.css.
+ */
+const Accessories = () => (
+  <g aria-hidden="true">
+    <g className="hodey__acc hodey__acc--glasses">
+      <circle cx="27.25" cy="25.5" r="7.5" />
+      <circle cx="39.25" cy="25.5" r="7.5" />
+      <path d="M34.75 25h-0.5M19.75 24.5l-5 -2M46.75 24.5l5 -2" />
+    </g>
+    <g className="hodey__acc hodey__acc--headphones">
+      <path className="hodey__acc-band" d="M7 32V24a25 22 0 0 1 50 0v8" />
+      <rect x="1" y="25" width="9" height="16" rx="4" />
+      <rect x="54" y="25" width="9" height="16" rx="4" />
+    </g>
+    <g className="hodey__acc hodey__acc--beanie">
+      <path d="M9 13a23 17 0 0 1 46 0z" />
+      <rect x="7" y="9" width="50" height="7" rx="3.5" />
+      <circle cx="32" cy="-6" r="4.5" />
+    </g>
+  </g>
+);
+
 const ClosedEyes = () => <path className="hodey__line" d="M22 27q4.5 3.5 9 0M35 27q4.5 3.5 9 0" />;
 const Smile = () => <path className="hodey__line" d="M26 41q7 6 14 0" />;
 const FlatMouth = () => <path className="hodey__line" d="M29 42h8" />;
@@ -29,6 +53,7 @@ function Sleeping(): ReactNode {
         <path className="hodey__head" d={HEAD} />
         <ClosedEyes />
         <path className="hodey__line" d="M30 42q3 2 6 0" />
+        <Accessories />
       </g>
       <Z x={52} y={4} s={5} delay={0} />
       <Z x={58} y={-4} s={6.5} delay={0.8} />
@@ -51,6 +76,7 @@ function Listening(): ReactNode {
         <path className="hodey__head" d={HEAD} />
         <OpenEyes className="hodey__eyes--right" />
         <ellipse className="hodey__ink" cx="35" cy="43" rx="3" ry="3.5" />
+        <Accessories />
       </g>
       {SOUND_WAVES.map((wave) => (
         <path key={wave.d} className="hodey__wave" style={{ animationDelay: `${wave.delay}s` }} d={wave.d} />
@@ -73,6 +99,7 @@ function Speaking(): ReactNode {
         <path className="hodey__head" d={HEAD} />
         <OpenEyes className="hodey__eyes--blink" />
         <ellipse className="hodey__ink hodey__mouth--talk" cx="33" cy="42" rx="5" ry="4" />
+        <Accessories />
       </g>
       {VOICE_WAVES.map((wave) => (
         <path key={wave.d} className="hodey__wave hodey__wave--out" style={{ animationDelay: `${wave.delay}s` }} d={wave.d} />
@@ -88,6 +115,7 @@ function Thinking(): ReactNode {
         <path className="hodey__head" d={HEAD} />
         <OpenEyes className="hodey__eyes--up" />
         <path className="hodey__line hodey__mouth--ponder" d="M30 43h7" />
+        <Accessories />
       </g>
       <circle className="hodey__dot" style={{ animationDelay: "0s" }} cx="54" cy="3" r="2.4" />
       <circle className="hodey__dot" style={{ animationDelay: "0.25s" }} cx="61" cy="-3" r="3.1" />
@@ -106,6 +134,7 @@ function Celebrating(): ReactNode {
         <path className="hodey__head" d={HEAD} />
         <path className="hodey__line" d="M22 28q4.5-6 9 0M35 28q4.5-6 9 0" />
         <path className="hodey__ink" d="M24 37q9 11 18 0z" />
+        <Accessories />
       </g>
       {sparkle(0, 4, 0)}
       {sparkle(64, -4, 0.3)}
@@ -119,6 +148,7 @@ function simpleFace(className: string, features: ReactNode): () => ReactNode {
     <g className={`hodey__face ${className}`}>
       <path className="hodey__head" d={HEAD} />
       {features}
+      <Accessories />
     </g>
   );
 }
