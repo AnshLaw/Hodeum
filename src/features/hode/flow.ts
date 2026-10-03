@@ -1,0 +1,110 @@
+import { COPY } from "../../lib/copy";
+import type { ScreenObservation, TeachingAction, TeachingContext } from "../../lib/types";
+import {
+  STUCK_MS,
+  currentStep,
+  initialState,
+  noop,
+  pinFor,
+  type EventOf,
+  type HodeEffect,
+  type HodeState,
+  type Transition,
+} from "./model";
+import { confidenceBand, overlayFor, startingLevel } from "./policy";
+
+export function onStartHode(s: HodeState): Transition {
+  if (s.phase !== "idle") return noop(s);
+  return { state: { ...initialState, phase: "goal_entry", focusRegion: s.focusRegion }, effects: [] };
+}
+
+export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Transition {
+  const goal = e.goal.trim();
+  if (s.phase !== "goal_entry" || goal === "") return noop(s);
+  if (!e.pack) return { state: { ...s, goal, notice: COPY.noPack }, effects: [{ type: "say", text: COPY.noPack }] };
+  return beginStep({ ...s, goal, pack: e.pack, notice: undefined }, 0);
+}
+
+export function beginStep(s: HodeState, stepIndex: number): Transition {
+  const step = s.pack?.steps[stepIndex];
+  if (!step) return noop(s);
+  return {
+    state: {
+      ...s,
+      phase: "observing",
+      stepIndex,
+      escalated: false,
+      mistakes: 0,
+      wrongActions: 0,
+      action: undefined,
+      correction: undefined,
+      explanation: undefined,
+      reobserved: false,
+    },
+    effects: [{ type: "loadSkill", skillId: step.skill }],
+  };
+}
+
+export function onSkillLoaded(s: HodeState, e: EventOf<"SKILL_LOADED">): Transition {
+  if (s.phase !== "observing" || currentStep(s)?.skill !== e.skillId) return noop(s);
+  return { state: { ...s, level: startingLevel(e.record) }, effects: [{ type: "observe" }] };
+}
+
+export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {
+  if (s.phase !== "observing") return noop(s);
+  return requestReason({ ...s, observation: e.observation });
+}
+
+function contextFor(s: HodeState, observation: ScreenObservation): TeachingContext {
+  return {
+    goal: s.goal,
+    pack: s.pack,
+    step: currentStep(s),
+    observation,
+    assistanceLevel: s.level,
+    utterance: s.question?.question,
+    focusRegion: s.question ?? s.focusRegion,
+    correction: s.correction,
+    recentMistakes: s.mistakes,
+  };
+}
+
+export function requestReason(s: HodeState): Transition {
+  if (!s.observation) return { state: { ...s, phase: "observing" }, effects: [{ type: "observe" }] };
+  const requestId = s.requestId + 1;
+  return {
+    state: { ...s, phase: "reasoning", requestId },
+    effects: [{ type: "reason", requestId, context: contextFor(s, s.observation) }],
+  };
+}
+
+export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transition {
+  if (s.phase !== "reasoning" || e.requestId !== s.requestId) return noop(s);
+  const withNotice = { ...s, notice: e.failures.length > 0 ? COPY.fallbackNotice : s.notice };
+  const action = e.action;
+  if (action.kind === "answer") return showAnswer(withNotice, action);
+  const band = action.target ? confidenceBand(action.target.confidence) : "uncertain";
+  if (band === "uncertain" && !s.reobserved) {
+    return { state: { ...withNotice, phase: "observing", reobserved: true }, effects: [{ type: "observe" }] };
+  }
+  const shown: TeachingAction = band === "uncertain" ? { ...action, kind: "clarify", speech: COPY.clarify, target: undefined } : action;
+  return showGuidance(withNotice, shown);
+}
+
+function showGuidance(s: HodeState, action: TeachingAction): Transition {
+  const primitives = overlayFor(action, pinFor(s));
+  const effects: HodeEffect[] = [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }];
+  if (action.speech !== "") effects.push({ type: "say", text: action.speech });
+  effects.push({ type: "startStuckTimer", ms: STUCK_MS });
+  return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false }, effects };
+}
+
+function showAnswer(s: HodeState, action: TeachingAction): Transition {
+  return {
+    state: { ...s, phase: "answering", action },
+    effects: [
+      { type: "renderOverlay", primitives: overlayFor(action, pinFor(s)) },
+      { type: "say", text: action.speech },
+    ],
+  };
+}
