@@ -1,5 +1,6 @@
 mod db;
 mod hit_test;
+mod perception;
 mod surfaces;
 
 use tauri::Emitter;
@@ -17,11 +18,14 @@ pub fn run() {
                 .build(),
         )
         .manage(hit_test::NotchHitRect::default())
+        .manage(perception::Perception::start())
         .invoke_handler(tauri::generate_handler![
             surfaces::set_notch_hit_rect,
             surfaces::set_notch_activatable,
             surfaces::set_overlay_interactive,
-            surfaces::monitor_info
+            surfaces::monitor_info,
+            perception::observe,
+            perception::capture_active_window
         ])
         .setup(|app| {
             app.handle().plugin(
@@ -38,6 +42,7 @@ pub fn run() {
             )?;
             surfaces::setup(app.handle())?;
             hit_test::spawn(app.handle().clone());
+            perception::input_hook::spawn(app.handle().clone())?;
             Ok(())
         })
         .run(tauri::generate_context!())
