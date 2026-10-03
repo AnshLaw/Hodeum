@@ -50,7 +50,7 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
 
 export function onSkillLoaded(s: HodeState, e: EventOf<"SKILL_LOADED">): Transition {
   if (s.phase !== "observing" || currentStep(s)?.skill !== e.skillId) return noop(s);
-  return { state: { ...s, level: startingLevel(e.record) }, effects: [{ type: "observe" }] };
+  return { state: { ...s, level: startingLevel(e.record, e.fallbackLevel) }, effects: [{ type: "observe" }] };
 }
 
 export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {

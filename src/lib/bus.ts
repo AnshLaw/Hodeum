@@ -8,6 +8,24 @@ export interface BusEvents {
   "annotate:start": Empty;
   "annotate:cancel": Empty;
   "annotation:submitted": { annotation: LearnerAnnotation };
+  /** Local data changed (a Hode was logged, settings saved, a skill adjusted); views refresh. */
+  "data:changed": Empty;
+  "settings:changed": Empty;
+  /** Live Hode status from the notch (where the runtime lives) for the app window. */
+  "hode:summary": HodeSummary;
+  /** Ask the notch to start a Hode, e.g. from the app's chat or learning paths. */
+  "hode:start": { goal: string };
+  "hode:end": Empty;
+  /** Ask the notch to broadcast a fresh summary (an app window just opened). */
+  "hode:summary-request": Empty;
+}
+
+export interface HodeSummary {
+  phase: string;
+  goal: string;
+  /** What Hodey is currently saying or asking. */
+  title: string;
+  step?: { current: number; total: number };
 }
 
 export type BusEventName = keyof BusEvents;

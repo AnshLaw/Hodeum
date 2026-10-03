@@ -27,8 +27,9 @@ export function relax(level: AssistanceLevel): AssistanceLevel {
   return ASSISTANCE_LEVELS[Math.min(LEAST_HELP, ASSISTANCE_LEVELS.indexOf(level) + 1)];
 }
 
-export function startingLevel(record: SkillRecord | null): AssistanceLevel {
-  return record?.last_assistance_level ?? "demonstrate";
+/** A practised skill resumes where it left off; a new one starts at the learner's chosen preset. */
+export function startingLevel(record: SkillRecord | null, fallback: AssistanceLevel = "demonstrate"): AssistanceLevel {
+  return record?.last_assistance_level ?? fallback;
 }
 
 /** Escalations already raised `outcome.level` during the step; an unaided completion earns one step less help. */

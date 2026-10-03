@@ -17,4 +17,16 @@ export class MemorySkillStore implements SkillStore {
     this.records.set(skillId, next);
     return next;
   }
+
+  all(): SkillRecord[] {
+    return [...this.records.values()];
+  }
+
+  put(record: SkillRecord): void {
+    this.records.set(record.skill_id, record);
+  }
+
+  remove(skillId: string): void {
+    this.records.delete(skillId);
+  }
 }

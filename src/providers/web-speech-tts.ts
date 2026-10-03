@@ -5,6 +5,9 @@ const BENIGN_ERRORS = new Set(["canceled", "interrupted"]);
 
 /** Windows native voices through WebView2's speechSynthesis — the PRD's always-available local fallback. */
 export class WebSpeechTTSProvider implements TTSProvider {
+  /** Speaking speed from the learner's settings (1 = normal). */
+  rate = SPEECH_RATE;
+
   async speak(text: AsyncIterable<string>, signal: AbortSignal): Promise<void> {
     let content = "";
     for await (const chunk of text) {
@@ -15,7 +18,7 @@ export class WebSpeechTTSProvider implements TTSProvider {
     const synth = window.speechSynthesis;
     await new Promise<void>((resolve, reject) => {
       const utterance = new SpeechSynthesisUtterance(content);
-      utterance.rate = SPEECH_RATE;
+      utterance.rate = this.rate;
       utterance.onend = () => resolve();
       utterance.onerror = (event) => (BENIGN_ERRORS.has(event.error) ? resolve() : reject(new Error(`Speech synthesis failed: ${event.error}`)));
       signal.addEventListener("abort", () => synth.cancel(), { once: true });

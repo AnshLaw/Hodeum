@@ -74,7 +74,8 @@ export type HodeEvent =
   | { type: "START_HODE" }
   /** `openAllowed`: no pack matched, but the local vision model is ready to plan step by step. */
   | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean }
-  | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null }
+  /** `fallbackLevel`: where a never-practised skill starts (from the learner's help preset). */
+  | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null; fallbackLevel?: AssistanceLevel }
   | { type: "OBSERVED"; observation: ScreenObservation }
   | { type: "ACTION_READY"; requestId: number; action: TeachingAction; failures: string[] }
   | { type: "LEARNER_ACTED"; observation: ScreenObservation }

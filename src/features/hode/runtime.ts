@@ -1,6 +1,6 @@
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
-import type { Rect, StepOutcome, TeachingContext } from "../../lib/types";
+import type { AssistanceLevel, Rect, StepOutcome, TeachingContext } from "../../lib/types";
 import type { PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { reasonWithFallback } from "../../providers/router";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState } from "./model";
@@ -29,6 +29,9 @@ export class HodeRuntime {
   /** Skill writes are chained so the next step's read sees the previous step's outcome. */
   private pendingWrite: Promise<void> = Promise.resolve();
   private muted = false;
+  private fallbackLevel: AssistanceLevel = "demonstrate";
+  private stuckMs: number | undefined;
+  private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
 
   constructor(private readonly deps: RuntimeDeps) {
     this.disposers = [
@@ -48,14 +51,30 @@ export class HodeRuntime {
     };
   };
 
+  /** Every event with the states around it (the learning-history recorder listens here). */
+  onTransition(listener: (event: HodeEvent, prev: HodeState, next: HodeState) => void): () => void {
+    this.transitionListeners.add(listener);
+    return () => {
+      this.transitionListeners.delete(listener);
+    };
+  }
+
   dispatch = (event: HodeEvent): void => {
-    const { state, effects } = step(this.state, event);
-    if (state !== this.state) {
+    const prev = this.state;
+    const { state, effects } = step(prev, event);
+    if (state !== prev) {
       this.state = state;
       this.listeners.forEach((listener) => listener());
     }
+    this.transitionListeners.forEach((listener) => listener(event, prev, state));
     effects.forEach((effect) => this.run(effect));
   };
+
+  /** Learner settings: where new skills start and how long before Hodey treats the learner as stuck. */
+  configure(options: { fallbackLevel: AssistanceLevel; stuckMs: number }): void {
+    this.fallbackLevel = options.fallbackLevel;
+    this.stuckMs = options.stuckMs;
+  }
 
   setMuted(muted: boolean): void {
     this.muted = muted;
@@ -85,7 +104,7 @@ export class HodeRuntime {
       case "stopSpeech":
         return this.stopSpeech();
       case "startStuckTimer":
-        return this.startStuckTimer(effect.ms);
+        return this.startStuckTimer(this.stuckMs ?? effect.ms);
       case "cancelStuckTimer":
         return this.clearStuckTimer();
       case "recordOutcome":
@@ -97,7 +116,7 @@ export class HodeRuntime {
     this.pendingWrite
       .then(() => this.deps.skills.get(skillId))
       .then(
-        (record) => this.dispatch({ type: "SKILL_LOADED", skillId, record }),
+        (record) => this.dispatch({ type: "SKILL_LOADED", skillId, record, fallbackLevel: this.fallbackLevel }),
         (error) => this.fail("Couldn't load your skill progress", error),
       );
   }
