@@ -1,7 +1,8 @@
 import type { Rect, UiElement } from "../../lib/types";
 
-export const DESKTOP = { width: 1280, height: 760 } as const;
-export const APP_WINDOW: Rect = { x: 40, y: 72, width: 1200, height: 660 };
+export const DESKTOP = { width: 1280, height: 900 } as const;
+/** Starts below the expanded notch card, which sits flush with the top edge. */
+export const APP_WINDOW: Rect = { x: 40, y: 220, width: 1200, height: 660 };
 export const TITLE_BAR_HEIGHT = 32;
 const MOCK_CONFIDENCE = 0.95;
 
