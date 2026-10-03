@@ -5,7 +5,7 @@ mod perception;
 mod surfaces;
 mod tray;
 
-use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, Shortcut, ShortcutState};
 
 const ANNOTATE_SHORTCUT: &str = "ctrl+alt+h";
@@ -65,11 +65,6 @@ pub fn run() {
             dock::set_notch_visible,
             dock::begin_notch_drag
         ])
-        .on_window_event(|window, event| {
-            if window.label() == surfaces::NOTCH && matches!(event, WindowEvent::Moved(_)) {
-                dock::on_notch_moved(window.app_handle());
-            }
-        })
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())
         .expect("error while building Hodeum");

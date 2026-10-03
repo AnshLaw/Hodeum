@@ -2,9 +2,8 @@ pub mod appbar;
 pub mod geometry;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewWindow};
@@ -13,18 +12,14 @@ use crate::surfaces::NOTCH;
 use appbar::AppBar;
 use geometry::{dock_rect, snap_dock, Dock, PxRect};
 
-/// After the last move event, the drag is considered released.
-const DRAG_SETTLE: Duration = Duration::from_millis(180);
-/// A press that never moves the window isn't a drag.
-const DRAG_GIVE_UP: Duration = Duration::from_secs(3);
-const DRAG_POLL: Duration = Duration::from_millis(40);
+/// ~60 Hz: the window tracks the cursor smoothly while dragging.
+const DRAG_POLL: Duration = Duration::from_millis(16);
 const SNAPPED_EVENT: &str = "dock:snapped";
 
 #[derive(Default)]
 pub struct DockState {
     pub appbar: AppBar,
     dragging: AtomicBool,
-    last_move: Mutex<Option<Instant>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -75,47 +70,42 @@ pub fn set_notch_visible(app: AppHandle, visible: bool) -> Result<(), String> {
     if visible { window.show() } else { window.hide() }.map_err(|e| e.to_string())
 }
 
-/// Starts a native window drag; a watcher snaps to the nearest dock once movement settles.
+fn left_button_down() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+    // SAFETY: GetAsyncKeyState has no preconditions; the high bit means "currently pressed".
+    (unsafe { GetAsyncKeyState(i32::from(VK_LBUTTON.0)) } as u16 & 0x8000) != 0
+}
+
+/// Moves the notch with the cursor while the left button is held, then snaps to the nearest dock.
+/// Done by hand because Windows' modal move loop ignores this undecorated, non-activating window.
 #[tauri::command]
 pub fn begin_notch_drag(app: AppHandle, state: State<'_, DockState>) -> Result<(), String> {
-    *state.last_move.lock().map_err(|e| e.to_string())? = None;
-    state.dragging.store(true, Ordering::SeqCst);
-    notch(&app)?.start_dragging().map_err(|e| e.to_string())?;
+    if state.dragging.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let window = notch(&app)?;
+    let cursor = app.cursor_position().map_err(|e| e.to_string())?;
+    let origin = window.outer_position().map_err(|e| e.to_string())?;
+    let grab = (cursor.x - f64::from(origin.x), cursor.y - f64::from(origin.y));
     let handle = app.clone();
-    thread::spawn(move || watch_drag(handle));
+    thread::spawn(move || follow_cursor(handle, grab));
     Ok(())
 }
 
-/// Called from the window-event handler for every notch move.
-pub fn on_notch_moved(app: &AppHandle) {
-    let state = app.state::<DockState>();
-    if state.dragging.load(Ordering::SeqCst) {
-        if let Ok(mut last) = state.last_move.lock() {
-            *last = Some(Instant::now());
+fn follow_cursor(app: AppHandle, grab: (f64, f64)) {
+    let result = (|| -> Result<(), String> {
+        let window = notch(&app)?;
+        while left_button_down() && app.state::<DockState>().dragging.load(Ordering::SeqCst) {
+            let cursor = app.cursor_position().map_err(|e| e.to_string())?;
+            let position = PhysicalPosition::new((cursor.x - grab.0).round() as i32, (cursor.y - grab.1).round() as i32);
+            window.set_position(position).map_err(|e| e.to_string())?;
+            thread::sleep(DRAG_POLL);
         }
-    }
-}
-
-fn watch_drag(app: AppHandle) {
-    let started = Instant::now();
-    loop {
-        thread::sleep(DRAG_POLL);
-        let state = app.state::<DockState>();
-        if !state.dragging.load(Ordering::SeqCst) {
-            return;
-        }
-        let last = state.last_move.lock().map(|l| *l).unwrap_or(None);
-        match last {
-            Some(moved) if moved.elapsed() >= DRAG_SETTLE => break,
-            None if started.elapsed() >= DRAG_GIVE_UP => {
-                state.dragging.store(false, Ordering::SeqCst);
-                return;
-            }
-            _ => {}
-        }
-    }
-    if let Err(error) = finish_drag(&app) {
-        eprintln!("couldn't snap the notch after dragging: {error}");
+        finish_drag(&app)
+    })();
+    if let Err(error) = result {
+        app.state::<DockState>().dragging.store(false, Ordering::SeqCst);
+        eprintln!("couldn't drag the notch: {error}");
     }
 }
 
