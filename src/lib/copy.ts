@@ -42,5 +42,4 @@ export const COPY = {
   focusSet: "Focus set. Start a Hode and I'll look there first.",
   nothingMarked: "I can't make out a control there yet. Try marking a smaller area around one button.",
   progressNotSaved: "Progress won't be saved this session — the local database didn't open.",
-  screenNotConnected: "Screen reading isn't connected yet — native UI Automation arrives in the next build.",
 } as const;
