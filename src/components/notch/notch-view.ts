@@ -189,3 +189,14 @@ export function stepItems(s: HodeState): StepItem[] {
   const revealAll = s.mode === "agent" || s.showAllSteps || finished;
   return revealAll ? items : items.filter((item) => item.state !== "todo");
 }
+
+export interface ProviderBadge {
+  label: string;
+  title: string;
+  variant: "local" | "enhanced";
+}
+
+/** "● Local" or "☁ Enhanced" (the glyph comes from CSS), per PRD §4.4. */
+export function providerBadge(enhanced: boolean): ProviderBadge {
+  return enhanced ? { label: COPY.enhanced, title: COPY.enhancedTitle, variant: "enhanced" } : { label: COPY.local, title: COPY.localTitle, variant: "local" };
+}

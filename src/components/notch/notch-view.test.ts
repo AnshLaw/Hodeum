@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { COPY } from "../../lib/copy";
 import { initialState, type HodeState } from "../../features/hode/model";
 import { PACK, guideAction } from "../../features/hode/test-fixtures";
-import { islandSize, notchView, skillLabel, stepItems } from "./notch-view";
+import { islandSize, notchView, providerBadge, skillLabel, stepItems } from "./notch-view";
 
 const guiding = (overrides: Partial<HodeState> = {}): HodeState => ({
   ...initialState,
@@ -125,5 +125,12 @@ describe("phone island", () => {
 
   it("still lets the menu take over", () => {
     expect(islandSize(notchView(initialState), { ...context, menuOpen: true })).toBe("lesson");
+  });
+});
+
+describe("providerBadge", () => {
+  it("says Local unless a cloud provider may receive context", () => {
+    expect(providerBadge(false)).toEqual({ label: COPY.local, title: COPY.localTitle, variant: "local" });
+    expect(providerBadge(true)).toEqual({ label: COPY.enhanced, title: COPY.enhancedTitle, variant: "enhanced" });
   });
 });

@@ -298,6 +298,17 @@
   background: var(--hd-ok);
 }
 
+.local-badge--enhanced::before {
+  content: "☁";
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  color: var(--hd-accent);
+  font-size: 12px;
+  line-height: 1;
+}
+
 .step-dots {
   display: inline-flex;
   gap: 3px;

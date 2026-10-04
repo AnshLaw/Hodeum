@@ -28,6 +28,30 @@ export const MAX_WAKE_WORD = 30;
 /** Longest voice id kept; Windows voice URIs are well under this. */
 const MAX_VOICE_NAME = 200;
 
+/** Opt-in cloud services; local is always on and always the fallback. */
+export const CLOUD_PROVIDERS = ["gemini", "elevenlabs", "backboard"] as const;
+export type CloudProvider = (typeof CLOUD_PROVIDERS)[number];
+/** Backboard learning memory: off, read and write, or recall only. */
+export const MEMORY_MODES = ["off", "auto", "readonly"] as const;
+export type MemoryMode = (typeof MEMORY_MODES)[number];
+export const MAX_SENSITIVE_APPS = 40;
+const MAX_SENSITIVE_APP = 60;
+/** Apps and sites matched (case-insensitive) against the active app and window title; cloud stays off there. */
+export const DEFAULT_SENSITIVE_APPS = ["1Password", "Bitwarden", "KeePass", "LastPass", "Dashlane", "Bank", "NetBanking", "PayPal", "Paytm", "PhonePe", "Credential Manager", "Password", "Medical", "Health"];
+
+export const DEFAULT_CLOUD = { reasoning: false, voice: false, memory: "off", sensitiveApps: DEFAULT_SENSITIVE_APPS } as const;
+
+const cloudSchema = z
+  .object({
+    /** Gemini reasoning (text context only). */
+    reasoning: z.boolean().catch(false),
+    /** ElevenLabs voice (Hodey's words only). */
+    voice: z.boolean().catch(false),
+    memory: z.enum(MEMORY_MODES).catch("off"),
+    sensitiveApps: z.array(z.string().trim().min(1).max(MAX_SENSITIVE_APP)).max(MAX_SENSITIVE_APPS).catch([...DEFAULT_SENSITIVE_APPS]),
+  })
+  .default({ ...DEFAULT_CLOUD, sensitiveApps: [...DEFAULT_SENSITIVE_APPS] });
+
 export const DEFAULT_APPEARANCE = { theme: "dark", accent: "amber", hodeyColor: "amber", hodeyAccessory: "none" } as const;
 
 const appearanceSchema = z
@@ -67,10 +91,12 @@ export const settingsSchema = z.object({
   webSearch: z.boolean().default(false),
   /** Hold to talk; with a letter for commands. */
   hodeyKey: z.enum(HODEY_KEYS).catch("right-ctrl").default("right-ctrl"),
+  cloud: cloudSchema,
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
 export type Appearance = Settings["appearance"];
+export type CloudSettings = Settings["cloud"];
 
 export const DEFAULT_SETTINGS: Settings = {
   voice: { enabled: true, rate: 1.05, name: "", conversation: true, handsFree: false, language: "auto", hindiScript: "devanagari", hindiVoice: DEFAULT_HINDI_VOICE, wakeWords: [] },
@@ -79,6 +105,7 @@ export const DEFAULT_SETTINGS: Settings = {
   appearance: { ...DEFAULT_APPEARANCE },
   webSearch: false,
   hodeyKey: "right-ctrl",
+  cloud: { ...DEFAULT_CLOUD, sensitiveApps: [...DEFAULT_SENSITIVE_APPS] },
 };
 
 export const SETTINGS_LIMITS = { MIN_RATE, MAX_RATE, MIN_STUCK_SECONDS, MAX_STUCK_SECONDS } as const;
@@ -90,7 +117,7 @@ export function parseSettings(raw: unknown): Settings {
     const result = settingsSchema.shape[key].safeParse(value[key]);
     return (result.success ? result.data : DEFAULT_SETTINGS[key]) as Settings[K];
   };
-  return { voice: pick("voice"), mode: pick("mode"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance"), webSearch: pick("webSearch"), hodeyKey: pick("hodeyKey") };
+  return { voice: pick("voice"), mode: pick("mode"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance"), webSearch: pick("webSearch"), hodeyKey: pick("hodeyKey"), cloud: pick("cloud") };
 }
 
 export interface SettingsStore {

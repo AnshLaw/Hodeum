@@ -32,6 +32,8 @@ export interface BridgeDeps {
   applyVoice: (voice: Settings["voice"]) => void;
   /** Tells the system-wide key handler which key is the Hodey key. */
   applyHodeyKey?: (key: Settings["hodeyKey"]) => void;
+  /** Tells the cloud policy which cloud providers are turned on. */
+  applyCloud?: (cloud: Settings["cloud"]) => void;
 }
 
 /** A typed goal as an event: its task pack, or (when vision can plan) the app it names. */
@@ -51,6 +53,7 @@ function applySettings(deps: BridgeDeps, settings: Settings): void {
   deps.runtime.setMuted(!settings.voice.enabled);
   deps.applyVoice(settings.voice);
   deps.applyHodeyKey?.(settings.hodeyKey);
+  deps.applyCloud?.(settings.cloud);
 }
 
 function loadSettings(deps: BridgeDeps): void {

@@ -10,6 +10,8 @@ import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import { TauriShell } from "../lib/tauri-shell";
 import { Notch } from "../components/notch/Notch";
 import { connectAccount } from "../features/account/connect";
+import { CloudContext } from "../components/notch/cloud-context";
+import { connectCloud } from "../providers/cloud/connect";
 import { connectHodeBridge } from "../features/hode/bridge";
 import { connectVoice, withoutEcho } from "../features/voice/connect";
 import type { HodePhase } from "../features/hode/model";
@@ -85,12 +87,14 @@ async function boot(): Promise<void> {
   const voice = createLocalVoice({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
   showMicDot(voice.speech, activity);
   showStandbyDot(voice.status, activity);
+  const cloud = connectCloud({ invoke, bus, activeApp: () => runtime.getState().observation });
   const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts: voice.tts });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   runtime.subscribe(() => {
     const state = runtime.getState();
     surfaces.setSurface(state.pack?.surface ?? "windows");
     surfaces.setWatching(WATCHING_PHASES.includes(state.phase));
+    cloud.appChanged();
   });
   connectHodeBridge({
     runtime,
@@ -107,6 +111,7 @@ async function boot(): Promise<void> {
       invoke<void>("set_speech_language", { language: asrLanguage(settings.language) }).catch((error) => console.error("Couldn't set the speech language", error));
       voice.speech.setHandsFree(settings.handsFree, settings.wakeWords).catch((error) => console.error("Couldn't switch hands-free listening", error));
     },
+    applyCloud: (settings) => cloud.apply(settings),
     applyHodeyKey: (key) => {
       hodeyKeySetting.set(key);
       invoke<void>("set_hodey_key", { key }).catch((error) => console.error("Couldn't set the Hodey key", error));
@@ -126,7 +131,11 @@ async function boot(): Promise<void> {
     openAllowed: () => vision.current().state === "ready",
   });
   connectAccount({ bus, settings, activity, invoke, listen: (event, handler) => subscribeTauri(event, handler) }).catch((error) => console.error("Accounts didn't start; Hodeum stays local", error));
-  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} phone={mirror} />);
+  mount(
+    <CloudContext.Provider value={cloud.policy}>
+      <Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} phone={mirror} />
+    </CloudContext.Provider>,
+  );
 }
 
 boot().catch((error) => console.error("Hodey failed to start", error));

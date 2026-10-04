@@ -5,7 +5,8 @@ import { COPY } from "../../lib/copy";
 import { HodeyFace } from "../hodey/HodeyFace";
 import type { HodeyMood } from "../hodey/mood";
 import { CheckIcon, CloseIcon, CrosshairIcon, ExpandIcon, EyeIcon, IconButton, MicIcon, MoreIcon, MutedIcon, PauseIcon, RepeatIcon, VolumeIcon } from "../shared/icons";
-import type { NotchControl, NotchView, StepItem } from "./notch-view";
+import { providerBadge, type NotchControl, type NotchView, type StepItem } from "./notch-view";
+import { useEnhanced } from "./cloud-context";
 
 const LABELS: Record<NotchControl, string> = {
   start: COPY.startHode,
@@ -90,10 +91,12 @@ export function StepDots({ current, total }: { current: number; total: number })
   );
 }
 
+/** "● Local" or "☁ Enhanced": whether any cloud provider may receive learning context right now. */
 export function LocalBadge() {
+  const badge = providerBadge(useEnhanced());
   return (
-    <span className="local-badge" title="Everything runs on this PC">
-      {COPY.local}
+    <span className={`local-badge local-badge--${badge.variant}`} title={badge.title} role="status">
+      {badge.label}
     </span>
   );
 }

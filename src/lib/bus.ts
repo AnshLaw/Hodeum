@@ -15,6 +15,8 @@ export interface BusEvents {
   /** Local data changed (a Hode was logged, settings saved, a skill adjusted); views refresh. */
   "data:changed": Empty;
   "settings:changed": Empty;
+  /** A cloud API key was saved or removed in Settings (the key itself never crosses the bus). */
+  "cloud:keys-changed": Empty;
   /** Live Hode status from the notch (where the runtime lives) for the app window. */
   "hode:summary": HodeSummary;
   /** Ask the notch to start a Hode, e.g. from the app's chat or learning paths. */

@@ -3,6 +3,7 @@ mod app_focus;
 mod app_window;
 mod chat_context;
 mod child_job;
+mod cloud;
 mod db;
 mod dock;
 mod hit_test;
@@ -89,7 +90,10 @@ pub fn run() {
             hodey_key::set_hodey_key,
             account::auth_listen,
             account::open_url,
-            account::device_name
+            account::device_name,
+            cloud::keys::cloud_key_status,
+            cloud::keys::cloud_key_set,
+            cloud::keys::cloud_key_clear
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())
