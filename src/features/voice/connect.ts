@@ -36,6 +36,8 @@ export interface VoiceDeps {
   onHodeEvent?: (listener: (event: HodeEvent) => void) => () => void;
   /** The PC's installed apps, so "open Excel" opens it. */
   apps?: () => InstalledApp[];
+  /** A conversation opened or closed: while open, the mic stays (or reopens) for the learner's reply between turns. */
+  onConversation?: (open: boolean) => void;
 }
 
 const ENDS_CONVERSATION = new Set<HodeEvent["type"]>(["DISMISS", "END_HODE"]);
@@ -115,6 +117,8 @@ class Conversation {
   private overHodey = false;
   /** ...and the learner's own words have since broken through (barge-in confirmed). */
   private bargedIn = false;
+  /** Whether a conversation is open, as `onConversation` last reported it. */
+  private reportedOpen = false;
 
   constructor(private readonly deps: VoiceDeps) {}
 
@@ -170,6 +174,7 @@ class Conversation {
       return this.end(true);
     }
     this.conversing = this.deps.conversation();
+    this.reportOpen();
     this.deps.heard?.(said);
     const events = routeUtterance(this.deps.getState(), said, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? [], this.deps.apps?.() ?? []);
     events.forEach(this.deps.dispatch);
@@ -192,6 +197,7 @@ class Conversation {
       return;
     }
     this.conversing = this.deps.conversation();
+    this.reportOpen();
     this.deps.heard?.(rest);
     routeUtterance(this.deps.getState(), rest, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? [], this.deps.apps?.() ?? []).forEach(this.deps.dispatch);
     if (this.conversing) this.openMic();
@@ -214,9 +220,11 @@ class Conversation {
   private openMic(): void {
     if (this.opening || this.open || !this.deps.speech.converse) return;
     this.opening = true;
+    this.reportOpen();
     this.deps.speech.converse().catch((error: unknown) => {
       this.opening = false;
       this.conversing = false;
+      this.reportOpen();
       console.error("Couldn't keep listening for the conversation", error);
     });
   }
@@ -227,7 +235,19 @@ class Conversation {
     this.conversing = false;
     this.open = false;
     this.clearQuietTimer();
+    this.reportOpen();
     if (stopMic && wasOpen) this.deps.speech.stop().catch((error: unknown) => console.error("Couldn't stop listening", error));
+  }
+
+  /**
+   * Tells the notch, on each change, whether a conversation is open: from the learner's first words, across the gap
+   * between a tap's mic closing and the conversation's opening, until it ends. A mic that can't converse never opens one.
+   */
+  private reportOpen(): void {
+    const open = this.opening || this.open || (this.conversing && this.deps.speech.converse !== undefined);
+    if (open === this.reportedOpen) return;
+    this.reportedOpen = open;
+    this.deps.onConversation?.(open);
   }
 
   private armQuietTimer(ms = CONVERSATION_PATIENCE_MS): void {

@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { reportError } from "../../lib/errors";
 import type { Bus } from "../../lib/bus";
 import type { NativeShell } from "../../lib/shell";
-import type { HodePhase } from "../../features/hode/model";
-import { applyCommand, loadPrefs, notchWindow, savePrefs, shouldReveal, type AppPresence, type DockPrefs } from "../../features/dock/dock";
+import { applyCommand, loadPrefs, notchWindow, savePrefs, shouldReveal, type AppPresence, type DockPrefs, type Engagement } from "../../features/dock/dock";
 
-/** Keeps auto-hide from flickering as the cursor brushes past the edge. */
+/**
+ * Keeps auto-hide from flickering as the cursor brushes past the edge, or as Hodey's signals hand over to each
+ * other (a line ending as the mic opens for the reply).
+ */
 const AUTO_HIDE_DELAY_MS = 2500;
 
 function browserStorage(): Storage | undefined {
@@ -69,9 +71,9 @@ export function useDock(shell: NativeShell, inHode: boolean, bus: Bus, searching
   return { prefs, update, command };
 }
 
-/** Auto-hide: reveal immediately, tuck away only after the cursor has been gone a moment. */
-export function useRevealed(prefs: DockPrefs, hovered: boolean, phase: HodePhase): boolean {
-  const wanted = shouldReveal(prefs.visibility, hovered, phase);
+/** Auto-hide: reveal immediately, tuck away only once the cursor has been gone and Hodey idle a moment. */
+export function useRevealed(prefs: DockPrefs, hovered: boolean, engagement: Engagement): boolean {
+  const wanted = shouldReveal(prefs.visibility, hovered, engagement);
   const [revealed, setRevealed] = useState(wanted);
   useEffect(() => {
     if (wanted) {

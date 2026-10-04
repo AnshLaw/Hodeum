@@ -9,7 +9,10 @@ import type { InstalledApp, TaskPack } from "../../lib/types";
 import type { HodeRuntime } from "../../features/hode/runtime";
 import { goalEvents, startFromApp } from "../../features/hode/bridge";
 import { useHodeState } from "../../features/hode/use-hode";
-import { holdsSpace } from "../../features/dock/dock";
+import { holdsSpace, type Engagement } from "../../features/dock/dock";
+import type { HodePhase } from "../../features/hode/model";
+import type { Watchable } from "../../lib/flag";
+import { useFlag } from "../shared/use-flag";
 import { SurfaceMenu } from "./DockMenu";
 import { SkillsPanel, successExtra } from "./SkillsPanel";
 import { useNotchSkills, type SkillSource } from "./use-skills";
@@ -66,6 +69,10 @@ export interface NotchProps {
   cloudSetup?: CloudSetup;
   /** The installed apps, so a typed "open Excel" opens it; empty until the catalog loads. */
   apps?: () => InstalledApp[];
+  /** Hodey is saying something: the notch stays out while it talks, even with no Hode. */
+  speaking?: Watchable<boolean>;
+  /** A conversation is open: the notch stays out between turns while Hodey waits for the reply. */
+  conversation?: Watchable<boolean>;
 }
 
 const TOAST_MS = 4000;
@@ -110,6 +117,11 @@ function useActivity(tracker: ActivityTracker): ActivityState {
     return off;
   }, [tracker]);
   return state;
+}
+
+/** What Hodey is doing with the learner right now: the Hode's phase, and the spoken exchange around it. */
+function useEngagement(phase: HodePhase, micStatus: SpeechInputStatus, voice: Pick<NotchProps, "speaking" | "conversation">): Engagement {
+  return { phase, listening: micStatus === "listening", speaking: useFlag(voice.speaking), conversing: useFlag(voice.conversation) };
 }
 
 function useSpeechStatus(speech: SpeechInput): SpeechInputStatus {
@@ -253,7 +265,7 @@ function useNaturalVoices(source?: Pick<NativeVoiceStatus, "current" | "subscrib
   return voices;
 }
 
-export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource, voiceSetup, cloudSetup, apps }: NotchProps) {
+export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource, voiceSetup, cloudSetup, apps, speaking, conversation }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
   const notice = bootNotice ?? voiceNotice(useTtsState(voiceStatus));
@@ -278,8 +290,10 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
     setVoiceMenu(undefined);
     skills?.setOpen(false);
   });
-  // Hodey stays out while the learner is in its menu or reading their skills.
-  const revealed = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true || web !== undefined, state.phase);
+  const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
+  const engagement = useEngagement(state.phase, micStatus, { speaking, conversation });
+  // Hodey stays out while the learner is in its menu or reading their skills, and while it's engaged with them.
+  const revealed = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true || web !== undefined, engagement);
   const handleControl = useControlHandler(runtime, bus);
   const onControl = (control: NotchControl) => (web && control === "dismiss" ? closeWeb() : handleControl(control));
   useHitRect(surfaceRef, shell, bus, `${layoutKey}:${revealed}`);
@@ -290,7 +304,6 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   useEffect(() => setCardBottom(undefined), [view.title, view.mode]);
   const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top", cardBottom);
   const activity = useActivity(tracker);
-  const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
   // A said answer folds back to what the learner was doing, unless they're reading it, in the menu, or replying.
   const answerDone = view.mode === "answer" && state.answerSaid === true && !hovered && !menuOpen && micStatus !== "listening";
   useAutoDismiss(answerDone, runtime, ANSWER_LINGER_MS);

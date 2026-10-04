@@ -6,9 +6,11 @@ import { TauriVoiceHardware, applyVoiceHardware, type VoiceSetup } from "../feat
 import { invoke } from "@tauri-apps/api/core";
 import { ActivityTracker, mirrorRemoteActivity, screenWatch, withScreenActivity } from "../lib/activity";
 import { connectAppearance } from "../lib/appearance";
+import { Flag } from "../lib/flag";
 import { hodeyKeySetting } from "../lib/keys";
 import { COPY } from "../lib/copy";
 import { createLocalVoice, showMicDot, showStandbyDot } from "../providers/speech/local-voice";
+import { trackSpeaking } from "../providers/speech/speaking";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import { TauriShell } from "../lib/tauri-shell";
 import { Notch } from "../components/notch/Notch";
@@ -153,7 +155,10 @@ async function boot(): Promise<void> {
   // ElevenLabs first when Settings > Cloud allows it right now; the local voice says anything it skips or fails.
   const elevenlabs = new ElevenLabsTTSProvider(invoke);
   const lessonLines = lessonCorpus(TASK_PACKS);
-  const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity, shareable: (text) => shareableText(text, lessonLines) });
+  // The notch stays out while Hodey talks and while a conversation waits for the learner's reply, Hode or not.
+  const speaking = new Flag();
+  const conversationOpen = new Flag();
+  const tts = trackSpeaking(new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity, shareable: (text) => shareableText(text, lessonLines) }), speaking);
   // SQLite always; Backboard only while the cloud policy allows it (and writes only in "auto").
   const memory = new RoutedMemory(localMemory, new BackboardMemoryProvider({ invoke, policy: cloud.policy, kv }), () => cloud.policy.reportFailure("backboard"));
   // A lesson step UI Automation grounds is answered locally at once; the cloud and the vision model only take the rest.
@@ -228,12 +233,13 @@ async function boot(): Promise<void> {
     packs: TASK_PACKS,
     openAllowed: () => vision.current().state === "ready",
     apps,
+    onConversation: (open) => conversationOpen.set(open),
   });
   installDebug({ runtime, bus, packs: TASK_PACKS, apps, openGoalsAllowed });
   connectAccount({ bus, settings, activity, invoke, listen: (event, handler) => subscribeTauri(event, handler) }).catch((error) => console.error("Accounts didn't start; Hodeum stays local", error));
   mount(
     <CloudContext.Provider value={cloud.policy}>
-      <Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} voiceStatus={voice.status} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} phone={mirror} skills={learning} voiceSetup={voiceSetup} cloudSetup={cloudSetup} apps={apps} />
+      <Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} voiceStatus={voice.status} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} phone={mirror} skills={learning} voiceSetup={voiceSetup} cloudSetup={cloudSetup} apps={apps} speaking={speaking} conversation={conversationOpen} />
     </CloudContext.Provider>,
   );
 }

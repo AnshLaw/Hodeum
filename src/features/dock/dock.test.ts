@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_PREFS, applyCommand, holdsSpace, loadPrefs, notchWindow, reservesSpace, savePrefs, shouldReveal } from "./dock";
+import type { HodePhase } from "../hode/model";
+import { DEFAULT_PREFS, applyCommand, engaged, holdsSpace, loadPrefs, notchWindow, reservesSpace, savePrefs, shouldReveal, type Engagement } from "./dock";
 
 const storage = (value: string | null) => ({ getItem: () => value });
 
@@ -57,20 +58,31 @@ describe("applyCommand", () => {
 });
 
 describe("visibility rules", () => {
-  it("pinned is always shown and hidden never is", () => {
-    expect(shouldReveal("pinned", false, "idle")).toBe(true);
-    expect(shouldReveal("hidden", true, "guiding")).toBe(false);
+  const quiet: Engagement = { phase: "idle", listening: false, speaking: false, conversing: false };
+  const at = (phase: HodePhase): Engagement => ({ ...quiet, phase });
+
+  it("pinned is always shown and hidden never is, even mid-conversation", () => {
+    expect(shouldReveal("pinned", false, quiet)).toBe(true);
+    expect(shouldReveal("hidden", true, at("guiding"))).toBe(false);
+    expect(shouldReveal("hidden", false, { ...quiet, listening: true, speaking: true, conversing: true })).toBe(false);
   });
 
   it("auto-hide reveals on hover or whenever a Hode is running", () => {
-    expect(shouldReveal("auto", false, "idle")).toBe(false);
-    expect(shouldReveal("auto", true, "idle")).toBe(true);
-    expect(shouldReveal("auto", false, "guiding")).toBe(true);
+    expect(shouldReveal("auto", false, quiet)).toBe(false);
+    expect(shouldReveal("auto", true, quiet)).toBe(true);
+    expect(shouldReveal("auto", false, at("guiding"))).toBe(true);
   });
 
-  it("auto-hide tucks a paused Hode away like a sleeping Hodey; hovering brings it back", () => {
-    expect(shouldReveal("auto", false, "paused")).toBe(false);
-    expect(shouldReveal("auto", true, "paused")).toBe(true);
+  it("auto-hide stays out while Hodey listens, speaks or holds a conversation open, even with no Hode", () => {
+    expect(shouldReveal("auto", false, { ...quiet, listening: true })).toBe(true);
+    expect(shouldReveal("auto", false, { ...quiet, speaking: true })).toBe(true);
+    expect(shouldReveal("auto", false, { ...quiet, conversing: true })).toBe(true);
+  });
+
+  it("auto-hide tucks a paused Hode into the orb like a sleeping Hodey; hovering or talking brings it back", () => {
+    expect(shouldReveal("auto", false, at("paused"))).toBe(false);
+    expect(shouldReveal("auto", true, at("paused"))).toBe(true);
+    expect(shouldReveal("auto", false, { ...at("paused"), listening: true })).toBe(true);
   });
 
   it("a copilot sidebar reserves space while pinned, or under auto-hide while a Hode runs", () => {
@@ -84,6 +96,23 @@ describe("visibility rules", () => {
 
   it("a floating sidebar never reserves space", () => {
     expect(reservesSpace({ dock: "right", visibility: "pinned", sidebar: "floating" }, true)).toBe(false);
+  });
+});
+
+describe("engaged", () => {
+  const quiet: Engagement = { phase: "idle", listening: false, speaking: false, conversing: false };
+  const LIVE_PHASES: HodePhase[] = ["goal_entry", "observing", "reasoning", "guiding", "answering", "annotating", "recovering", "acting", "checkpoint", "success"];
+
+  it("is engaged in every phase of a Hode or question except a pause", () => {
+    for (const phase of LIVE_PHASES) expect(engaged({ ...quiet, phase })).toBe(true);
+    expect(engaged({ ...quiet, phase: "paused" })).toBe(false);
+  });
+
+  it("is engaged in a spoken exchange from idle: the mic open, Hodey talking, or waiting for the reply", () => {
+    expect(engaged(quiet)).toBe(false);
+    expect(engaged({ ...quiet, listening: true })).toBe(true);
+    expect(engaged({ ...quiet, speaking: true })).toBe(true);
+    expect(engaged({ ...quiet, conversing: true })).toBe(true);
   });
 });
 
