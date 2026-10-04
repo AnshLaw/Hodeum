@@ -11,6 +11,10 @@ const KEY_FLAG = 1;
 const MICROSECONDS = 1000;
 /** Past this many queued frames the decoder is behind: skip to the next keyframe to stay live. */
 const MAX_DECODE_QUEUE = 6;
+/** Decode errors in a row with no frame shown between them: the stream can't be decoded, so the mirror says so. */
+const MAX_DECODE_FAILURES = 3;
+
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((byte, i) => byte === b[i]);
 
 /** Raw channel bodies arrive as an ArrayBuffer (small) or via an IPC fetch (large); anything else is a status. */
 export function bytesOf(message: unknown): Uint8Array | undefined {
@@ -32,8 +36,12 @@ export class AirPlayPhoneSource implements PhoneSource {
   readonly kind = "airplay" as const;
   private readonly handlers = new Set<(status: PhoneSourceStatus) => void>();
   private decoder: VideoDecoder | undefined;
+  /** The SPS the decoder was set up for: a keyframe with another (the iPhone rotated) sets it up again. */
+  private sps: Uint8Array | undefined;
   private live = false;
+  private size: { width: number; height: number } | undefined;
   private skipToKey = false;
+  private failures = 0;
 
   /** `network` is read at every start, so Try again picks up a changed choice. */
   constructor(
@@ -66,13 +74,15 @@ export class AirPlayPhoneSource implements PhoneSource {
   private onReceiver(message: ReceiverMessage): void {
     const status = receiverStatus(message);
     if (!status) return;
-    if (status.state === "error") this.closeDecoder();
+    // A receiver that stopped, or restarted and waits for the iPhone again, starts the next stream from scratch.
+    if (status.state === "error" || status.state === "waiting") this.closeDecoder();
     this.emit(status);
   }
 
   private onUnit(bytes: Uint8Array, sink: FrameSink): void {
     const key = (bytes[0] & KEY_FLAG) !== 0;
     const data = bytes.subarray(1);
+    if (key) this.resetOnNewStream(data);
     if (!this.decoder && !this.configure(data, key, sink)) return;
     const decoder = this.decoder;
     if (!decoder || decoder.state !== "configured") return;
@@ -82,33 +92,63 @@ export class AirPlayPhoneSource implements PhoneSource {
     decoder.decode(new EncodedVideoChunk({ type: key ? "key" : "delta", timestamp: performance.now() * MICROSECONDS, data }));
   }
 
+  /** A keyframe with a new SPS starts a new stream (the iPhone rotated, or changed resolution): set up for it. */
+  private resetOnNewStream(data: Uint8Array): void {
+    const sps = findSps(data);
+    if (this.decoder && this.sps && sps && !sameBytes(sps, this.sps)) this.resetDecoder();
+  }
+
   /** The decoder can only start on a keyframe that carries its SPS. */
   private configure(data: Uint8Array, key: boolean, sink: FrameSink): boolean {
     const sps = key ? findSps(data) : undefined;
     if (!sps) return false;
+    this.sps = sps;
     this.decoder = new VideoDecoder({
       output: (frame) => {
         sink.draw(frame, frame.displayWidth, frame.displayHeight);
-        if (!this.live) {
-          this.live = true;
-          this.emit({ state: "live", width: frame.displayWidth, height: frame.displayHeight });
-        }
+        this.showing(frame.displayWidth, frame.displayHeight);
         frame.close();
       },
-      error: (error) => {
-        console.error("Decoding the AirPlay video failed", error);
-        this.closeDecoder();
-        this.emit({ state: "error", message: `Couldn't decode the iPhone video: ${error.message}` });
-      },
+      error: (error) => this.decodeFailed(error),
     });
     this.decoder.configure({ codec: avcCodec(sps), optimizeForLatency: true });
     return true;
   }
 
-  private closeDecoder(): void {
+  /** Live once a frame shows, and again (with the new size) when a rotation changes it. */
+  private showing(width: number, height: number): void {
+    this.failures = 0;
+    if (this.live && this.size?.width === width && this.size.height === height) return;
+    this.live = true;
+    this.size = { width, height };
+    this.emit({ state: "live", width, height });
+  }
+
+  /**
+   * A glitch in the stream (a lost frame, a format change) starts the decoder again at the next keyframe, and
+   * the mirror stays live meanwhile. Only a stream that keeps failing with nothing shown is an error.
+   */
+  private decodeFailed(error: Error): void {
+    console.error("Decoding the AirPlay video failed; starting again at the next keyframe", error);
+    this.resetDecoder();
+    this.failures += 1;
+    if (this.failures < MAX_DECODE_FAILURES) return;
+    this.closeDecoder();
+    this.emit({ state: "error", message: `Couldn't decode the iPhone video: ${error.message}` });
+  }
+
+  private resetDecoder(): void {
     if (this.decoder && this.decoder.state !== "closed") this.decoder.close();
     this.decoder = undefined;
+    this.sps = undefined;
+    this.skipToKey = false;
+  }
+
+  private closeDecoder(): void {
+    this.resetDecoder();
     this.live = false;
+    this.size = undefined;
+    this.failures = 0;
   }
 
   private emit(status: PhoneSourceStatus): void {
