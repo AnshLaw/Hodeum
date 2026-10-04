@@ -4,7 +4,9 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, 
 use std::sync::Mutex;
 
 use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetForegroundWindow, GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
+};
 
 use crate::dock::geometry::{PxRect, NOTCH_WINDOW};
 use crate::perception::foreground::{root_window, window_pid};
@@ -14,6 +16,30 @@ use crate::hit_test::{HitRect, NotchHitRect};
 pub const NOTCH: &str = "main_notch";
 pub const OVERLAY: &str = "guidance_overlay";
 
+/// Marks a Hodeum surface as a tool window, which other apps' occlusion checks skip.
+pub fn occlusion_safe(ex_style: u32) -> u32 {
+    ex_style | WS_EX_TOOLWINDOW.0
+}
+
+/// Chromium apps (Chrome, Edge, Electron) stop painting any window they think a visible, opaque,
+/// non-click-through window covers, so behind our transparent overlay it turns solid black. Tao
+/// rewrites the extended style on every cursor-events, focusable or visibility change (dropping
+/// WS_EX_TRANSPARENT when the overlay turns interactive for Point & Ask), so call this after each.
+pub fn keep_out_of_occlusion(win: &WebviewWindow) -> Result<(), String> {
+    let hwnd = HWND(win.hwnd().map_err(|e| e.to_string())?.0 as *mut _);
+    // SAFETY: `hwnd` is a live window owned by this process; only its extended style changes.
+    unsafe {
+        let current = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        if current == 0 {
+            return Err(format!("couldn't read the style of `{}`", win.label()));
+        }
+        let wanted = occlusion_safe(current as u32);
+        if wanted != current as u32 {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, wanted as isize);
+        }
+    }
+    Ok(())
+}
 
 /// A monitor in physical pixels, mirrored by `MonitorInfo` in `src/lib/types.ts`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -79,10 +105,12 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     place_overlay(&overlay, &monitor)?;
     overlay.set_ignore_cursor_events(true)?;
     overlay.show()?;
+    keep_out_of_occlusion(&overlay)?;
 
     place_notch(&notch, &monitor)?;
     notch.set_ignore_cursor_events(true)?;
     notch.show()?;
+    keep_out_of_occlusion(&notch)?;
     Ok(())
 }
 
@@ -153,6 +181,7 @@ pub fn set_notch_activatable(app: AppHandle, activatable: bool, focus: State<'_,
         focus.remember()?;
     }
     notch.set_focusable(activatable).map_err(|e| e.to_string())?;
+    keep_out_of_occlusion(&notch)?;
     if activatable {
         notch.set_focus().map_err(|e| e.to_string())
     } else {
@@ -170,6 +199,7 @@ pub fn set_overlay_interactive(app: AppHandle, interactive: bool, focus: State<'
         .set_ignore_cursor_events(!interactive)
         .map_err(|e| e.to_string())?;
     overlay.set_focusable(interactive).map_err(|e| e.to_string())?;
+    keep_out_of_occlusion(&overlay)?;
     if interactive {
         overlay.set_focus().map_err(|e| e.to_string())
     } else {
@@ -184,7 +214,22 @@ pub fn monitor_info(app: AppHandle) -> Result<MonitorInfo, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{notch_origin, MonitorInfo};
+    use super::{notch_origin, occlusion_safe, MonitorInfo};
+    use windows::Win32::UI::WindowsAndMessaging::{WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT};
+
+    #[test]
+    fn an_interactive_overlay_still_reads_as_a_tool_window() {
+        // What tao leaves on the overlay once Point & Ask makes it clickable: no WS_EX_TRANSPARENT.
+        let interactive = WS_EX_TOPMOST.0;
+        assert_eq!(occlusion_safe(interactive), WS_EX_TOPMOST.0 | WS_EX_TOOLWINDOW.0);
+    }
+
+    #[test]
+    fn keeps_the_click_through_and_no_activate_bits() {
+        let passive = WS_EX_TOPMOST.0 | WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0 | WS_EX_NOACTIVATE.0;
+        assert_eq!(occlusion_safe(passive), passive | WS_EX_TOOLWINDOW.0);
+        assert_eq!(occlusion_safe(occlusion_safe(passive)), occlusion_safe(passive));
+    }
 
     #[test]
     fn centres_the_notch_on_a_secondary_monitor() {

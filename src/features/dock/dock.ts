@@ -98,13 +98,31 @@ export function shouldReveal(visibility: Visibility, hovered: boolean, phase: Ho
   }
 }
 
+/** The parts of the Hode state that say whether a Hode (not just a question) is under way. */
+export interface HodeProgress {
+  phase: HodePhase;
+  pack?: object;
+  open: boolean;
+  resumePhase?: HodePhase;
+}
+
+/**
+ * Whether a Hode is under way, from the goal form to the success card. A one-off Point & Ask or
+ * spoken question from idle is not one: reserving for it would shove the learner's windows aside the
+ * moment they start marking, then back again once the answer is dismissed.
+ */
+export function holdsSpace(s: HodeProgress): boolean {
+  if (s.phase === "idle") return false;
+  return s.phase === "goal_entry" || s.resumePhase === "goal_entry" || s.pack !== undefined || s.open;
+}
+
 /**
  * A copilot sidebar reserves its width (an app bar, with windows moved aside) while it's meant to be
  * open: always when pinned, during a Hode under auto-hide. Floating sidebars and the top notch never do.
  */
-export function reservesSpace(prefs: DockPrefs, phase: HodePhase): boolean {
+export function reservesSpace(prefs: DockPrefs, inHode: boolean): boolean {
   if (prefs.dock === "top" || prefs.sidebar !== "copilot") return false;
-  return prefs.visibility === "pinned" || (prefs.visibility === "auto" && hodeActive(phase));
+  return prefs.visibility === "pinned" || (prefs.visibility === "auto" && inHode);
 }
 
 /** The Hodeum app around the notch: on screen (the notch steps aside), folding back into it, or gone. */
@@ -121,9 +139,9 @@ export interface NotchWindow {
  * app folds into it, but a copilot strip is reserved again only once the app is gone, so windows moved
  * aside never jump under the fold.
  */
-export function notchWindow(prefs: DockPrefs, phase: HodePhase, presence: AppPresence): NotchWindow {
+export function notchWindow(prefs: DockPrefs, inHode: boolean, presence: AppPresence): NotchWindow {
   return {
     visible: presence !== "open" && prefs.visibility !== "hidden",
-    reserve: presence === "closed" && reservesSpace(prefs, phase),
+    reserve: presence === "closed" && reservesSpace(prefs, inHode),
   };
 }

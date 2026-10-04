@@ -9,6 +9,7 @@ import type { TaskPack } from "../../lib/types";
 import type { HodeRuntime } from "../../features/hode/runtime";
 import { goalEvent, startFromApp } from "../../features/hode/bridge";
 import { useHodeState } from "../../features/hode/use-hode";
+import { holdsSpace } from "../../features/dock/dock";
 import { SurfaceMenu } from "./DockMenu";
 import { SkillsPanel, successExtra } from "./SkillsPanel";
 import { useNotchSkills, type SkillSource } from "./use-skills";
@@ -240,7 +241,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   const surfaceRef = useRef<HTMLElement>(null);
   const [muted, setMuted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const dock = useDock(shell, state.phase, bus);
+  const dock = useDock(shell, holdsSpace(state), bus);
   const layoutKey = dock.prefs.dock;
   const hovered = useNotchHover(surfaceRef, shell, layoutKey);
   const skills = useNotchSkills(skillSource, bus, state, packs, (next) => startFromApp(runtime, next.pack.title, packs, visionStatus?.state === "ready"));

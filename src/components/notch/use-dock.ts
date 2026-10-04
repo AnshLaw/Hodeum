@@ -37,13 +37,16 @@ function useAppPresence(bus: Bus): AppPresence {
   return presence;
 }
 
-/** Owns dock + visibility preferences and mirrors them onto the native window (stepping aside for the app). */
-export function useDock(shell: NativeShell, phase: HodePhase, bus: Bus): DockController {
+/**
+ * Owns dock + visibility preferences and mirrors them onto the native window (stepping aside for the app).
+ * `inHode` (see `holdsSpace`) decides whether an auto-hiding copilot sidebar reserves its strip.
+ */
+export function useDock(shell: NativeShell, inHode: boolean, bus: Bus): DockController {
   const [prefs, setPrefs] = useState<DockPrefs>(() => {
     const storage = browserStorage();
     return storage ? loadPrefs(storage) : loadPrefs({ getItem: () => null });
   });
-  const { visible, reserve } = notchWindow(prefs, phase, useAppPresence(bus));
+  const { visible, reserve } = notchWindow(prefs, inHode, useAppPresence(bus));
 
   useEffect(() => {
     const storage = browserStorage();
@@ -77,5 +80,7 @@ export function useRevealed(prefs: DockPrefs, hovered: boolean, phase: HodePhase
     const timer = setTimeout(() => setRevealed(false), AUTO_HIDE_DELAY_MS);
     return () => clearTimeout(timer);
   }, [wanted]);
-  return revealed;
+  // Reveal in the same render the hover arrives in; otherwise the side panel first opens while still
+  // tucked off the edge and only slides in a frame later.
+  return wanted || revealed;
 }

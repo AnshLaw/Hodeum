@@ -3,7 +3,7 @@ use std::{sync::Mutex, thread, time::Duration};
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::surfaces::NOTCH;
+use crate::surfaces::{keep_out_of_occlusion, NOTCH};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(33);
 const ERROR_BACKOFF: Duration = Duration::from_secs(1);
@@ -59,6 +59,7 @@ fn apply(app: &AppHandle, inside: bool) -> Result<(), String> {
     notch
         .set_ignore_cursor_events(!inside)
         .map_err(|e| e.to_string())?;
+    keep_out_of_occlusion(&notch)?;
     app.emit(HOVER_EVENT, inside).map_err(|e| e.to_string())
 }
 

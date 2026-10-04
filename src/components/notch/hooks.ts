@@ -4,7 +4,9 @@ import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
 import type { HodeRuntime } from "../../features/hode/runtime";
 import type { OverlayPrimitive } from "../../lib/types";
+import type { Dock } from "../../features/dock/dock";
 import { coversTarget, guidanceFootprint, notchScreenRect } from "./footprint";
+import { createHoverGate, hoverGraceMs } from "./hover-gate";
 import type { NotchControl } from "./notch-view";
 
 /** Long enough to read what moved and the next suggestion; hovering holds it longer. */
@@ -61,24 +63,27 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
 
 /**
  * Hover from both DOM pointer events (browser) and the native hit-test (Tauri), because a window
- * that ignores cursor events never receives pointerleave.
+ * that ignores cursor events never receives pointerleave. A side dock grows from a tab into a panel
+ * under the cursor, so leaving it waits out a grace period (see `hoverGraceMs`).
  */
-export function useNotchHover(ref: RefObject<HTMLElement | null>, shell: NativeShell, layoutKey: string): boolean {
+export function useNotchHover(ref: RefObject<HTMLElement | null>, shell: NativeShell, dock: Dock): boolean {
   const [hovered, setHovered] = useState(false);
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const enter = () => setHovered(true);
-    const leave = () => setHovered(false);
+    const gate = createHoverGate(setHovered, hoverGraceMs(dock));
+    const enter = () => gate.set(true);
+    const leave = () => gate.set(false);
     element.addEventListener("pointerenter", enter);
     element.addEventListener("pointerleave", leave);
-    const stopNative = shell.onNotchHover(setHovered);
+    const stopNative = shell.onNotchHover(gate.set);
     return () => {
       element.removeEventListener("pointerenter", enter);
       element.removeEventListener("pointerleave", leave);
       stopNative();
+      gate.dispose();
     };
-  }, [ref, shell, layoutKey]);
+  }, [ref, shell, dock]);
   return hovered;
 }
 

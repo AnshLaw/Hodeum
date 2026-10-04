@@ -10,7 +10,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewWindow};
 
-use crate::surfaces::NOTCH;
+use crate::surfaces::{keep_out_of_occlusion, NOTCH};
 use appbar::AppBar;
 use arrange::Arranged;
 use geometry::{dock_rect, snap_dock, top_rect, Dock, PxRect};
@@ -152,7 +152,8 @@ pub fn set_notch_tall(app: AppHandle, tall: bool, state: State<'_, DockState>) -
 #[tauri::command]
 pub fn set_notch_visible(app: AppHandle, visible: bool) -> Result<(), String> {
     let window = notch(&app)?;
-    if visible { window.show() } else { window.hide() }.map_err(|e| e.to_string())
+    if visible { window.show() } else { window.hide() }.map_err(|e| e.to_string())?;
+    keep_out_of_occlusion(&window)
 }
 
 fn left_button_down() -> bool {
