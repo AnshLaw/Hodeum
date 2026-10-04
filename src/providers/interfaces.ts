@@ -1,4 +1,5 @@
 import type {
+  AppLaunch,
   AssistanceLevel,
   PerformRequest,
   Rect,
@@ -66,6 +67,10 @@ export interface PerceptionAdapter {
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void;
   /** Brings an open window of `app` (e.g. "Excel") to the front. False when none is open. */
   focusApp?(app: string): Promise<boolean>;
+  /** Opens `app` (with the pack's practice file) and brings it to the front. False when it didn't appear in time. */
+  launchApp?(app: string, launch: AppLaunch): Promise<boolean>;
+  /** Fires when the learner's front window becomes a different window. */
+  onAppSwitched?(handler: () => void): () => void;
   /** Agent · Do it for me: presses a control for the learner. Rejects when it's no longer where it was seen. */
   perform?(request: PerformRequest): Promise<void>;
 }

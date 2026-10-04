@@ -204,8 +204,8 @@ describe("shouldPeek", () => {
     expect(shouldPeek({ ...covered, mode: "guidance" })).toBe(true);
   });
 
-  it("steps aside for a Point & Ask answer too: its highlight sat under the card before", () => {
-    expect(shouldPeek({ ...covered, mode: "answer" })).toBe(true);
+  it("never folds an answer away: it's said once, so its text must stay readable", () => {
+    expect(shouldPeek({ ...covered, mode: "answer" })).toBe(false);
   });
 
   it("stays open while the learner hovers it, uses the menu or reads their skills", () => {

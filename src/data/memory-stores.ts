@@ -31,6 +31,15 @@ export class MemoryLearningStore implements LearningStore, SkillStore {
     if (hode) this.hodes.set(id, { ...hode, outcome, endedAt: at });
   }
 
+  async closeOpenHodes(): Promise<number> {
+    const open = [...this.hodes.values()].filter((hode) => !hode.endedAt);
+    for (const hode of open) {
+      const last = this.events.filter((e) => e.hodeId === hode.id).reduce((latest, e) => (e.at > latest ? e.at : latest), hode.startedAt);
+      this.hodes.set(hode.id, { ...hode, outcome: "ended", endedAt: last });
+    }
+    return open.length;
+  }
+
   async listHodes(limit: number): Promise<HodeRecord[]> {
     return [...this.hodes.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, limit);
   }

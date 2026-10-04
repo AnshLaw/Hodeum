@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HodeSummary } from "../lib/bus";
 import type { CommandKind, DeviceRow, PcCommand } from "../features/sync/types";
 import { HEARTBEAT_MS } from "../features/sync/device-link";
-import { ANSWER_TIMEOUT_MS, WebBus, type CommandFeedback, type CommandSender } from "./command-bus";
+import { ANSWER_TIMEOUT_MS, WebBus, liveOn, type CommandFeedback, type CommandSender } from "./command-bus";
 
 const NOW = Date.parse("2026-10-03T10:00:00.000Z");
 const PC: DeviceRow = { id: "pc-1", name: "ANSH-PC", last_seen_at: new Date(NOW).toISOString(), live: null };
@@ -75,5 +75,12 @@ describe("WebBus", () => {
     bus.on("hode:summary", (s) => seen.push(s));
     bus.emit("hode:summary-request", {});
     expect(seen).toEqual([live]);
+  });
+
+  it("doesn't show the last Hode of a PC that went offline as still running", () => {
+    const live: HodeSummary = { phase: "guiding", goal: "pivot", title: "Select your data" };
+    const quiet = { ...PC, live, last_seen_at: new Date(Date.now() - 3_600_000).toISOString() };
+    expect(liveOn(quiet).phase).toBe("idle");
+    expect(liveOn({ ...PC, live, last_seen_at: new Date().toISOString() })).toEqual(live);
   });
 });

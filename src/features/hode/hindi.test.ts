@@ -36,6 +36,8 @@ describe("language setting", () => {
     expect(replyLanguage("hinglish")).toBe("hinglish");
     expect(replyLanguage("auto")).toBeUndefined();
     expect(asrLanguage("hinglish")).toBe("auto");
+    // Auto listens in English: open language detection heard English words as Hindi.
+    expect(asrLanguage("auto")).toBe("en");
   });
 
   it("on Auto, answers in whatever language the learner just used", () => {

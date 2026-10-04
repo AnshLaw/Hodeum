@@ -1,5 +1,5 @@
 import { padRect } from "../../lib/coords";
-import { requestReason } from "./flow";
+import { overlayOf, requestReason } from "./flow";
 import { continueAfterCheckpoint, takeOver } from "./execute";
 import { clampToMode } from "./policy";
 import { COPY } from "../../lib/copy";
@@ -14,6 +14,7 @@ import {
   type HodePhase,
   type HodeState,
   type Transition,
+  STUCK_MS,
 } from "./model";
 
 const IN_HODE: HodePhase[] = ["observing", "reasoning", "guiding", "answering", "recovering", "acting"];
@@ -22,17 +23,45 @@ const PAUSABLE: HodePhase[] = IN_HODE;
 const STOP_EVERYTHING: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "stopSpeech" }];
 
 function resumeTarget(s: HodeState): HodePhase {
-  if (s.phase === "checkpoint") return "checkpoint";
+  if (s.phase === "checkpoint" || s.phase === "paused") return s.phase;
+  // Guidance already given comes back as it was; only a step still being worked out is looked at again.
+  if (s.phase === "guiding" && s.action) return "guiding";
   if ((s.pack || s.open) && IN_HODE.includes(s.phase)) return "observing";
   return s.phase === "goal_entry" ? "goal_entry" : "idle";
 }
 
-/** Return to where the learner was; an active Hode re-observes so guidance reflects the current screen. */
+/** Where a question leaves from: the phase to return to, and the guidance to bring back with it. */
+function leaving(s: HodeState): Pick<HodeState, "resumePhase" | "resumeAction" | "resumeObservation"> {
+  const resumePhase = resumeTarget(s);
+  return resumePhase === "guiding" ? { resumePhase, resumeAction: s.action, resumeObservation: s.observation } : { resumePhase, resumeAction: undefined, resumeObservation: undefined };
+}
+
+/** The interrupted step, exactly as it was: its card and highlight, with nothing said again. */
+function restoreGuidance(state: HodeState, s: HodeState): Transition {
+  const restored: HodeState = { ...state, action: s.resumeAction, observation: s.resumeObservation ?? s.observation };
+  const primitives = s.resumeAction ? overlayOf(restored, s.resumeAction) : [];
+  const overlay: HodeEffect = primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" };
+  // Waiting for the learner's app is not being stuck.
+  return { state: restored, effects: restored.waitingForApp ? [overlay] : [overlay, { type: "startStuckTimer", ms: STUCK_MS }] };
+}
+
+/** Return to where the learner was; a step still being prepared is looked at again. */
 function resume(s: HodeState): Transition {
   const phase = s.resumePhase ?? "idle";
-  const state: HodeState = { ...s, phase, resumePhase: undefined, question: undefined, spokenQuestion: undefined };
+  const state: HodeState = {
+    ...s,
+    phase,
+    resumePhase: undefined,
+    resumeAction: undefined,
+    resumeObservation: undefined,
+    question: undefined,
+    spokenQuestion: undefined,
+    answerSaid: undefined,
+  };
+  if (phase === "guiding") return restoreGuidance(state, s);
   if (phase === "observing") return { state, effects: [{ type: "observe" }] };
-  return { state, effects: [pinOverlay(state.focusRegion?.shape.bounds)] };
+  // A mark just set is shown; after an answer, nothing lingers on screen.
+  return { state, effects: [s.phase === "annotating" ? pinOverlay(state.focusRegion) : { type: "clearOverlay" }] };
 }
 
 /**
@@ -77,14 +106,14 @@ const NOT_LISTENING: HodePhase[] = ["goal_entry", "annotating"];
 export function onVoiceQuestion(s: HodeState, e: EventOf<"VOICE_QUESTION">): Transition {
   const question = e.question.trim();
   if (question === "" || NOT_LISTENING.includes(s.phase)) return noop(s);
-  const answeringAlready = s.phase === "observing" && s.spokenQuestion !== undefined;
-  const resumePhase = answeringAlready || s.phase === "answering" ? (s.resumePhase ?? resumeTarget(s)) : resumeTarget(s);
+  const answeringAlready = (s.phase === "observing" && s.spokenQuestion !== undefined) || s.phase === "answering";
+  const from = answeringAlready && s.resumePhase ? { resumePhase: s.resumePhase, resumeAction: s.resumeAction, resumeObservation: s.resumeObservation } : leaving(s);
   const requestId = s.requestId + 1;
   // A quick acknowledgement while Hodey looks, varied so it doesn't sound canned.
   const { acks } = spoken(s.language);
   const ack = acks[requestId % acks.length];
   return {
-    state: { ...s, phase: "observing", spokenQuestion: question, question: undefined, resumePhase, requestId },
+    state: { ...s, ...from, phase: "observing", spokenQuestion: question, question: undefined, requestId },
     effects: [{ type: "stopSpeech" }, { type: "cancelStuckTimer" }, { type: "say", text: ack }, { type: "observe" }],
   };
 }
@@ -92,7 +121,7 @@ export function onVoiceQuestion(s: HodeState, e: EventOf<"VOICE_QUESTION">): Tra
 export function onAnnotateStart(s: HodeState): Transition {
   if (s.phase === "annotating" || s.phase === "paused") return noop(s);
   return {
-    state: { ...s, phase: "annotating", resumePhase: resumeTarget(s) },
+    state: { ...s, ...leaving(s), phase: "annotating" },
     effects: [{ type: "cancelStuckTimer" }, { type: "stopSpeech" }],
   };
 }
@@ -124,6 +153,11 @@ export function onDismiss(s: HodeState): Transition {
     default:
       return noop(s);
   }
+}
+
+/** An answer's marks have done their job once it's been said; the answer itself stays on the notch. */
+export function onSpeechFinished(s: HodeState): Transition {
+  return s.phase === "answering" ? { state: { ...s, answerSaid: true }, effects: [{ type: "clearOverlay" }] } : noop(s);
 }
 
 export function onPause(s: HodeState): Transition {

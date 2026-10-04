@@ -39,13 +39,18 @@ export interface LearningStats {
   hodesCompleted: number;
   skillsMastered: number;
   skillsLearning: number;
-  /** Consecutive days, ending today or yesterday, with at least one completed Hode. */
+  /** Consecutive days, ending today or yesterday, on which the learner practised. */
   streakDays: number;
   minutesLearning: number;
 }
 
 /** Read side for the app window and the web dashboard. */
 export interface LearningStore extends HodeLog {
+  /**
+   * Ends every Hode left open (Hodeum quit or crashed mid-Hode), at its last recorded activity. Run at
+   * startup, when no Hode can be running; otherwise they'd show "in progress" here and on the web for ever.
+   */
+  closeOpenHodes(): Promise<number>;
   listHodes(limit: number): Promise<HodeRecord[]>;
   getHode(id: string): Promise<HodeDetail | null>;
   listSkills(): Promise<SkillRecord[]>;

@@ -228,7 +228,9 @@ export function onExplainRequested(s: HodeState): Transition {
 export function onRepeat(s: HodeState): Transition {
   const speech = s.action?.speech ?? "";
   if ((s.phase !== "guiding" && s.phase !== "answering") || speech === "") return noop(s);
-  return { state: s, effects: [{ type: "say", text: speech }] };
+  // A repeated answer is said again before it folds away.
+  const state = s.phase === "answering" ? { ...s, answerSaid: false } : s;
+  return { state, effects: [{ type: "say", text: speech }] };
 }
 
 /** Fresh eyes on the current screen: drop the old observation and reason again. */
@@ -247,6 +249,6 @@ export function onLetMeTry(s: HodeState): Transition {
   const level = ASSISTANCE_LEVELS.indexOf(s.level) < observeIndex ? "observe" : s.level;
   return {
     state: { ...s, level },
-    effects: [{ type: "stopSpeech" }, pinOverlay(s.focusRegion?.shape.bounds), { type: "startStuckTimer", ms: STUCK_MS }],
+    effects: [{ type: "stopSpeech" }, pinOverlay(s.focusRegion), { type: "startStuckTimer", ms: STUCK_MS }],
   };
 }

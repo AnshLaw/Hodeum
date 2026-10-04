@@ -3,7 +3,7 @@ import { COPY } from "../../lib/copy";
 import { HODEY_KEY_LABELS, KEY_LETTERS, hodeyKeySetting } from "../../lib/keys";
 import { AGENT_STYLE_COPY, MODE_COPY } from "../../lib/modes";
 import { AGENT_STYLES, HODE_MODES, type AgentStyle, type HodeMode } from "../../lib/types";
-import type { Dock, DockPrefs, SidebarStyle, Visibility } from "../../features/dock/dock";
+import { applyCommand, type Dock, type DockPrefs, type SidebarStyle, type Visibility } from "../../features/dock/dock";
 import type { VisionStatus } from "../../providers/vision/types";
 import type { SurfaceProps } from "./surface";
 
@@ -143,7 +143,7 @@ export function SurfaceMenu(props: SurfaceProps) {
       agentStyle={props.hodeAgentStyle}
       onAgentStyleChange={props.onSetAgentStyle}
       onChange={dock.update}
-      onHide={() => dock.update({ visibility: "hidden" })}
+      onHide={() => dock.update(applyCommand(dock.prefs, "toggle-visibility"))}
       phoneOpen={props.phoneOpen}
       onTogglePhone={props.onTogglePhone}
       onShowSkills={showSkills}

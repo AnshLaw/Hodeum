@@ -40,6 +40,8 @@ export function recordFor(event: HodeEvent, prev: HodeState, next: HodeState, ho
   const ops: LogOp[] = progressEvents(event, prev, next, at, hodeId).map((e) => ({ op: "event", event: e }));
   if (next.phase === "success" && prev.phase !== "success") ops.push({ op: "end", id: hodeId, outcome: "completed", at });
   else if (event.type === "END_HODE" && ACTIVE_PHASES.has(prev.phase)) ops.push({ op: "end", id: hodeId, outcome: "ended", at });
+  // Back to idle any other way (an answer dismissed with nothing to resume): the Hode is over, not "in progress".
+  else if (next.phase === "idle" && ACTIVE_PHASES.has(prev.phase)) ops.push({ op: "end", id: hodeId, outcome: "ended", at });
   return ops;
 }
 

@@ -129,9 +129,31 @@ describe("staying in the right app", () => {
     expect(types(back)).toEqual(["reason"]);
   });
 
+  it("keeps the waiting card, without repeating itself, when a fresh look still finds another app", () => {
+    const waiting = step(loaded(), { type: "OBSERVED", observation: VS_CODE }).state;
+    const looking = step(waiting, { type: "LOOK_AGAIN" }).state;
+    const still = step(looking, { type: "OBSERVED", observation: VS_CODE });
+    expect(still.state).toMatchObject({ phase: "guiding", waitingForApp: "Excel" });
+    expect(still.effects).toEqual([]);
+  });
+
   it("notices when the learner leaves the app mid-Hode", () => {
     const t = step(guiding(), { type: "LEARNER_ACTED", observation: VS_CODE });
     expect(t.state).toMatchObject({ waitingForApp: "Excel", action: { kind: "clarify" } });
+  });
+});
+
+describe("opening the pack's app", () => {
+  const LAUNCHING = { ...PACK, launch: { exe: "excel.exe", sample: "hodeum-sales.csv" } };
+
+  it("opens the app with its practice file in Agent mode, so Hodey can get going", () => {
+    const begun = fold(initialState, { type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "teach me", pack: LAUNCHING, mode: "agent" });
+    expect(begun.effects[0]).toEqual({ type: "focusApp", app: "Excel", launch: LAUNCHING.launch });
+  });
+
+  it("leaves opening it to the learner in Teach mode", () => {
+    const begun = fold(initialState, { type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "teach me", pack: LAUNCHING, mode: "teach" });
+    expect(begun.effects[0]).toEqual({ type: "focusApp", app: "Excel" });
   });
 });
 
@@ -163,7 +185,44 @@ describe("spoken questions", () => {
     const answered = step(observed.state, { type: "ACTION_READY", requestId: observed.state.requestId, action: answer, failures: [] });
     expect(answered.state.phase).toBe("answering");
     const resumed = step(answered.state, { type: "DISMISS" });
-    expect(resumed.state).toMatchObject({ phase: "observing", spokenQuestion: undefined });
+    expect(resumed.state).toMatchObject({ phase: "guiding", spokenQuestion: undefined });
+  });
+
+  it("shows a reply phrased as guidance as the answer, so the question doesn't linger", () => {
+    const asked = step(guiding(), { type: "VOICE_QUESTION", question: "how do I add a table?" }).state;
+    const observed = step(asked, { type: "OBSERVED", observation: HOME_SELECTED });
+    const reply = guideAction({ speech: "Open Insert first." });
+    const answered = step(observed.state, { type: "ACTION_READY", requestId: observed.state.requestId, action: reply, failures: [] });
+    expect(answered.state).toMatchObject({ phase: "answering", action: { kind: "answer", speech: "Open Insert first." } });
+    expect(step(answered.state, { type: "DISMISS" }).state).toMatchObject({ phase: "guiding", spokenQuestion: undefined });
+  });
+
+  it("after Got it, brings back the step it interrupted without thinking or speaking again", () => {
+    const before = guiding();
+    const asked = step(before, { type: "VOICE_QUESTION", question: "what is this?" }).state;
+    const observed = step(asked, { type: "OBSERVED", observation: HOME_SELECTED });
+    const answered = step(observed.state, { type: "ACTION_READY", requestId: observed.state.requestId, action: answer, failures: [] });
+    const resumed = step(answered.state, { type: "DISMISS" });
+    expect(resumed.state).toMatchObject({ phase: "guiding", action: before.action, spokenQuestion: undefined });
+    expect(types(resumed)).toEqual(["renderOverlay", "startStuckTimer"]);
+  });
+
+  it("keeps a paused Hode paused after a question", () => {
+    const paused = step(guiding(), { type: "PAUSE" }).state;
+    const asked = step(paused, { type: "VOICE_QUESTION", question: "what is this?" }).state;
+    const observed = step(asked, { type: "OBSERVED", observation: HOME_SELECTED });
+    const answered = step(observed.state, { type: "ACTION_READY", requestId: observed.state.requestId, action: answer, failures: [] });
+    expect(step(answered.state, { type: "DISMISS" }).state).toMatchObject({ phase: "paused", pack: PACK });
+  });
+
+  it("notes when the answer has been said, and starts over when it's repeated", () => {
+    const asked = step(initialState, { type: "VOICE_QUESTION", question: "what is this?" }).state;
+    const observed = step(asked, { type: "OBSERVED", observation: HOME_SELECTED });
+    const answered = step(observed.state, { type: "ACTION_READY", requestId: observed.state.requestId, action: answer, failures: [] });
+    expect(answered.state.answerSaid).toBe(false);
+    const said = step(answered.state, { type: "SPEECH_FINISHED" }).state;
+    expect(said.answerSaid).toBe(true);
+    expect(step(said, { type: "REPEAT" }).state.answerSaid).toBe(false);
   });
 
   it("works with no Hode running, and returns to idle", () => {
@@ -363,10 +422,10 @@ describe("Point & Ask", () => {
 
   it("pauses guidance while marking and resumes on cancel", () => {
     const marking = step(guiding(), { type: "ANNOTATE_START" });
-    expect(marking.state).toMatchObject({ phase: "annotating", resumePhase: "observing" });
+    expect(marking.state).toMatchObject({ phase: "annotating", resumePhase: "guiding" });
     expect(types(marking)).toEqual(["cancelStuckTimer", "stopSpeech"]);
     const cancelled = step(marking.state, { type: "ANNOTATE_CANCEL" });
-    expect(cancelled.state.phase).toBe("observing");
+    expect(cancelled.state.phase).toBe("guiding");
   });
 
   it("ignores Point & Ask while paused", () => {
@@ -385,7 +444,32 @@ describe("Point & Ask", () => {
     expect(answered.state.phase).toBe("answering");
     expect(answered.effects[0]).toMatchObject({ type: "renderOverlay", primitives: [{ kind: "pin" }, { kind: "highlight" }] });
     const dismissed = step(answered.state, { type: "DISMISS" });
-    expect(dismissed.state).toMatchObject({ phase: "observing", question: undefined });
+    expect(dismissed.state).toMatchObject({ phase: "guiding", question: undefined });
+  });
+
+  function answering(action = guideAction({ kind: "answer", speech: "That's Insert." })): Transition {
+    const reasoned = fold(guiding(), { type: "ANNOTATE_START" }, { type: "ANNOTATION_SUBMITTED", annotation: ask }, { type: "OBSERVED", observation: HOME_SELECTED });
+    return step(reasoned.state, { type: "ACTION_READY", requestId: reasoned.state.requestId, action, failures: [] });
+  }
+
+  it("rings the mark itself when the answer points at something far bigger (the whole page)", () => {
+    const page = { x: 0, y: 0, width: 1600, height: 900 };
+    const answered = answering(guideAction({ kind: "answer", speech: "That's the page.", target: { elementId: "pane:page", bounds: page, confidence: 0.9, label: "YouTube" } }));
+    const render = answered.effects[0];
+    expect(render).toMatchObject({ type: "renderOverlay", primitives: [{ kind: "highlight", bounds: INSERT_BOUNDS, emphasis: "precise" }] });
+    expect(render.type === "renderOverlay" && render.primitives).toHaveLength(1);
+    expect(answered.state.action?.target).toMatchObject({ bounds: INSERT_BOUNDS, label: "" });
+  });
+
+  it("clears the answer's marks once Hodey has said it, keeping the answer on the notch", () => {
+    const said = step(answering().state, { type: "SPEECH_FINISHED" });
+    expect(said.state.phase).toBe("answering");
+    expect(said.effects).toEqual([{ type: "clearOverlay" }]);
+  });
+
+  it("ignores a line finishing outside an answer", () => {
+    const state = guiding();
+    expect(step(state, { type: "SPEECH_FINISHED" }).state).toBe(state);
   });
 
   it("works without a Hode and returns to idle", () => {

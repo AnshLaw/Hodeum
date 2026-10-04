@@ -47,14 +47,17 @@ describe("seedPrefs", () => {
 describe("applyCommand", () => {
   const prefs = { dock: "top", visibility: "auto", sidebar: "copilot" } as const;
 
-  it("hides, then shows again pinned", () => {
+  it("hides, then shows again the way it was shown before, so auto-hide survives a Hide", () => {
     const hidden = applyCommand(prefs, "toggle-visibility");
     expect(hidden.visibility).toBe("hidden");
-    expect(applyCommand(hidden, "toggle-visibility").visibility).toBe("pinned");
+    expect(applyCommand(hidden, "toggle-visibility")).toEqual(prefs);
+    const pinned = applyCommand(applyCommand({ ...prefs, visibility: "pinned" }, "toggle-visibility"), "toggle-visibility");
+    expect(pinned.visibility).toBe("pinned");
   });
 
-  it("shows a hidden notch pinned and leaves a visible one as it is (tray icon click)", () => {
-    expect(applyCommand({ ...prefs, visibility: "hidden" }, "show").visibility).toBe("pinned");
+  it("shows a hidden notch and leaves a visible one as it is (tray icon click)", () => {
+    expect(applyCommand(applyCommand(prefs, "toggle-visibility"), "show")).toEqual(prefs);
+    expect(applyCommand({ ...prefs, visibility: "hidden" }, "show").visibility).toBe("auto");
     expect(applyCommand(prefs, "show")).toEqual(prefs);
     expect(applyCommand({ ...prefs, visibility: "pinned" }, "show").visibility).toBe("pinned");
   });
@@ -82,6 +85,11 @@ describe("visibility rules", () => {
     expect(shouldReveal("auto", false, "idle")).toBe(false);
     expect(shouldReveal("auto", true, "idle")).toBe(true);
     expect(shouldReveal("auto", false, "guiding")).toBe(true);
+  });
+
+  it("auto-hide tucks a paused Hode away like a sleeping Hodey; hovering brings it back", () => {
+    expect(shouldReveal("auto", false, "paused")).toBe(false);
+    expect(shouldReveal("auto", true, "paused")).toBe(true);
   });
 
   it("a copilot sidebar reserves space while pinned, or under auto-hide while a Hode runs", () => {

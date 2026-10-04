@@ -88,6 +88,15 @@ describe("QwenVisionProvider", () => {
     );
   });
 
+  it("lists sliders and moves a neighbouring pick onto the slider the learner asked about", async () => {
+    const mute = el("Mute app", "button", { bounds: { x: 600, y: 200, width: 20, height: 20 } });
+    const slider = el("System sounds", "slider", { bounds: { x: 640, y: 200, width: 200, height: 20 } });
+    const asking = ctx({ pack: undefined, step: undefined, utterance: "show me where the slider", observation: obs([mute, slider]) });
+    expect(selectCandidates(asking)[0]).toBe(slider);
+    const action = await provider(fakeFetch({ kind: "answer", speech: "Right here.", target_index: 1, confidence: 0.9 })).reason(asking);
+    expect(action.target).toMatchObject({ label: "System sounds", bounds: slider.bounds });
+  });
+
   it("caps confidence for a pixel-only box so it never draws a precise arrow", async () => {
     const action = await provider(fakeFetch({ kind: "guide", speech: "Click here.", target_index: -1, bbox: [100, 100, 200, 200], confidence: 0.99 })).reason(ctx());
     expect(action.target?.confidence).toBe(VISUAL_CONFIDENCE_CAP);

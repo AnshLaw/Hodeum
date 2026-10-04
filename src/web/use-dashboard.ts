@@ -7,7 +7,7 @@ import type { DeviceRow } from "../features/sync/types";
 import { TASK_PACKS } from "../task-packs";
 import { WebBus, type CommandFeedback } from "./command-bus";
 import type { Loadable } from "../app/hooks";
-import { noPcMessage, pickDevice } from "./devices";
+import { isOnline, noPcMessage, pickDevice } from "./devices";
 import { SupabaseCommandSender, SupabaseLearningStore, SupabaseSettingsStore, listDevices, watchAccount } from "./supabase-web";
 
 const CHOSEN_PC_KEY = "hodeum.web.pc";
@@ -105,8 +105,9 @@ export function useDashboard(client: SupabaseClient, email: string | undefined):
       off();
     };
   }, [client, services, reloadDevices]);
-  // The chosen PC's live Hode drives "Continue your Hode" on Home.
-  useEffect(() => services.bus.emit("hode:summary-request", {}), [services, target?.id, JSON.stringify(target?.live)]);
+  // The chosen PC's live Hode drives "Continue your Hode" on Home; it clears once the PC goes offline.
+  const online = target ? isOnline(target, Date.now()) : false;
+  useEffect(() => services.bus.emit("hode:summary-request", {}), [services, target?.id, JSON.stringify(target?.live), online]);
   const choose = (id: string) => {
     saveChosen(id);
     setChosen(id);

@@ -101,6 +101,7 @@ export function SettingsPage({ services }: { services: AppServices }) {
         <p className="hmuted">Changes apply to the notch right away.</p>
       </header>
       <SettingsNav />
+      <AccountSettings bus={services.bus} />
       {saveError && <p className="hchat__error" role="alert">Couldn't save: {saveError}</p>}
       {settings && (
         <>
@@ -122,7 +123,6 @@ export function SettingsPage({ services }: { services: AppServices }) {
         }
       />
       {settings && <CloudSettings cloud={settings.cloud} keys={services.cloudKeys} catalog={services.cloudCatalog} openLink={services.openLink} bus={services.bus} onChange={(cloud) => update({ ...settings, cloud })} />}
-      <AccountSettings bus={services.bus} />
     </div>
   );
 }

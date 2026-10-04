@@ -70,6 +70,10 @@ export function GoalForm({ packs, shell, notice, defaultMode, defaultAgentStyle,
     if (event.key === "Escape") onClose();
   };
 
+  // Clicking elsewhere closes an empty form; a typed goal is kept until the learner sends or closes it.
+  const empty = goal.trim() === "";
+  useEffect(() => (empty ? shell.onNotchOutsidePress(onClose) : undefined), [shell, empty, onClose]);
+
   return (
     <form
       className="notch__content goal"

@@ -1,7 +1,7 @@
 import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
-import type { AgentStyle, AssistanceLevel, HodeMode, PerformRequest, Rect, StepOutcome, TeachingContext } from "../../lib/types";
+import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, OverlayPrimitive, PerformRequest, Rect, StepOutcome, TeachingContext } from "../../lib/types";
 import type { LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { reasonWithFallback } from "../../providers/router";
 import { rememberedLevel } from "../memory/tracker";
@@ -29,6 +29,14 @@ const ECHO_WINDOW_MS = 1500;
 /** After Hodey presses a control, the app gets this long to respond (a menu or dialog opening) before it's read. */
 export const PRESS_SETTLE_MS = 450;
 const CANT_PRESS = "Hodey can't click in this app, so this step is yours.";
+/** Muted, a line counts as said once it's been up this long per word (with a floor), the time to read it. */
+const MUTED_READ_MS_PER_WORD = 300;
+const MUTED_READ_MIN_MS = 2500;
+
+function readingMs(text: string): number {
+  const words = text.split(/\s+/).filter((word) => word !== "").length;
+  return Math.max(MUTED_READ_MIN_MS, words * MUTED_READ_MS_PER_WORD);
+}
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -48,6 +56,7 @@ export class HodeRuntime {
   private defaultMode: HodeMode = "teach";
   private defaultAgentStyle: AgentStyle = "guide";
   private pressTimer: ReturnType<typeof setTimeout> | undefined;
+  private readTimer: ReturnType<typeof setTimeout> | undefined;
   private stuckMs: number | undefined;
   private autoLanguage = false;
   /** What learning memory recalled for the running Hode; skill loads wait for it. */
@@ -60,6 +69,10 @@ export class HodeRuntime {
       deps.bus.on("annotate:start", () => this.dispatch({ type: "ANNOTATE_START" })),
       deps.bus.on("annotate:cancel", () => this.dispatch({ type: "ANNOTATE_CANCEL" })),
       deps.bus.on("annotation:submitted", ({ annotation }) => this.dispatch({ type: "ANNOTATION_SUBMITTED", annotation })),
+      // Waiting for the learner to open or switch to the app: look again the moment another window comes forward.
+      deps.perception.onAppSwitched?.(() => {
+        if (this.state.phase === "guiding" && this.state.waitingForApp) this.dispatch({ type: "LOOK_AGAIN" });
+      }) ?? (() => undefined),
     ];
   }
 
@@ -117,7 +130,8 @@ export class HodeRuntime {
 
   /** Auto language: what the learner just said or typed decides what Hodey answers in. */
   noticeLanguage(text: string): void {
-    if (this.autoLanguage) this.setLanguage(detectLanguage(text));
+    const heard = this.autoLanguage ? detectLanguage(text) : undefined;
+    if (heard) this.setLanguage(heard);
   }
 
   private setLanguage(language: ReplyLanguage): void {
@@ -127,11 +141,19 @@ export class HodeRuntime {
   /** Barge-in: the learner started talking, so Hodey stops mid-sentence. */
   interruptSpeech(): void {
     this.stopSpeech();
+    this.answerCutShort();
   }
 
   setMuted(muted: boolean): void {
     this.muted = muted;
-    if (muted) this.stopSpeech();
+    if (!muted) return;
+    this.stopSpeech();
+    this.answerCutShort();
+  }
+
+  /** The learner stopped Hodey mid-answer: the answer counts as delivered, so its card can fold away. */
+  private answerCutShort(): void {
+    if (this.state.phase === "answering" && this.state.answerSaid === false) this.dispatch({ type: "SPEECH_FINISHED" });
   }
 
   dispose(): void {
@@ -144,7 +166,7 @@ export class HodeRuntime {
   private run(effect: HodeEffect): void {
     switch (effect.type) {
       case "focusApp":
-        return this.focusApp(effect.app);
+        return this.focusApp(effect.app, effect.launch);
       case "loadSkill":
         return this.loadSkill(effect.skillId);
       case "observe":
@@ -154,7 +176,7 @@ export class HodeRuntime {
       case "perform":
         return this.schedulePress(effect.requestId, effect.request, effect.delayMs);
       case "renderOverlay":
-        return this.deps.bus.emit("overlay:render", { primitives: effect.primitives, surface: this.state.pack?.surface ?? "windows" });
+        return this.renderOverlay(effect.primitives);
       case "clearOverlay":
         return this.deps.bus.emit("overlay:clear", {});
       case "say":
@@ -168,6 +190,13 @@ export class HodeRuntime {
       case "recordOutcome":
         return this.recordOutcome(effect.skillId, effect.outcome);
     }
+  }
+
+  /** Desktop guidance belongs to the window it was placed on, the one last read; the overlay draws it only there. */
+  private renderOverlay(primitives: OverlayPrimitive[]): void {
+    const surface = this.state.pack?.surface ?? "windows";
+    const anchor = surface === "windows" ? this.state.observation?.window : undefined;
+    this.deps.bus.emit("overlay:render", anchor ? { primitives, surface, anchor } : { primitives, surface });
   }
 
   private loadSkill(skillId: string): void {
@@ -190,8 +219,9 @@ export class HodeRuntime {
   }
 
   /** Observations wait for this, so the first read is of the app being brought forward. */
-  private focusApp(app: string): void {
-    const focus = this.deps.perception.focusApp?.(app) ?? Promise.resolve(false);
+  private focusApp(app: string, launch?: AppLaunch): void {
+    const { perception } = this.deps;
+    const focus = (launch && perception.launchApp?.(app, launch)) || (perception.focusApp?.(app) ?? Promise.resolve(false));
     this.focusing = focus.then(
       (found) => {
         if (!found) console.info(`No ${app} window is open yet; Hodey will ask the learner to open it`);
@@ -264,7 +294,14 @@ export class HodeRuntime {
   }
 
   private say(text: string): void {
-    if (this.muted) return;
+    this.clearReadTimer();
+    if (this.muted) {
+      this.readTimer = setTimeout(() => {
+        this.readTimer = undefined;
+        this.dispatch({ type: "SPEECH_FINISHED" });
+      }, readingMs(text));
+      return;
+    }
     this.speech?.abort();
     const controller = new AbortController();
     this.speech = controller;
@@ -275,11 +312,16 @@ export class HodeRuntime {
       .then(
         () => {
           saying.endedAt = Date.now();
-          if (!controller.signal.aborted) this.speechFinishedListeners.forEach((listener) => listener());
+          if (controller.signal.aborted) return;
+          this.dispatch({ type: "SPEECH_FINISHED" });
+          this.speechFinishedListeners.forEach((listener) => listener());
         },
         (error) => {
           saying.endedAt = Date.now();
-          if (!controller.signal.aborted) console.error("Speech failed", error);
+          if (controller.signal.aborted) return;
+          console.error("Speech failed", error);
+          // The line is on the card even if it couldn't be heard.
+          this.dispatch({ type: "SPEECH_FINISHED" });
         },
       );
   }
@@ -299,7 +341,13 @@ export class HodeRuntime {
     return saying.endedAt === undefined || Date.now() - saying.endedAt < ECHO_WINDOW_MS ? saying.text : undefined;
   }
 
+  private clearReadTimer(): void {
+    if (this.readTimer !== undefined) clearTimeout(this.readTimer);
+    this.readTimer = undefined;
+  }
+
   private stopSpeech(): void {
+    this.clearReadTimer();
     this.speech?.abort();
     this.speech = undefined;
     this.deps.tts.stop().catch((error) => console.error("Stopping speech failed", error));

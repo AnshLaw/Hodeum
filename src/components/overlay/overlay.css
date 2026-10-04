@@ -6,6 +6,12 @@
   pointer-events: none;
 }
 
+/* Holds the guidance; clipped to the learner's window so nothing spills onto other apps. */
+.overlay-clip {
+  position: absolute;
+  inset: 0;
+}
+
 .guidance {
   position: absolute;
   inset: 0;

@@ -14,7 +14,7 @@ import { SurfaceMenu } from "./DockMenu";
 import { SkillsPanel, successExtra } from "./SkillsPanel";
 import { useNotchSkills, type SkillSource } from "./use-skills";
 import { GoalForm } from "./GoalForm";
-import { useAutoDismiss, useCardBottom, useControlHandler, useCoveringTarget, useHitRect, useNotchHover, useSettled } from "./hooks";
+import { ANSWER_LINGER_MS, useOutsidePress, useAutoDismiss, useCardBottom, useControlHandler, useCoveringTarget, useHitRect, useNotchHover, useSettled } from "./hooks";
 import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
@@ -28,6 +28,10 @@ import type { ActivityState, ActivityTracker } from "../../lib/activity";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
 import type { PhoneMirror } from "../../features/phone/phone-mirror";
 import { PhonePanel } from "./PhonePanel";
+import { openVoiceMenu, type VoiceMenuKind } from "./VoiceMenu";
+import type { VoiceSetup } from "../../features/voice/hardware";
+import type { CloudSetup } from "./CloudMenu";
+import type { NaturalVoice } from "../../providers/speech/native-voice";
 import { useWebActivity } from "./use-web-activity";
 import { webSearchView } from "./web-activity";
 import { usePhoneControls, usePhoneScreen, useTallNotch } from "./use-phone";
@@ -56,6 +60,10 @@ export interface NotchProps {
   phone?: PhoneMirror;
   /** The learner's skills, read from the same local store the runtime saves progress to. */
   skills?: SkillSource;
+  /** Microphones, speakers and speech models to pick from the notch; absent in the practice stage. */
+  voiceSetup?: VoiceSetup;
+  /** Local or cloud, and each cloud service's model, from the badge; absent in the practice stage. */
+  cloudSetup?: CloudSetup;
 }
 
 const TOAST_MS = 4000;
@@ -150,6 +158,8 @@ function Orb({ mood, label, activity }: { mood: HodeyMood; label: string; activi
 
 function topBody(props: SurfaceProps, view: NotchView, size: NotchSize, peek: boolean) {
   const { menuOpen, skills, onControl } = props;
+  const voiceMenu = openVoiceMenu(props);
+  if (voiceMenu) return voiceMenu;
   if (menuOpen) return <SurfaceMenu {...props} />;
   if (skills?.open) return <SkillsPanel skills={skills} />;
   if (view.mode === "goal") return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} defaultAgentStyle={props.defaultAgentStyle} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
@@ -184,7 +194,7 @@ function TopNotch(props: SurfaceProps & { surfaceRef: RefObject<HTMLElement | nu
           <Orb mood={props.mood} label={view.title} activity={props.activity} />
         ) : (
           <>
-            <NotchBar view={view} mood={props.mood} expanded={EXPANDED_SIZES.includes(size)} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={props.onControl} onGrip={props.onGrip} activity={props.activity} micStatus={props.micStatus} onToggleMic={props.onToggleMic} onOpenApp={props.onOpenApp} />
+            <NotchBar view={view} mood={props.mood} expanded={EXPANDED_SIZES.includes(size)} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={props.onControl} onGrip={props.onGrip} activity={props.activity} micStatus={props.micStatus} onToggleMic={props.onToggleMic} onOpenApp={props.onOpenApp} onVoiceMenu={props.voiceSetup ? props.onVoiceMenu : undefined} voiceMenu={props.voiceMenu} onCloudMenu={props.cloudSetup ? () => props.onVoiceMenu?.("cloud") : undefined} />
             {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
             {listening && <HeardLine heard={props.heard} />}
             <div aria-live="polite">
@@ -234,7 +244,14 @@ function useTtsState(source?: Pick<NativeVoiceStatus, "current" | "subscribe">) 
   return tts;
 }
 
-export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource }: NotchProps) {
+/** Hodey's natural voices as the voice engine last reported them. */
+function useNaturalVoices(source?: Pick<NativeVoiceStatus, "current" | "subscribe">): NaturalVoice[] {
+  const [voices, setVoices] = useState(source?.current()?.voices ?? []);
+  useEffect(() => source?.subscribe((status) => setVoices(status.voices)), [source]);
+  return voices;
+}
+
+export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource, voiceSetup, cloudSetup }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
   const notice = bootNotice ?? voiceNotice(useTtsState(voiceStatus));
@@ -244,11 +261,21 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   const view = web ? webSearchView(web) : inScript(notchView(state), show);
   const surfaceRef = useRef<HTMLElement>(null);
   const [muted, setMuted] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [dockMenuOpen, setMenuOpen] = useState(false);
+  const [voiceMenu, setVoiceMenu] = useState<VoiceMenuKind>();
+  // Either menu takes the notch the same way: expanded, with the bar's title saying it's settings.
+  const menuOpen = dockMenuOpen || voiceMenu !== undefined;
+  const naturalVoices = useNaturalVoices(voiceStatus);
   const dock = useDock(shell, holdsSpace(state), bus, web !== undefined);
   const layoutKey = dock.prefs.dock;
   const hovered = useNotchHover(surfaceRef, shell, layoutKey);
   const skills = useNotchSkills(skillSource, bus, state, packs, (next) => startFromApp(runtime, next.pack.title, packs, visionStatus?.state === "ready"));
+  // A click anywhere else closes whatever the notch has open, like any popover.
+  useOutsidePress(surfaceRef, shell, menuOpen || skills?.open === true, () => {
+    setMenuOpen(false);
+    setVoiceMenu(undefined);
+    skills?.setOpen(false);
+  });
   // Hodey stays out while the learner is in its menu or reading their skills.
   const revealed = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true || web !== undefined, state.phase);
   const handleControl = useControlHandler(runtime, bus);
@@ -257,9 +284,14 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   // The success card stays while the learner reads it (hovering), then makes way.
   useAutoDismiss(view.mode === "success" && !hovered, runtime);
   const [cardBottom, setCardBottom] = useState<number>();
+  // Each card is measured afresh: a tall earlier card must not make a short new one look like it covers the target.
+  useEffect(() => setCardBottom(undefined), [view.title, view.mode]);
   const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top", cardBottom);
   const activity = useActivity(tracker);
   const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
+  // A said answer folds back to what the learner was doing, unless they're reading it, in the menu, or replying.
+  const answerDone = view.mode === "answer" && state.answerSaid === true && !hovered && !menuOpen && micStatus !== "listening";
+  useAutoDismiss(answerDone, runtime, ANSWER_LINGER_MS);
   const { phoneOpen, onTogglePhone } = usePhoneControls(phone, state, () => setMenuOpen(false));
   useTallNotch(shell, dock.prefs.dock === "top" && phoneOpen);
 
@@ -282,9 +314,19 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
       setMuted(!muted);
     },
     onToggleMenu: () => {
-      setMenuOpen((open) => !open);
+      setMenuOpen(!dockMenuOpen);
+      setVoiceMenu(undefined);
       skills?.setOpen(false);
     },
+    voiceMenu,
+    onVoiceMenu: (kind) => {
+      setVoiceMenu((open) => (open === kind ? undefined : kind));
+      setMenuOpen(false);
+      skills?.setOpen(false);
+    },
+    voiceSetup,
+    cloudSetup,
+    naturalVoices,
     onGrip: () => {
       shell.beginNotchDrag().catch(reportError("Couldn't start dragging Hodey"));
     },
@@ -297,6 +339,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
       // The notch grows into the app, then gets out of its way: goal entry continues on the app's home page.
       openApp();
       setMenuOpen(false);
+      setVoiceMenu(undefined);
       if (state.phase === "goal_entry") runtime.dispatch({ type: "DISMISS" });
     },
     onSubmitGoal: (goal, mode, agentStyle) => runtime.dispatch(goalEvent(goal, packs, visionStatus?.state === "ready", mode, agentStyle)),

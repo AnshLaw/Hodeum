@@ -1,8 +1,10 @@
 import { COPY } from "../../lib/copy";
 import { spoken } from "../../lib/spoken";
 import { localizePack } from "../../task-packs/localize";
-import type { AssistanceLevel, HodeMode, ScreenObservation, TeachingAction, TeachingContext } from "../../lib/types";
+import { area, padRect } from "../../lib/coords";
+import type { AssistanceLevel, HodeMode, LearnerAnnotation, ScreenObservation, TeachingAction, TeachingContext } from "../../lib/types";
 import {
+  QUESTION_PADDING_PX,
   STUCK_MS,
   currentStep,
   initialState,
@@ -40,7 +42,9 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
   // Bring the pack's app forward first, so Hodey reads Excel rather than whatever had focus.
   const pack = localizePack(e.pack, s.language);
   const begun = beginStep({ ...s, goal, mode, agentStyle, pack, app: pack.app, notice: undefined }, 0);
-  return { ...begun, effects: [{ type: "focusApp", app: e.pack.app }, ...begun.effects] };
+  // Agent mode gets going on its own: it opens the app and the pack's practice file instead of asking the learner to.
+  const launch = mode === "agent" && e.pack.launch ? { launch: e.pack.launch } : {};
+  return { ...begun, effects: [{ type: "focusApp", app: e.pack.app, ...launch }, ...begun.effects] };
 }
 
 /** Same app, ignoring case. An unknown app name (unreadable process) never blocks guidance. */
@@ -54,7 +58,8 @@ export function waitForApp(s: HodeState, observation: ScreenObservation): Transi
   const words = spoken(s.language);
   const speech = s.pack?.surface === "phone" ? words.connectPhone : words.switchToApp(app);
   const action: TeachingAction = { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
-  if (s.waitingForApp === app) return { state: { ...s, observation }, effects: [] };
+  // Already said: a fresh look that still finds another app keeps the waiting card, quietly.
+  if (s.waitingForApp === app) return { state: { ...s, phase: "guiding", observation }, effects: [] };
   const effects: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "say", text: speech }];
   return { state: { ...s, phase: "guiding", observation, action, waitingForApp: app }, effects };
 }
@@ -143,7 +148,9 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   if (s.phase !== "reasoning" || e.requestId !== s.requestId) return noop(s);
   const withNotice = { ...s, notice: e.failures.length > 0 ? COPY.fallbackNotice : s.notice };
   const action = e.action;
-  if (action.kind === "answer") return showAnswer(withNotice, action);
+  // Whatever form a reply to a question takes, it's shown as the answer, so the question never lingers.
+  const asking = s.spokenQuestion !== undefined || s.question !== undefined;
+  if (action.kind === "answer" || (asking && action.kind !== "complete")) return showAnswer(withNotice, { ...action, kind: "answer" });
   if (action.kind === "complete" && s.open) return finishOpenHode(withNotice, action);
   const band = action.target ? confidenceBand(action.target.confidence) : "uncertain";
   // A correction is worth saying even when its target isn't on screen (the learner left the page).
@@ -158,7 +165,7 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
 }
 
 /** The action's overlay, with the text around its target so the label can keep clear of it. */
-function overlayOf(s: HodeState, action: TeachingAction) {
+export function overlayOf(s: HodeState, action: TeachingAction) {
   const nearby = action.target && s.observation ? neighboursOf(action.target.bounds, s.observation.elements) : [];
   return overlayFor(action, pinFor(s), nearby);
 }
@@ -200,12 +207,25 @@ function finishOpenHode(s: HodeState, action: TeachingAction): Transition {
   };
 }
 
-function showAnswer(s: HodeState, action: TeachingAction): Transition {
+/** Bigger than this many times the (padded) mark, an answer's target is the page or window around it, not what was asked about. */
+const MAX_ANSWER_TARGET_GROWTH = 4;
+const MARKED_AREA_ID = "marked-area";
+
+/** A Point & Ask answer points within what the learner marked; one aimed at the whole page rings the mark itself. */
+function fitToMark(action: TeachingAction, mark: LearnerAnnotation | undefined): TeachingAction {
+  const target = action.target;
+  if (!mark || !target) return action;
+  const allowed = area(padRect(mark.shape.bounds, QUESTION_PADDING_PX)) * MAX_ANSWER_TARGET_GROWTH;
+  if (area(target.bounds) <= allowed) return action;
+  return { ...action, target: { elementId: MARKED_AREA_ID, bounds: mark.shape.bounds, confidence: 1, label: "" } };
+}
+
+function showAnswer(s: HodeState, reply: TeachingAction): Transition {
+  const action = fitToMark(reply, s.question);
+  // Ringing the mark itself, the beam replaces the mark's dashed outline.
+  const primitives = action.target?.elementId === MARKED_AREA_ID ? overlayOf({ ...s, question: undefined, focusRegion: undefined }, action) : overlayOf(s, action);
   return {
-    state: { ...s, phase: "answering", action },
-    effects: [
-      { type: "renderOverlay", primitives: overlayOf(s, action) },
-      { type: "say", text: action.speech },
-    ],
+    state: { ...s, phase: "answering", action, answerSaid: false },
+    effects: [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }, { type: "say", text: action.speech }],
   };
 }

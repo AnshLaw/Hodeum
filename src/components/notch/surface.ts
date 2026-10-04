@@ -10,6 +10,10 @@ import type { NotchControl, NotchView, StepItem } from "./notch-view";
 import type { Bus } from "../../lib/bus";
 import type { PhoneMirror } from "../../features/phone/phone-mirror";
 import type { NotchSkills } from "./use-skills";
+import type { VoiceSetup } from "../../features/voice/hardware";
+import type { NaturalVoice } from "../../providers/speech/native-voice";
+import type { VoiceMenuKind } from "./VoiceMenu";
+import type { CloudSetup } from "./CloudMenu";
 
 /** Everything the top notch and the sidebar render from; both are views over the same state. */
 export interface SurfaceProps {
@@ -56,4 +60,12 @@ export interface SurfaceProps {
   onTogglePhone?: () => void;
   /** The learner's skill graph and this Hode's progress; absent where no skill store is readable. */
   skills?: NotchSkills;
+  /** The mic's or speaker's menu, when open; the voice menus need `voiceSetup` (absent in the practice stage). */
+  voiceMenu?: VoiceMenuKind;
+  onVoiceMenu?: (kind: VoiceMenuKind) => void;
+  voiceSetup?: VoiceSetup;
+  /** Cloud services, models and keys for the badge's menu; absent in the practice stage. */
+  cloudSetup?: CloudSetup;
+  /** Hodey's natural voices, for the speaker's menu. */
+  naturalVoices: NaturalVoice[];
 }

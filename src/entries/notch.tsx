@@ -2,8 +2,9 @@
 import "../components/shared/base.css";
 import type { HindiScript } from "../data/settings";
 import { asrLanguage } from "../lib/language";
+import { TauriVoiceHardware, applyVoiceHardware, type VoiceSetup } from "../features/voice/hardware";
 import { invoke } from "@tauri-apps/api/core";
-import { ActivityTracker, mirrorRemoteActivity, withScreenActivity } from "../lib/activity";
+import { ActivityTracker, mirrorRemoteActivity, screenWatch, withScreenActivity } from "../lib/activity";
 import { connectAppearance } from "../lib/appearance";
 import { hodeyKeySetting } from "../lib/keys";
 import { COPY } from "../lib/copy";
@@ -13,6 +14,8 @@ import { TauriShell } from "../lib/tauri-shell";
 import { Notch } from "../components/notch/Notch";
 import { connectAccount } from "../features/account/connect";
 import { CloudContext } from "../components/notch/cloud-context";
+import type { CloudSetup } from "../components/notch/CloudMenu";
+import { TauriCloudCatalog } from "../providers/cloud/catalog";
 import { connectCloud } from "../providers/cloud/connect";
 import { CloudFirstTTS, ElevenLabsTTSProvider } from "../providers/cloud/elevenlabs-tts";
 import { lessonCorpus, shareableText } from "../providers/cloud/shareable";
@@ -87,6 +90,8 @@ function createPerception(activity: ActivityTracker) {
 async function boot(): Promise<void> {
   const bus = new TauriBus();
   const { learning, settings, memory: localMemory, kv, notice } = await openStores();
+  // No Hode runs yet: any left open by a quit or crash is over, so it stops showing "in progress" (here and on the web).
+  await learning.closeOpenHodes().catch((error: unknown) => console.error("Couldn't close Hodes left open last time", error));
   const activity = new ActivityTracker();
   mirrorRemoteActivity(bus, activity);
   connectAppearance(settings, bus, document.documentElement);
@@ -113,12 +118,17 @@ async function boot(): Promise<void> {
   const memory = new RoutedMemory(localMemory, new BackboardMemoryProvider({ invoke, policy: cloud.policy, kv }), () => cloud.policy.reportFailure("backboard"));
   const runtime = new HodeRuntime({ perception, reasoners: [gemini, local], skills: learning, bus, tts, memory });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
+  const watchDot = screenWatch(activity);
   runtime.subscribe(() => {
     const state = runtime.getState();
     surfaces.setSurface(state.pack?.surface ?? "windows");
-    surfaces.setWatching(WATCHING_PHASES.includes(state.phase));
+    const watching = WATCHING_PHASES.includes(state.phase);
+    surfaces.setWatching(watching);
+    watchDot(watching);
     cloud.appChanged();
   });
+  const cloudSetup: CloudSetup = { catalog: new TauriCloudCatalog(invoke), keys: () => cloud.keys.current(), settings, changed: () => bus.emit("settings:changed", {}) };
+  const voiceSetup: VoiceSetup = { hardware: new TauriVoiceHardware(invoke), settings, changed: () => bus.emit("settings:changed", {}) };
   connectHodeBridge({
     runtime,
     bus,
@@ -134,6 +144,7 @@ async function boot(): Promise<void> {
       wakeWords = settings.wakeWords;
       script = settings.hindiScript;
       invoke<void>("set_speech_language", { language: asrLanguage(settings.language) }).catch((error) => console.error("Couldn't set the speech language", error));
+      applyVoiceHardware(invoke, settings).catch((error) => console.error("Couldn't switch Hodey's microphone, speaker or speech model", error));
       voice.speech.setHandsFree(settings.handsFree, settings.wakeWords).catch((error) => console.error("Couldn't switch hands-free listening", error));
     },
     applyCloud: (settings) => {
@@ -157,13 +168,14 @@ async function boot(): Promise<void> {
     conversation: () => conversation,
     wakeWords: () => wakeWords,
     heard: (text) => runtime.noticeLanguage(text),
+    onHodeEvent: (listener) => runtime.onTransition((event) => listener(event)),
     packs: TASK_PACKS,
     openAllowed: () => vision.current().state === "ready",
   });
   connectAccount({ bus, settings, activity, invoke, listen: (event, handler) => subscribeTauri(event, handler) }).catch((error) => console.error("Accounts didn't start; Hodeum stays local", error));
   mount(
     <CloudContext.Provider value={cloud.policy}>
-      <Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} voiceStatus={voice.status} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} phone={mirror} skills={learning} />
+      <Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} voiceStatus={voice.status} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} phone={mirror} skills={learning} voiceSetup={voiceSetup} cloudSetup={cloudSetup} />
     </CloudContext.Provider>,
   );
 }

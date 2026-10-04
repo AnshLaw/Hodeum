@@ -6,7 +6,8 @@ import { CheckIcon, CrosshairIcon, ExpandIcon, IconButton, MoreIcon, MutedIcon, 
 import { SurfaceMenu } from "./DockMenu";
 import { SkillsPanel, successExtra } from "./SkillsPanel";
 import { GoalForm } from "./GoalForm";
-import { Grip, LocalBadge, MicButton, NotchContent, PrivacyDots, StepList } from "./NotchParts";
+import { Grip, LocalBadge, MenuCaret, MicButton, NotchContent, PrivacyDots, StepList } from "./NotchParts";
+import { openVoiceMenu } from "./VoiceMenu";
 import type { SurfaceProps } from "./surface";
 import { PhonePanel } from "./PhonePanel";
 import { sidebarPanelOpen } from "./sidebar-view";
@@ -45,6 +46,8 @@ function SidebarContent(props: SurfaceProps & { phoneScreen?: Size }) {
 
 function SidebarBody(props: SurfaceProps) {
   const { view, menuOpen, skills, onControl } = props;
+  const voiceMenu = openVoiceMenu(props);
+  if (voiceMenu) return voiceMenu;
   if (menuOpen) return <SurfaceMenu {...props} />;
   if (skills?.open) return <SkillsPanel skills={skills} />;
   if (view.mode === "goal") {
@@ -101,10 +104,14 @@ export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceR
               </Grip>
               <span className="notch__spacer" />
               <MicButton status={props.micStatus} onToggle={props.onToggleMic} />
+              {props.voiceSetup && <MenuCaret label={COPY.micMenu} open={props.voiceMenu === "mic"} onClick={() => props.onVoiceMenu?.("mic")} />}
               {view.mode !== "idle" && (
-                <IconButton label={muted ? COPY.unmute : COPY.mute} onClick={props.onToggleMute}>
-                  {muted ? <MutedIcon /> : <VolumeIcon />}
-                </IconButton>
+                <>
+                  <IconButton label={muted ? COPY.unmute : COPY.mute} onClick={props.onToggleMute}>
+                    {muted ? <MutedIcon /> : <VolumeIcon />}
+                  </IconButton>
+                  {props.voiceSetup && <MenuCaret label={COPY.speakerMenu} open={props.voiceMenu === "speaker"} onClick={() => props.onVoiceMenu?.("speaker")} />}
+                </>
               )}
               <IconButton label={COPY.openApp} onClick={props.onOpenApp}>
                 <ExpandIcon />
@@ -113,7 +120,7 @@ export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceR
                 <MoreIcon />
               </IconButton>
               <PrivacyDots activity={props.activity} />
-              <LocalBadge />
+              <LocalBadge onOpen={props.cloudSetup ? () => props.onVoiceMenu?.("cloud") : undefined} open={props.voiceMenu === "cloud"} />
             </header>
             {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
             {props.micStatus === "listening" && (

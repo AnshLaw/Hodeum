@@ -27,6 +27,8 @@ export const MAX_WAKE_WORDS = 8;
 export const MAX_WAKE_WORD = 30;
 /** Longest voice id kept; Windows voice URIs are well under this. */
 const MAX_VOICE_NAME = 200;
+/** Windows audio endpoint ids are ~55 characters; room to spare. */
+const MAX_DEVICE_ID = 300;
 
 /** Opt-in cloud services; local is always on and always the fallback. */
 export const CLOUD_PROVIDERS = ["gemini", "elevenlabs", "backboard"] as const;
@@ -111,6 +113,11 @@ export const settingsSchema = z.object({
     hindiVoice: z.string().max(MAX_VOICE_NAME).default(DEFAULT_HINDI_VOICE),
     /** Extra names for Hodey ("Hey Hodes"), recognised like "Hey Hodey". */
     wakeWords: z.array(z.string().trim().min(1).max(MAX_WAKE_WORD)).max(MAX_WAKE_WORDS).default([]),
+    /** The microphone and speaker Hodey uses (Windows endpoint ids); empty means the system default. */
+    inputDevice: z.string().max(MAX_DEVICE_ID).catch("").default(""),
+    outputDevice: z.string().max(MAX_DEVICE_ID).catch("").default(""),
+    /** The local speech-to-text model ("nemotron", "whisper"); empty means the engine's own pick. */
+    asrModel: z.string().max(MAX_VOICE_NAME).catch("").default(""),
   }),
   /** How new Hodes run by default; each Hode can still pick its own. */
   mode: z.enum(HODE_MODES).catch("teach").default("teach"),
@@ -128,10 +135,11 @@ export const settingsSchema = z.object({
 
 export type Settings = z.infer<typeof settingsSchema>;
 export type Appearance = Settings["appearance"];
+export type VoiceSettings = Settings["voice"];
 export type CloudSettings = Settings["cloud"];
 
 export const DEFAULT_SETTINGS: Settings = {
-  voice: { enabled: true, rate: 1.05, name: "", conversation: true, handsFree: false, language: "auto", hindiScript: "devanagari", hindiVoice: DEFAULT_HINDI_VOICE, wakeWords: [] },
+  voice: { enabled: true, rate: 1.05, name: "", conversation: true, handsFree: false, language: "auto", hindiScript: "devanagari", hindiVoice: DEFAULT_HINDI_VOICE, wakeWords: [], inputDevice: "", outputDevice: "", asrModel: "" },
   mode: "teach",
   agentStyle: "guide",
   stuckSeconds: 12,

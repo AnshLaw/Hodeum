@@ -10,7 +10,7 @@ export const visionReplySchema = z.object({
   speech: z.string().min(1).max(MAX_SPEECH_CHARS),
   /** Index into the numbered control list, or -1 when no listed control fits. */
   target_index: z.number().int().min(-1),
-  /** Only when target_index is -1: [x1, y1, x2, y2] in 0–1000 image space. */
+  /** [x1, y1, x2, y2] in 0–1000 image space: around the picked control, or where to act when target_index is -1. */
   bbox: z.array(z.number().min(0).max(BOX_SCALE)).length(4).optional(),
   confidence: z.number().min(0).max(1),
 });

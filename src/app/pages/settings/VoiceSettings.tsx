@@ -82,7 +82,7 @@ export function VoiceSettings({ voice, natural, onChange }: { voice: Settings["v
       <Row label="Hands-free" detail="Say “Hey Hodey” any time, no key needed. The mic stays on (orange dot) and speech is checked on this PC for a wake word; anything else is dropped at once. Nothing is recorded or sent. Uses some CPU.">
         <input type="checkbox" className="hswitch" checked={voice.handsFree} onChange={(e) => onChange({ ...voice, handsFree: e.target.checked })} aria-label="Hands-free" />
       </Row>
-      <Row label="Language" detail="Auto answers in whatever you speak: English, Hindi, or Hinglish. Or fix one. There's no Indian-English option in the speech model; if Auto or English US mishears you, try English UK.">
+      <Row label="Language" detail="Auto listens in English and answers in whatever you type or say: English, Hindi, or Hinglish. To speak Hindi or Hinglish, pick it here so Hodey listens for it. There's no Indian-English option in the speech model; if Auto or English US mishears you, try English UK.">
         <Segmented label="Language" options={LANGUAGE_OPTIONS} value={voice.language} onSelect={(language) => onChange({ ...voice, language })} />
       </Row>
       {voice.language !== "en" && voice.language !== "en-GB" && (

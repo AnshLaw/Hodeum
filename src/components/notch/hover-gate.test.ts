@@ -69,6 +69,13 @@ describe("createHoverGate", () => {
     expect(changes).toEqual([true, false]);
   });
 
+  it("starts from the hover it's handed, so leaving right after a re-dock still closes", () => {
+    const changes: boolean[] = [];
+    const gate = createHoverGate((hovered) => changes.push(hovered), 0, true);
+    gate.set(false);
+    expect(changes).toEqual([false]);
+  });
+
   it("keeps a live hover when disposed (re-docking under the cursor)", () => {
     const changes: boolean[] = [];
     const gate = createHoverGate((hovered) => changes.push(hovered), 400);

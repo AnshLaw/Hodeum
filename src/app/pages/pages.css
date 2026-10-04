@@ -109,7 +109,28 @@
 
 /* Narrow screens (the web dashboard on a phone): the goal box gets the full width. */
 @media (max-width: 520px) {
-  .hstart__row {
+  /* Signed out: the invitation to sync, beside the actions it leads to. */
+.hsignin {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border-color: color-mix(in srgb, var(--hd-accent) 35%, var(--happ-line));
+}
+
+.hsignin__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.hsignin__text h2 {
+  margin: 0 0 4px;
+}
+
+.hsignin__text p {
+  margin: 0;
+}
+
+.hstart__row {
     flex-direction: column;
   }
 }

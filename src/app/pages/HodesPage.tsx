@@ -13,7 +13,7 @@ function HodeDetail({ services, id }: { services: AppServices; id: string }) {
   if (detail.state === "error") return <p className="hmuted">Couldn't load this Hode: {detail.message}</p>;
   const hode = detail.value;
   if (!hode) return <p className="hmuted">This Hode no longer exists.</p>;
-  const outcome = outcomeOf(hode);
+  const outcome = outcomeOf(hode, new Date());
   const now = new Date();
   return (
     <article className="hdetail">
@@ -70,7 +70,7 @@ export function HodesPage({ services }: { services: AppServices }) {
         <div className="hsplit">
           <ul className="hcard hlist hlist--select" aria-label="Hodes">
             {hodes.value.map((hode) => {
-              const outcome = outcomeOf(hode);
+              const outcome = outcomeOf(hode, new Date());
               return (
                 <li key={hode.id}>
                   <button type="button" className="hlist__row hlist__button" aria-current={hode.id === current ? "true" : undefined} onClick={() => setSelected(hode.id)}>

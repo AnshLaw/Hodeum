@@ -60,6 +60,12 @@ export const CheckIcon = () => (
   </svg>
 );
 
+export const ChevronDownIcon = () => (
+  <svg {...BASE} width={10} height={10}>
+    <path d="M4 6l4 4 4-4" />
+  </svg>
+);
+
 export const MoreIcon = () => (
   <svg {...BASE}>
     <circle cx="3.5" cy="8" r="1.1" fill="currentColor" />

@@ -8,6 +8,11 @@ const WAKE = /^(?:(?:hey|hi|hello|ok|okay)[ ,]+)?(?:hode?y|hod[iy]e?|hoadie|howd
 const POLITE = /\b(?:please|thanks|thank you|can you|could you)\b/gi;
 /** Utterances shorter than this (after cleanup) are noise: "um", "uh". */
 const MIN_CHARS = 3;
+/** A question or goal has at least this many words; a lone word that isn't a control is noise (keyboard clicks). */
+const MIN_WORDS = 2;
+/** Thanks and okays: they close an answer, and with nothing running they need no reply at all. */
+const ACK_WORDS = new Set(["ok", "okay", "great", "perfect", "nice", "cool", "awesome", "alright", "understood", "thanks", "thank", "got"]);
+const ACK_FILLER = new Set(["you", "it", "so", "much", "a", "lot", "all", "right", "that", "very"]);
 const QUESTION_START = /^(?:what|where|which|why|who|whose|when|is|are|does|did|was|were|can i see|what's|where's)\b/i;
 
 /** Spoken controls during a Hode. Matched against the whole cleaned utterance, so questions aren't misread. */
@@ -107,6 +112,17 @@ function asCommand(text: string): HodeEvent | undefined {
 
 const question = (text: string): HodeEvent => ({ type: "VOICE_QUESTION", question: text });
 
+const wordsIn = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}' ]/gu, " ").split(/\s+/).filter(Boolean);
+
+/** "Thanks", "okay great", "perfect, thank you": acknowledging Hodey, not asking anything. */
+export function isAcknowledgement(text: string): boolean {
+  const words = wordsIn(text);
+  return words.some((w) => ACK_WORDS.has(w)) && words.every((w) => ACK_WORDS.has(w) || ACK_FILLER.has(w));
+}
+
+/** Too little to be a question or a goal. */
+const tooShort = (text: string) => wordsIn(text).length < MIN_WORDS;
+
 /**
  * What the learner said, as Hode events. Idle: a goal starts a Hode, a what/where question asks about
  * the screen. Goal entry: it's the goal. During a Hode: a control word, or else a question.
@@ -116,10 +132,14 @@ export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], ope
   if (text.length < MIN_CHARS) return [];
   if (s.phase === "goal_entry") return [goalEvent(text, packs, openAllowed)];
   if (s.phase === "annotating") return [];
+  const acknowledged = isAcknowledgement(text);
   if (s.phase !== "idle") {
+    if (acknowledged && s.phase === "answering") return [{ type: "DISMISS" }];
     const command = asCommand(text);
-    return [command ?? question(text)];
+    if (command) return [command];
+    return acknowledged || tooShort(text) ? [] : [question(text)];
   }
+  if (acknowledged || tooShort(text)) return [];
   if (QUESTION_START.test(text)) return [question(text)];
   const goal = goalEvent(text, packs, openAllowed);
   const startable = goal.type === "GOAL_SUBMITTED" && (goal.pack !== undefined || openAllowed);

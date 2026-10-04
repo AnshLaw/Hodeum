@@ -53,6 +53,7 @@ function setup(state: HodeState, saying?: string, conversation = true) {
   const dispatched: HodeEvent[] = [];
   const interrupt = vi.fn();
   const doneSpeaking = new Set<() => void>();
+  const hodeEvents = new Set<(event: HodeEvent) => void>();
   const off = connectVoice({
     speech,
     getState: () => state,
@@ -67,9 +68,14 @@ function setup(state: HodeState, saying?: string, conversation = true) {
     },
     conversation: () => conversation,
     wakeWords: () => ["Hey Hodes"],
+    onHodeEvent: (listener) => {
+      hodeEvents.add(listener);
+      return () => hodeEvents.delete(listener);
+    },
   });
   const hodeyFinishes = () => doneSpeaking.forEach((l) => l());
-  return { speech, dispatched, interrupt, off, hodeyFinishes };
+  const hode = (event: HodeEvent) => hodeEvents.forEach((l) => l(event));
+  return { speech, dispatched, interrupt, off, hodeyFinishes, hode };
 }
 
 describe("connectVoice", () => {
@@ -195,6 +201,35 @@ describe("conversation", () => {
     speech.say("thanks, that's all");
     expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }]);
     expect(speech.stop).toHaveBeenCalledOnce();
+  });
+
+  it("ends when the learner closes the answer or the Hode", () => {
+    const { speech, hode } = setup(guiding);
+    tap(speech, "what is this");
+    speech.setStatus("listening");
+    hode({ type: "DISMISS" });
+    expect(speech.stop).toHaveBeenCalledOnce();
+  });
+
+  it("ends on a bare thanks", () => {
+    const { speech, dispatched } = setup(guiding);
+    tap(speech, "give me a hint");
+    speech.setStatus("listening");
+    speech.say("thank you");
+    expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }]);
+    expect(speech.stop).toHaveBeenCalledOnce();
+  });
+
+  it("stops waiting once a noise is heard and nothing comes of it", () => {
+    vi.useFakeTimers();
+    const { speech } = setup(guiding);
+    tap(speech, "give me a hint");
+    speech.setStatus("listening");
+    speech.speechStart.forEach((h) => h());
+    speech.say("yeah");
+    vi.advanceTimersByTime(CONVERSATION_PATIENCE_MS + 1);
+    expect(speech.stop).toHaveBeenCalledOnce();
+    vi.useRealTimers();
   });
 
   it("doesn't wait out a quiet turn while Hodey is still working out the answer", () => {

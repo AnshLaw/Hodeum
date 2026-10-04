@@ -4,7 +4,7 @@ import type { WindowOrigin } from "../components/notch/footprint";
 import type { Dock } from "../features/dock/dock";
 import type { NativeShell } from "./shell";
 import { subscribeTauri } from "./tauri-bus";
-import type { MonitorInfo, Rect } from "./types";
+import type { MonitorInfo, Rect, WindowRef } from "./types";
 
 export class TauriShell implements NativeShell {
   setNotchHitRect(rect: Rect): Promise<void> {
@@ -31,6 +31,18 @@ export class TauriShell implements NativeShell {
 
   onOverlayMoved(handler: () => void): () => void {
     return subscribeTauri<null>("overlay:moved", () => handler());
+  }
+
+  learnerWindow(): Promise<WindowRef | null> {
+    return invoke<WindowRef | null>("learner_window");
+  }
+
+  onLearnerWindow(handler: (window: WindowRef | null) => void): () => void {
+    return subscribeTauri<WindowRef | null>("perception:learner-window", handler);
+  }
+
+  onNotchOutsidePress(handler: () => void): () => void {
+    return subscribeTauri<null>("notch:outside-press", () => handler());
   }
 
   onNotchHover(handler: (inside: boolean) => void): () => void {

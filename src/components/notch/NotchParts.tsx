@@ -4,7 +4,7 @@ import type { SpeechInputStatus } from "../../providers/speech/speech-input";
 import { COPY } from "../../lib/copy";
 import { HodeyFace } from "../hodey/HodeyFace";
 import type { HodeyMood } from "../hodey/mood";
-import { CheckIcon, CloseIcon, CrosshairIcon, ExpandIcon, EyeIcon, IconButton, ListIcon, MicIcon, MoreIcon, MutedIcon, PauseIcon, RepeatIcon, VolumeIcon } from "../shared/icons";
+import { CheckIcon, ChevronDownIcon, CloseIcon, CrosshairIcon, ExpandIcon, EyeIcon, IconButton, ListIcon, MicIcon, MoreIcon, MutedIcon, PauseIcon, RepeatIcon, VolumeIcon } from "../shared/icons";
 import { providerBadge, type NotchControl, type NotchView, type StepItem } from "./notch-view";
 import { useEnhanced } from "./cloud-context";
 
@@ -130,13 +130,23 @@ export function StepDots({ current, total }: { current: number; total: number })
   );
 }
 
-/** "● Local" or "☁ Enhanced": whether any cloud provider may receive learning context right now. */
-export function LocalBadge() {
+/** "● Local" or "☁ Cloud": whether any cloud provider may receive learning context right now. */
+/** ● Local or ☁ Cloud; with `onOpen`, a button that opens the switch between them. */
+export function LocalBadge({ onOpen, open }: { onOpen?: () => void; open?: boolean } = {}) {
   const badge = providerBadge(useEnhanced());
+  const className = `local-badge local-badge--${badge.variant}`;
+  if (!onOpen) {
+    return (
+      <span className={className} title={badge.title} role="status">
+        {badge.label}
+      </span>
+    );
+  }
   return (
-    <span className={`local-badge local-badge--${badge.variant}`} title={badge.title} role="status">
+    <button type="button" className={`${className} local-badge--button`} title={`${badge.title}. ${COPY.cloudMenu}`} aria-expanded={open} onClick={onOpen}>
       {badge.label}
-    </span>
+      <ChevronDownIcon />
+    </button>
   );
 }
 
@@ -225,6 +235,20 @@ export interface BarProps {
   micStatus: SpeechInputStatus;
   onToggleMic: () => void;
   onOpenApp: () => void;
+  /** Opens the mic's or speaker's menu; absent where there are no devices to pick (the practice stage). */
+  onVoiceMenu?: (kind: "mic" | "speaker") => void;
+  voiceMenu?: "mic" | "speaker" | "cloud";
+  /** Opens the Local/Cloud menu from the badge; absent in the practice stage. */
+  onCloudMenu?: () => void;
+}
+
+/** The small arrow beside the mic or speaker button that opens its menu. */
+export function MenuCaret({ label, open, onClick }: { label: string; open: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="icon-btn menu-caret" aria-label={label} title={label} aria-expanded={open} onClick={onClick}>
+      <ChevronDownIcon />
+    </button>
+  );
 }
 
 export function NotchBar(props: BarProps) {
@@ -242,11 +266,15 @@ export function NotchBar(props: BarProps) {
       {view.mode === "idle" && !menuOpen && <IdleActions onControl={onControl} />}
       {showInline && <ControlButtons controls={view.controls} onControl={onControl} />}
       <MicButton status={props.micStatus} onToggle={props.onToggleMic} />
+      {props.onVoiceMenu && <MenuCaret label={COPY.micMenu} open={props.voiceMenu === "mic"} onClick={() => props.onVoiceMenu?.("mic")} />}
       {/* Nothing is spoken while the learner marks a spot, and the bar needs the room for its title. */}
       {view.mode !== "idle" && view.mode !== "annotate" && (
-        <IconButton label={muted ? COPY.unmute : COPY.mute} onClick={onToggleMute}>
-          {muted ? <MutedIcon /> : <VolumeIcon />}
-        </IconButton>
+        <>
+          <IconButton label={muted ? COPY.unmute : COPY.mute} onClick={onToggleMute}>
+            {muted ? <MutedIcon /> : <VolumeIcon />}
+          </IconButton>
+          {props.onVoiceMenu && <MenuCaret label={COPY.speakerMenu} open={props.voiceMenu === "speaker"} onClick={() => props.onVoiceMenu?.("speaker")} />}
+        </>
       )}
       {(expanded || menuOpen || view.mode === "idle") && (
         <IconButton label={COPY.openApp} onClick={props.onOpenApp}>
@@ -257,7 +285,7 @@ export function NotchBar(props: BarProps) {
         <MoreIcon />
       </IconButton>
       <PrivacyDots activity={props.activity} />
-      <LocalBadge />
+      <LocalBadge onOpen={props.onCloudMenu} open={props.voiceMenu === "cloud"} />
     </header>
   );
 }

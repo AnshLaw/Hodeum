@@ -4,6 +4,7 @@ import {
   type AssistanceLevel,
   type HodeMode,
   type OverlayPrimitive,
+  type PinPrimitive,
   type Rect,
   type SkillRecord,
   type StepOutcome,
@@ -112,8 +113,8 @@ function overlayStyle(action: TeachingAction): OverlayStyle {
 }
 
 /** `nearby`: bounds of text around the target, so its label can keep clear of them. */
-export function overlayFor(action: TeachingAction, pin?: Rect, nearby: Rect[] = []): OverlayPrimitive[] {
-  const primitives: OverlayPrimitive[] = pin ? [{ kind: "pin", bounds: pin }] : [];
+export function overlayFor(action: TeachingAction, pin?: PinPrimitive, nearby: Rect[] = []): OverlayPrimitive[] {
+  const primitives: OverlayPrimitive[] = pin ? [pin] : [];
   const target = action.target;
   const style = overlayStyle(action);
   if (!target || style === "none") return primitives;

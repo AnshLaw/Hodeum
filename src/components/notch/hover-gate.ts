@@ -17,9 +17,12 @@ export interface HoverGate {
   dispose(): void;
 }
 
-/** Hover with hysteresis: entering counts at once, leaving only once the cursor has stayed out for `graceMs`. */
-export function createHoverGate(onChange: (hovered: boolean) => void, graceMs: number): HoverGate {
-  let hovered = false;
+/**
+ * Hover with hysteresis: entering counts at once, leaving only once the cursor has stayed out for `graceMs`.
+ * `initial`: the hover the previous gate left behind (re-docking under the cursor), so its leave still counts.
+ */
+export function createHoverGate(onChange: (hovered: boolean) => void, graceMs: number, initial = false): HoverGate {
+  let hovered = initial;
   let pending: ReturnType<typeof setTimeout> | undefined;
   const cancel = () => {
     clearTimeout(pending);

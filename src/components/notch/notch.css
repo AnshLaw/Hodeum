@@ -358,6 +358,29 @@
   background: var(--hd-ok);
 }
 
+/* The badge as the Local/Cloud switch: a quiet pill that lights on hover. */
+.local-badge--button {
+  height: 24px;
+  padding: 0 6px 0 8px;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 11px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.local-badge--button:hover,
+.local-badge--button[aria-expanded="true"] {
+  color: var(--hd-text);
+  background: rgb(255 255 255 / 0.1);
+}
+
+.local-badge--button:focus-visible {
+  outline: 2px solid var(--hd-accent);
+  outline-offset: 1px;
+}
+
 .local-badge--enhanced::before {
   content: "☁";
   width: auto;
@@ -511,6 +534,80 @@
 .dock-menu {
   display: grid;
   gap: 12px;
+}
+
+/* ---- Mic and speaker menus ---- */
+
+/* The arrow beside the mic and speaker buttons: narrower than an icon button, it reads as part of it. */
+.notch__bar .menu-caret {
+  width: 16px;
+  margin-left: -4px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--hd-text-2);
+}
+
+.notch__bar .menu-caret[aria-expanded="true"] {
+  color: var(--hd-text);
+  background: rgb(255 255 255 / 0.12);
+}
+
+/* Device lists can be long: the menu scrolls rather than growing past the screen. */
+.voice-menu {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.choice-list {
+  display: grid;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 0.06);
+}
+
+.choice-list__option {
+  display: grid;
+  gap: 1px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 7px;
+  font: inherit;
+  text-align: left;
+  color: var(--hd-text-2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.choice-list__option[aria-checked="true"] {
+  color: var(--hd-text);
+  background: rgb(255 255 255 / 0.14);
+}
+
+.choice-list__option:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.choice-list__option:focus-visible {
+  outline: 2px solid var(--hd-accent);
+  outline-offset: 1px;
+}
+
+.choice-list__label {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.choice-list__detail {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--hd-text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dock-menu__group {

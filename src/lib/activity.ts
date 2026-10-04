@@ -64,18 +64,30 @@ export function activeChannels(state: ActivityState): ActivityChannel[] {
   return CHANNELS.filter((channel) => state[channel]);
 }
 
-/** Every screen read lights the green dot. */
+/**
+ * Every screen read Hodey asks for lights the green dot. Reads after the learner's own actions happen only
+ * while Hodey watches, which `screenWatch` shows as one steady dot rather than a blink per keystroke.
+ */
 export function withScreenActivity(perception: PerceptionAdapter, activity: ActivityTracker): PerceptionAdapter {
   return {
     observe: (region?: Rect): Promise<ScreenObservation> => activity.track("screen", () => perception.observe(region)),
     focusApp: perception.focusApp?.bind(perception),
+    launchApp: perception.launchApp?.bind(perception),
+    onAppSwitched: perception.onAppSwitched?.bind(perception),
     perform: perception.perform?.bind(perception),
-    onLearnerAction: (handler) =>
-      perception.onLearnerAction((observation) => {
-        // The adapter already re-read the screen to produce this observation: show it.
-        activity.begin("screen")();
-        handler(observation);
-      }),
+    onLearnerAction: (handler) => perception.onLearnerAction(handler),
+  };
+}
+
+/** Holds the green dot on while Hodey watches the learner's screen; call with false when it stops. */
+export function screenWatch(activity: ActivityTracker): (watching: boolean) => void {
+  let end: (() => void) | undefined;
+  return (watching) => {
+    if (watching && !end) end = activity.begin("screen");
+    if (!watching && end) {
+      end();
+      end = undefined;
+    }
   };
 }
 

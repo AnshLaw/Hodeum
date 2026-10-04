@@ -52,4 +52,14 @@ describe("detectLanguage", () => {
     expect(detectLanguage("ये button क्या करता है")).toBe("hinglish");
     expect(detectLanguage("mujhe pivot table banana sikhao")).toBe("hinglish");
   });
+
+  it("stays in English for English words the speech model spelled in Devanagari", () => {
+    expect(detectLanguage("शो मी फॉलिप स्लाइडर")).toBe("en");
+    expect(detectLanguage("वॉल्यूम स्लाइडर कहाँ")).toBe("en");
+  });
+
+  it("needs a sentence, not a word or two, to switch language", () => {
+    expect(detectLanguage("क्या है")).toBeUndefined();
+    expect(detectLanguage("kya hai")).toBeUndefined();
+  });
 });

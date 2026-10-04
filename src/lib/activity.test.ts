@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOME_SELECTED } from "../features/hode/test-fixtures";
 import type { PerceptionAdapter } from "../providers/interfaces";
-import { ACTIVITY_LINGER_MS, ActivityTracker, activeChannels, mirrorRemoteActivity, trackRemote, withScreenActivity } from "./activity";
+import { ACTIVITY_LINGER_MS, ActivityTracker, activeChannels, mirrorRemoteActivity, screenWatch, trackRemote, withScreenActivity } from "./activity";
 import { LocalBus } from "./bus";
 
 beforeEach(() => vi.useFakeTimers());
@@ -65,6 +65,30 @@ describe("withScreenActivity", () => {
     release();
     await pending;
     vi.advanceTimersByTime(ACTIVITY_LINGER_MS);
+    expect(tracker.current().screen).toBe(false);
+  });
+});
+
+describe("screenWatch", () => {
+  it("holds the green dot steady while Hodey watches, instead of blinking at every keystroke", () => {
+    vi.useFakeTimers();
+    const tracker = new ActivityTracker();
+    const watch = screenWatch(tracker);
+    watch(true);
+    watch(true);
+    expect(tracker.current().screen).toBe(true);
+    watch(false);
+    vi.advanceTimersByTime(ACTIVITY_LINGER_MS);
+    expect(tracker.current().screen).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("no longer flashes for each learner action on its own", () => {
+    const tracker = new ActivityTracker();
+    let act: (o: typeof HOME_SELECTED) => void = () => undefined;
+    const perception: PerceptionAdapter = { observe: async () => HOME_SELECTED, onLearnerAction: (h) => ((act = h), () => undefined) };
+    withScreenActivity(perception, tracker).onLearnerAction(() => undefined);
+    act(HOME_SELECTED);
     expect(tracker.current().screen).toBe(false);
   });
 });

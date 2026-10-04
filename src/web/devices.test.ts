@@ -11,12 +11,16 @@ describe("devices", () => {
     expect(isOnline(device("a", 600), NOW)).toBe(false);
   });
 
-  it("keeps the learner's chosen PC, else picks the most recently seen", () => {
+  it("keeps the learner's chosen PC while it's online, else picks the most recently seen", () => {
     const list = [device("old", 900), device("fresh", 10), device("mid", 60)];
-    expect(pickDevice(list, "mid")?.id).toBe("mid");
-    expect(pickDevice(list, "gone")?.id).toBe("fresh");
-    expect(pickDevice(list, undefined)?.id).toBe("fresh");
-    expect(pickDevice([], undefined)).toBeUndefined();
+    expect(pickDevice(list, "mid", NOW)?.id).toBe("mid");
+    expect(pickDevice(list, "gone", NOW)?.id).toBe("fresh");
+    expect(pickDevice(list, undefined, NOW)?.id).toBe("fresh");
+    expect(pickDevice([], undefined, NOW)).toBeUndefined();
+  });
+
+  it("doesn't stick to a chosen PC that went quiet (an old copy of Hodeum on the same PC)", () => {
+    expect(pickDevice([device("old", 900), device("fresh", 10)], "old", NOW)?.id).toBe("fresh");
   });
 
   it("says why there's no PC to start a Hode on, instead of one catch-all", () => {

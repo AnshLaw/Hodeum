@@ -1,5 +1,6 @@
-import type { ActionTarget, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
+import type { ActionTarget, Rect, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
 import type { ReasoningProvider } from "../interfaces";
+import { groundTarget } from "./grounding";
 import { buildMessages, fromImageBox, insideFrame, selectCandidates } from "./prompt";
 import { parseVisionReply, replySchemaFor, type VisionReply } from "./schema";
 import type { CapturedFrame, VisionConnection } from "./types";
@@ -69,16 +70,24 @@ export class QwenVisionProvider implements ReasoningProvider {
   }
 }
 
-function targetFrom(reply: VisionReply, candidates: UiElement[], frame: CapturedFrame): ActionTarget | undefined {
-  const element = reply.target_index >= 0 ? candidates[reply.target_index] : undefined;
-  if (element) {
-    return { elementId: element.id, bounds: element.bounds, confidence: Math.min(reply.confidence, element.confidence), label: element.name };
-  }
+/** The model's box in screen px, unless it's off the window or covers most of it (pointing at nothing). */
+function boxOf(reply: VisionReply, frame: CapturedFrame): Rect | undefined {
   if (!reply.bbox) return undefined;
   const bounds = fromImageBox(reply.bbox, frame.rect);
   const share = (bounds.width * bounds.height) / (frame.rect.width * frame.rect.height);
-  if (!insideFrame(bounds, frame.rect) || share > MAX_BOX_SHARE) return undefined;
-  return { elementId: "vision-box", bounds, confidence: Math.min(reply.confidence, VISUAL_CONFIDENCE_CAP), label: "Here" };
+  return insideFrame(bounds, frame.rect) && share <= MAX_BOX_SHARE ? bounds : undefined;
+}
+
+/** A control from the screen read, checked against the model's box and the learner's words; else the bare box. */
+function targetFrom(reply: VisionReply, candidates: UiElement[], frame: CapturedFrame, context: TeachingContext): ActionTarget | undefined {
+  const box = boxOf(reply, frame);
+  const chosen = reply.target_index >= 0 ? candidates[reply.target_index] : undefined;
+  const element = groundTarget({ chosen, box, elements: context.observation.elements, utterance: context.utterance });
+  if (element) {
+    return { elementId: element.id, bounds: element.bounds, confidence: Math.min(reply.confidence, element.confidence), label: element.name };
+  }
+  if (!box) return undefined;
+  return { elementId: "vision-box", bounds: box, confidence: Math.min(reply.confidence, VISUAL_CONFIDENCE_CAP), label: "Here" };
 }
 
 export function toAction(reply: VisionReply, candidates: UiElement[], frame: CapturedFrame, context: TeachingContext): TeachingAction {
@@ -86,7 +95,7 @@ export function toAction(reply: VisionReply, candidates: UiElement[], frame: Cap
   return {
     kind,
     speech: reply.speech.trim(),
-    target: kind === "clarify" || kind === "complete" ? undefined : targetFrom(reply, candidates, frame),
+    target: kind === "clarify" || kind === "complete" ? undefined : targetFrom(reply, candidates, frame, context),
     skill: context.step?.skill ?? GENERAL_SKILL,
     assistanceLevel: context.assistanceLevel,
   };

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { CloudState } from "../../providers/cloud/policy";
 
-/** The cloud policy, for the Local/Enhanced badge. Absent (browser stage, tests) means Local. */
+/** The cloud policy, for the Local/Cloud badge. Absent (browser stage, tests) means Local. */
 export const CloudContext = createContext<CloudState | undefined>(undefined);
 
 export function useEnhanced(): boolean {

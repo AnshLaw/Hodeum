@@ -29,6 +29,12 @@ export interface Size {
   height: number;
 }
 
+/** A top-level window of the learner's app: its handle and visible frame (physical screen px). */
+export interface WindowRef {
+  id: number;
+  bounds: Rect;
+}
+
 /** A monitor in physical pixels; `scale` is the DPI factor (1.25 = 125%). */
 export interface MonitorInfo {
   x: number;
@@ -74,6 +80,8 @@ export interface ScreenObservation {
   tone?: ScreenTone;
   /** The learner input this read follows, oldest first (learner-action reads only). */
   inputs?: LearnerInput[];
+  /** The window that was read; guidance drawn from this read belongs to it. Absent off Windows. */
+  window?: WindowRef;
 }
 
 export type StateSignal =
@@ -103,10 +111,17 @@ export interface TaskStep {
   checkpoint?: boolean;
 }
 
+/** How Agent mode opens a pack's app: its program, and a practice file shipped with Hodeum to open in it. */
+export interface AppLaunch {
+  exe: string;
+  sample?: string;
+}
+
 export interface TaskPack {
   id: string;
   title: string;
   app: string;
+  launch?: AppLaunch;
   /** Defaults to "windows". Phone packs are taught on the mirrored iPhone, read by OCR. */
   surface?: Surface;
   goalPhrases: string[];
@@ -154,6 +169,8 @@ export interface LearnerAnnotation {
   intent: "ask" | "focus";
   question?: string;
   createdAt: number;
+  /** The window the learner marked; the mark is only drawn over it. */
+  window?: WindowRef;
 }
 
 export interface TeachingContext {
@@ -231,4 +248,7 @@ export type OverlayPrimitive =
   /** `keepClear`: nearby on-screen text (headings, neighbouring rows) the label shouldn't cover. */
   | { kind: "highlight"; bounds: Rect; label?: string; emphasis: "precise" | "broad"; keepClear?: Rect[] }
   | { kind: "arrow"; to: Rect }
-  | { kind: "pin"; bounds: Rect };
+  /** `window`: the window the learner marked it on, when that differs from the guidance's. */
+  | { kind: "pin"; bounds: Rect; window?: WindowRef };
+
+export type PinPrimitive = OverlayPrimitive & { kind: "pin" };

@@ -17,6 +17,19 @@ const learningStores: [string, () => LearningStore & SkillStore][] = [
 ];
 
 describe.each(learningStores)("%s learning store", (_, make) => {
+  it("closes Hodes a quit or crash left open, at their last activity", async () => {
+    const store = make();
+    await store.startHode({ id: "open", goal: "zip files", open: false, startedAt: "2026-10-01T10:00:00Z" });
+    await store.logEvent({ hodeId: "open", kind: "hint", at: "2026-10-01T10:05:00Z" });
+    await store.startHode({ id: "quiet", goal: "margins", open: true, startedAt: "2026-10-02T10:00:00Z" });
+    await store.startHode({ id: "done", goal: "pivot", open: false, startedAt: "2026-10-03T10:00:00Z" });
+    await store.endHode("done", "completed", "2026-10-03T10:09:00Z");
+    expect(await store.closeOpenHodes()).toBe(2);
+    expect(await store.getHode("open")).toMatchObject({ outcome: "ended", endedAt: "2026-10-01T10:05:00Z" });
+    expect(await store.getHode("quiet")).toMatchObject({ outcome: "ended", endedAt: "2026-10-02T10:00:00Z" });
+    expect(await store.getHode("done")).toMatchObject({ outcome: "completed", endedAt: "2026-10-03T10:09:00Z" });
+  });
+
   it("keeps Hodes newest first with their events, and ends them", async () => {
     const store = make();
     await store.startHode({ id: "a", goal: "zip files", packId: "zip", open: false, startedAt: "2026-10-01T10:00:00Z" });

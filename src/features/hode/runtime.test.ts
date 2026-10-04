@@ -55,7 +55,7 @@ function setup(reasoners: ReasoningProvider[] = [new TaskPackReasoningProvider()
       await settle();
     }
   };
-  return { scene, bus, runtime, overlays, surfaces, spoken, start, act, state: () => runtime.getState() };
+  return { scene, perception, bus, runtime, overlays, surfaces, spoken, start, act, state: () => runtime.getState() };
 }
 
 const failing: ReasoningProvider = { id: "gemini", reason: () => Promise.reject(new Error("quota")), healthCheck: async () => false };
@@ -182,6 +182,29 @@ describe("HodeRuntime end to end", () => {
     expect(h.overlays.at(-1)).toContain("highlight");
   });
 
+  it("anchors Windows guidance to the window it was read from", async () => {
+    const h = setup();
+    const window = { id: 7, bounds: { x: 0, y: 0, width: 1280, height: 800 } };
+    const read = h.perception.observe.bind(h.perception);
+    vi.spyOn(h.perception, "observe").mockImplementation(async (region) => ({ ...(await read(region)), window }));
+    const anchors: unknown[] = [];
+    h.bus.on("overlay:render", ({ anchor }) => anchors.push(anchor));
+    await h.start();
+    expect(anchors).toEqual([window]);
+  });
+
+  it("clears a muted answer's marks once it has been up long enough to read", async () => {
+    vi.useFakeTimers();
+    const h = setup();
+    h.runtime.setMuted(true);
+    h.runtime.dispatch({ type: "VOICE_QUESTION", question: "what is the insert tab?" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.state().phase).toBe("answering");
+    expect(h.overlays.at(-1)).not.toBe("clear");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(h.overlays.at(-1)).toBe("clear");
+  });
+
   it("stays silent when muted", async () => {
     const h = setup();
     h.runtime.setMuted(true);
@@ -201,6 +224,8 @@ describe("HodeRuntime end to end", () => {
     await settle();
     expect(h.state().phase).toBe("answering");
     expect(h.state().action?.speech).toMatch(/^That's Insert\./);
+    // Said in full: the answer's ring and the mark go, while the answer stays on the notch.
+    expect(h.overlays.slice(-2)).toEqual(["pin+highlight", "clear"]);
     h.runtime.dispatch({ type: "DISMISS" });
     await settle();
     expect(h.state().phase).toBe("guiding");
@@ -233,6 +258,49 @@ describe("bringing the pack's app forward", () => {
     await settle();
     expect(order).toEqual(["focus Excel", "observe"]);
     expect(runtime.getState().phase).toBe("guiding");
+  });
+});
+
+describe("opening the pack's app", () => {
+  it("launches it, waits for it, then reads the screen", async () => {
+    const scene = new ExcelScene();
+    const perception = new MockPerception(() => scene);
+    const order: string[] = [];
+    const launchApp = vi.fn(async (app: string) => {
+      order.push(`launch ${app}`);
+      return true;
+    });
+    Object.assign(perception, { launchApp });
+    const focus = vi.spyOn(perception, "focusApp");
+    const observe = perception.observe.bind(perception);
+    vi.spyOn(perception, "observe").mockImplementation((region) => {
+      order.push("observe");
+      return observe(region);
+    });
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
+    const pack = matchGoal(GOAL, TASK_PACKS);
+    runtime.dispatch({ type: "START_HODE" });
+    runtime.dispatch({ type: "GOAL_SUBMITTED", goal: GOAL, pack, mode: "agent" });
+    await settle();
+    expect(order).toEqual(["launch Excel", "observe"]);
+    expect(launchApp).toHaveBeenCalledWith("Excel", pack?.launch);
+    expect(focus).not.toHaveBeenCalled();
+  });
+
+  it("looks again by itself when the learner switches apps while Hodey waits for the right one", async () => {
+    const scene = new ExcelScene();
+    const perception = new MockPerception(() => scene);
+    let switched: () => void = () => undefined;
+    Object.assign(perception, { onAppSwitched: (handler: () => void) => ((switched = handler), () => undefined) });
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
+    const waiting = { ...runtime.getState(), phase: "guiding" as const, waitingForApp: "Excel", pack: matchGoal(GOAL, TASK_PACKS) };
+    runtime.dispatch({ type: "START_HODE" });
+    const dispatch = vi.spyOn(runtime, "dispatch");
+    Object.assign(runtime, { state: waiting });
+    switched();
+    expect(dispatch).toHaveBeenCalledWith({ type: "LOOK_AGAIN" });
   });
 });
 

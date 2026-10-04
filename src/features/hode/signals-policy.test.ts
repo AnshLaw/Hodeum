@@ -91,7 +91,7 @@ describe("confidence policy", () => {
 });
 
 describe("overlayFor", () => {
-  const kinds = (action = guideAction(), pin?: typeof INSERT_BOUNDS) => overlayFor(action, pin).map((p) => p.kind);
+  const kinds = (action = guideAction(), pin?: typeof INSERT_BOUNDS) => overlayFor(action, pin && { kind: "pin", bounds: pin }).map((p) => p.kind);
 
   it("demonstrate draws spotlight, highlight and arrow", () => {
     expect(kinds()).toEqual(["spotlight", "highlight", "arrow"]);

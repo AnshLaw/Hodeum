@@ -2,12 +2,14 @@ import { useState } from "react";
 import type { HodeSummary } from "../../lib/bus";
 import type { SkillRecord } from "../../lib/types";
 import type { HodeRecord } from "../../data/types";
-import { computeStats } from "../../data/stats";
 import { useLiveQuery } from "../hooks";
 import type { Page } from "../App";
 import type { AppServices } from "../services";
 import { durationLabel, greeting, outcomeOf, suggestedPacks, timeAgo } from "../view";
 import { PracticeList } from "./PracticeList";
+import { WeekPanel } from "./WeekPanel";
+import { ACCOUNT_COPY } from "../../features/account/copy";
+import type { AccountStatus } from "../../features/account/types";
 import "./pages.css";
 
 const RECENT_COUNT = 5;
@@ -58,13 +60,33 @@ function LiveHode({ live, services }: { live: HodeSummary; services: AppServices
   );
 }
 
-function Stat({ value, label }: { value: number | string; label: string }) {
+/** Signed out (and accounts set up): one clear invitation to sync, on the page the learner sees first. */
+function SignInCard({ account, services }: { account?: AccountStatus; services: AppServices }) {
+  if (!account?.configured || account.phase === "signed-in") return null;
+  const waiting = account.phase === "signing-in";
   return (
-    <div className="hstat">
-      <span className="hstat__value">{value}</span>
-      <span className="hstat__label">{label}</span>
-    </div>
+    <section className="hcard hsignin" aria-label={ACCOUNT_COPY.signInLabel}>
+      <div className="hsignin__text">
+        <h2>{ACCOUNT_COPY.homeSignInTitle}</h2>
+        <p className="hmuted">{waiting ? ACCOUNT_COPY.waiting : ACCOUNT_COPY.homeSignInDetail}</p>
+      </div>
+      {waiting ? (
+        <button type="button" className="btn" onClick={() => services.bus.emit("account:cancel", {})}>
+          Cancel
+        </button>
+      ) : (
+        <button type="button" className="btn btn--primary" onClick={() => services.bus.emit("account:sign-in", {})}>
+          {ACCOUNT_COPY.signInLabel}
+        </button>
+      )}
+    </section>
   );
+}
+
+/** First name from the Google account, or the product's name for the learner. */
+function learnerName(account?: AccountStatus): string {
+  const name = account?.phase === "signed-in" ? account.user?.name?.trim().split(/\s+/)[0] : undefined;
+  return name || "Hodian";
 }
 
 /** First run: no history yet, so show how a Hode works instead of a row of zeros. */
@@ -101,7 +123,7 @@ function RecentHodes({ hodes, now, onNavigate }: { hodes: HodeRecord[]; now: Dat
       </div>
       <ul className="hlist">
         {hodes.slice(0, RECENT_COUNT).map((hode) => {
-          const outcome = outcomeOf(hode);
+          const outcome = outcomeOf(hode, now);
           return (
             <li key={hode.id} className="hlist__row">
               <span className="hlist__main">
@@ -137,19 +159,7 @@ function PracticeNext({ services, skills, live, onNavigate }: { services: AppSer
   );
 }
 
-function Stats({ hodes, skills, now }: { hodes: HodeRecord[]; skills: SkillRecord[]; now: Date }) {
-  const stats = computeStats(hodes, skills, now);
-  return (
-    <section className="hstats" aria-label="Your progress">
-      <Stat value={stats.hodesCompleted} label="Hodes completed" />
-      <Stat value={stats.skillsMastered} label="Skills mastered" />
-      <Stat value={`${stats.streakDays} ${stats.streakDays === 1 ? "day" : "days"}`} label="Learning streak" />
-      <Stat value={stats.minutesLearning} label="Minutes learning" />
-    </section>
-  );
-}
-
-export function HomePage({ services, live, onNavigate }: { services: AppServices; live?: HodeSummary; onNavigate: (page: Page) => void }) {
+export function HomePage({ services, live, account, onNavigate }: { services: AppServices; live?: HodeSummary; account?: AccountStatus; onNavigate: (page: Page) => void }) {
   const [data] = useLiveQuery(services.bus, async () => ({ hodes: await services.learning.listHodes(HISTORY_FOR_STATS), skills: await services.learning.listSkills() }), []);
   const now = new Date();
   if (data.state !== "ready") return <p className="hmuted">{data.state === "error" ? `Couldn't load your learning: ${data.message}` : "Loading…"}</p>;
@@ -158,11 +168,14 @@ export function HomePage({ services, live, onNavigate }: { services: AppServices
   return (
     <div className="hpage">
       <header className="hpage__head">
-        <h1>{greeting(now)}, Hodian</h1>
+        <h1>
+          {greeting(now)}, {learnerName(account)}
+        </h1>
         <p className="hmuted">{firstRun ? "Learn something new in the apps you already use. Hodey guides, you do the clicking." : "Start a Hode, or pick up where you left off."}</p>
       </header>
       {live ? <LiveHode live={live} services={services} /> : <StartHode services={services} />}
-      {!firstRun && <Stats hodes={hodes} skills={skills} now={now} />}
+      <SignInCard account={account} services={services} />
+      {!firstRun && <WeekPanel hodes={hodes} skills={skills} now={now} />}
       <div className="hcolumns">
         {firstRun ? <HowItWorks /> : <RecentHodes hodes={hodes} now={now} onNavigate={onNavigate} />}
         <PracticeNext services={services} skills={skills} live={live} onNavigate={onNavigate} />

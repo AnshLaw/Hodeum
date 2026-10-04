@@ -1,11 +1,13 @@
 import type { ReplyLanguage } from "../../lib/language";
 import type {
   AgentStyle,
+  AppLaunch,
   AssistanceLevel,
   HodeMode,
   LearnerAnnotation,
   OverlayPrimitive,
   PerformRequest,
+  PinPrimitive,
   Rect,
   ScreenObservation,
   SkillRecord,
@@ -68,6 +70,11 @@ export interface HodeState {
   requestId: number;
   reobserved: boolean;
   resumePhase?: HodePhase;
+  /** The guidance a question interrupted, and the screen read it came from: restored as it was afterwards. */
+  resumeAction?: TeachingAction;
+  resumeObservation?: ScreenObservation;
+  /** The answer on screen has been said in full (or, muted, been up long enough to read). */
+  answerSaid?: boolean;
   learnedSkills: string[];
   /** An open-ended Hode: no task pack, planned and verified by the local vision model. */
   open: boolean;
@@ -175,6 +182,8 @@ export type HodeEvent =
   | { type: "ANNOTATE_CANCEL" }
   | { type: "ANNOTATION_SUBMITTED"; annotation: LearnerAnnotation }
   | { type: "DISMISS" }
+  /** Hodey said its last line in full (or, muted, it has been up long enough to read). */
+  | { type: "SPEECH_FINISHED" }
   | { type: "PAUSE" }
   | { type: "RESUME" }
   | { type: "END_HODE" }
@@ -184,7 +193,8 @@ export type HodeEvent =
 export type EventOf<T extends HodeEvent["type"]> = Extract<HodeEvent, { type: T }>;
 
 export type HodeEffect =
-  | { type: "focusApp"; app: string }
+  /** `launch`: open the app (with its practice file) instead of only bringing an open window forward. */
+  | { type: "focusApp"; app: string; launch?: AppLaunch }
   | { type: "loadSkill"; skillId: string }
   | { type: "observe"; region?: Rect }
   | { type: "reason"; requestId: number; context: TeachingContext }
@@ -224,10 +234,18 @@ export function rechecking(s: HodeState): boolean {
   return s.phase === "reasoning" && s.thinking !== true && !asking && s.action !== undefined && s.action.kind !== "answer";
 }
 
-export function pinFor(state: HodeState): Rect | undefined {
-  return (state.question ?? state.focusRegion)?.shape.bounds;
+/** The learner's mark as an overlay pin, drawn only over the window they marked it on. */
+export function pinOf(annotation: LearnerAnnotation | undefined): PinPrimitive | undefined {
+  if (!annotation) return undefined;
+  const bounds = annotation.shape.bounds;
+  return annotation.window ? { kind: "pin", bounds, window: annotation.window } : { kind: "pin", bounds };
 }
 
-export function pinOverlay(pin: Rect | undefined): HodeEffect {
-  return pin ? { type: "renderOverlay", primitives: [{ kind: "pin", bounds: pin }] } : { type: "clearOverlay" };
+export function pinFor(state: HodeState): PinPrimitive | undefined {
+  return pinOf(state.question ?? state.focusRegion);
+}
+
+export function pinOverlay(annotation: LearnerAnnotation | undefined): HodeEffect {
+  const pin = pinOf(annotation);
+  return pin ? { type: "renderOverlay", primitives: [pin] } : { type: "clearOverlay" };
 }

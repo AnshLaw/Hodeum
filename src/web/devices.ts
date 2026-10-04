@@ -1,16 +1,24 @@
 import type { Loadable } from "../app/hooks";
 import type { DeviceRow } from "../features/sync/types";
 
-/** A PC checks in every 30 s; allow for one missed heartbeat and some clock skew. */
-export const ONLINE_WINDOW_MS = 75_000;
+/**
+ * A PC checks in every 30 s, but Windows may slow a hidden window's timers to once a minute: allow for
+ * that, a missed beat and some clock skew.
+ */
+export const ONLINE_WINDOW_MS = 150_000;
 
 export function isOnline(device: DeviceRow, now: number): boolean {
   return now - Date.parse(device.last_seen_at) <= ONLINE_WINDOW_MS;
 }
 
-/** The learner's chosen PC if it still exists, otherwise the one seen most recently. */
-export function pickDevice(devices: DeviceRow[], preferredId: string | undefined): DeviceRow | undefined {
-  return devices.find((d) => d.id === preferredId) ?? [...devices].sort((a, b) => b.last_seen_at.localeCompare(a.last_seen_at))[0];
+/**
+ * The learner's chosen PC while it's online, otherwise the one seen most recently. A remembered choice
+ * that has gone quiet (an old install on the same PC) mustn't hide the copy of Hodeum that's running.
+ */
+export function pickDevice(devices: DeviceRow[], preferredId: string | undefined, now = Date.now()): DeviceRow | undefined {
+  const preferred = devices.find((d) => d.id === preferredId);
+  if (preferred && isOnline(preferred, now)) return preferred;
+  return [...devices].sort((a, b) => b.last_seen_at.localeCompare(a.last_seen_at))[0];
 }
 
 /** Why the dashboard has no PC to send a Hode to. A PC appears once Hodeum there is signed in to this account with sync on. */

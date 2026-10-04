@@ -83,6 +83,23 @@ describe("routeUtterance", () => {
     expect(route(guiding, "  ")).toEqual([]);
     expect(route(guiding, "um")).toEqual([]);
   });
+
+  it("drops a lone word that isn't a control: keyboard clicks and noise come out as one", () => {
+    expect(route(guiding, "yeah")).toEqual([]);
+    expect(route(initialState, "the")).toEqual([]);
+    expect(route(guiding, "hint")).toEqual([{ type: "HINT_REQUESTED" }]);
+  });
+
+  it("says nothing back to thanks or okay with no Hode running", () => {
+    expect(route(initialState, "thanks", true)).toEqual([]);
+    expect(route(initialState, "okay thank you", true)).toEqual([]);
+    expect(route(initialState, "great", true)).toEqual([]);
+  });
+
+  it("takes thanks as Got it for an answer", () => {
+    expect(route({ ...initialState, phase: "answering" }, "thanks")).toEqual([{ type: "DISMISS" }]);
+    expect(route({ ...initialState, phase: "answering" }, "perfect thank you")).toEqual([{ type: "DISMISS" }]);
+  });
 });
 
 describe("wakeRest (hands-free)", () => {

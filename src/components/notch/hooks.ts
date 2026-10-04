@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { Bus } from "../../lib/bus";
 import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
@@ -11,6 +11,8 @@ import type { NotchControl } from "./notch-view";
 
 /** Long enough to read what moved and the next suggestion; hovering holds it longer. */
 const SUCCESS_DISPLAY_MS = 5000;
+/** An answer stays this long after it's been said, then folds back to what the learner was doing. */
+export const ANSWER_LINGER_MS = 6000;
 
 /** Tells the overlay where the surface is (physical screen px), so arrows and labels keep out from under it. */
 function broadcastRect(element: HTMLElement, shell: NativeShell, bus: Bus): void {
@@ -46,14 +48,33 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
     const offRequest = bus.on("notch:rect-request", report);
     const observer = new ResizeObserver(report);
     observer.observe(element);
-    // Sliding in and out of auto-hide is a transform, which ResizeObserver doesn't see.
-    element.addEventListener("transitionend", report);
+    // Sliding in and out of auto-hide is a transform, which ResizeObserver doesn't see: follow it every frame,
+    // or the hit area lags behind the surface and a cursor over where it was keeps it out.
+    let sliding = 0;
+    const follow = () => {
+      report();
+      sliding = requestAnimationFrame(follow);
+    };
+    const startSliding = () => {
+      cancelAnimationFrame(sliding);
+      sliding = requestAnimationFrame(follow);
+    };
+    const stopSliding = () => {
+      cancelAnimationFrame(sliding);
+      report();
+    };
+    element.addEventListener("transitionrun", startSliding);
+    element.addEventListener("transitionend", stopSliding);
+    element.addEventListener("transitioncancel", stopSliding);
     // The window growing or shrinking around the iPhone mirror moves the centred surface without resizing it.
     window.addEventListener("resize", report);
     report();
     return () => {
       observer.disconnect();
-      element.removeEventListener("transitionend", report);
+      cancelAnimationFrame(sliding);
+      element.removeEventListener("transitionrun", startSliding);
+      element.removeEventListener("transitionend", stopSliding);
+      element.removeEventListener("transitioncancel", stopSliding);
       window.removeEventListener("resize", report);
       offRequest();
       cancelAnimationFrame(frame);
@@ -68,10 +89,16 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
  */
 export function useNotchHover(ref: RefObject<HTMLElement | null>, shell: NativeShell, dock: Dock): boolean {
   const [hovered, setHovered] = useState(false);
+  // A new gate (after re-docking) starts from the hover React still shows, or its first leave would be lost.
+  const current = useRef(false);
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const gate = createHoverGate(setHovered, hoverGraceMs(dock));
+    const onChange = (next: boolean) => {
+      current.current = next;
+      setHovered(next);
+    };
+    const gate = createHoverGate(onChange, hoverGraceMs(dock), current.current);
     const enter = () => gate.set(true);
     const leave = () => gate.set(false);
     element.addEventListener("pointerenter", enter);
@@ -85,6 +112,29 @@ export function useNotchHover(ref: RefObject<HTMLElement | null>, shell: NativeS
     };
   }, [ref, shell, dock]);
   return hovered;
+}
+
+/**
+ * Closes the notch's open menu or panel on a press anywhere else, like any popover. The notch never takes
+ * focus and is click-through outside its surface, so in the app the native side reports such presses; the
+ * DOM listener covers the browser practice stage.
+ */
+export function useOutsidePress(ref: RefObject<HTMLElement | null>, shell: NativeShell, active: boolean, onOutside: () => void): void {
+  const latest = useRef(onOutside);
+  latest.current = onOutside;
+  useEffect(() => {
+    if (!active) return;
+    const close = () => latest.current();
+    const onDown = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) close();
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    const stop = shell.onNotchOutsidePress(close);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      stop();
+    };
+  }, [ref, shell, active]);
 }
 
 /** True once `value` has held for `ms`; false the moment it doesn't. Keeps brief states from flickering. */
@@ -101,12 +151,12 @@ export function useSettled(value: boolean, ms: number): boolean {
   return value && settled;
 }
 
-export function useAutoDismiss(active: boolean, runtime: HodeRuntime): void {
+export function useAutoDismiss(active: boolean, runtime: HodeRuntime, ms = SUCCESS_DISPLAY_MS): void {
   useEffect(() => {
     if (!active) return;
-    const timer = setTimeout(() => runtime.dispatch({ type: "DISMISS" }), SUCCESS_DISPLAY_MS);
+    const timer = setTimeout(() => runtime.dispatch({ type: "DISMISS" }), ms);
     return () => clearTimeout(timer);
-  }, [active, runtime]);
+  }, [active, runtime, ms]);
 }
 
 export function useControlHandler(runtime: HodeRuntime, bus: Bus): (control: NotchControl) => void {
@@ -168,7 +218,10 @@ export function useCardBottom(ref: RefObject<HTMLElement | null>, active: boolea
   }, [ref, active, onBottom]);
 }
 
-/** The Windows highlights currently on screen, as the runtime last rendered them. */
+/**
+ * The Windows highlights as the runtime last rendered them. Ones hidden because their window isn't in front
+ * still count: un-peeking whenever the learner clicked another app made the card jump open over and over.
+ */
 function useDesktopPrimitives(bus: Bus): OverlayPrimitive[] {
   const [primitives, setPrimitives] = useState<OverlayPrimitive[]>([]);
   useEffect(() => {

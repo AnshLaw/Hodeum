@@ -4,7 +4,7 @@ import { step } from "../features/hode/reducer";
 import { DATA_SELECTED, FIELDS_VISIBLE, HOME_SELECTED, INSERT_SELECTED, PACK, guideAction, skillRecord } from "../features/hode/test-fixtures";
 import { MemoryLearningStore } from "./memory-stores";
 import { HodeRecorder } from "./recorder";
-import { computeStats, masteryOf, streakDays } from "./stats";
+import { computeStats, masteryOf, streakDays, weekActivity } from "./stats";
 
 function drive(recorder: HodeRecorder, events: HodeEvent[], start: HodeState = initialState): HodeState {
   let state = start;
@@ -73,6 +73,15 @@ describe("HodeRecorder", () => {
     expect(events.map((e) => [e.kind, e.detail])).toEqual([["stuck", "said_stuck"], ["stuck", "undo_loop"]]);
   });
 
+  it("ends a Hode that goes back to idle without being ended (it would stay 'in progress' everywhere)", async () => {
+    const store = new MemoryLearningStore();
+    const recorder = new HodeRecorder(store, undefined, () => "h1", () => "2026-10-03T10:00:00.000Z");
+    const guiding = drive(recorder, HODE.slice(0, 5));
+    recorder.observe({ type: "DISMISS" }, guiding, { ...guiding, phase: "idle" });
+    await recorder.flushed();
+    expect((await store.getHode("h1"))?.outcome).toBe("ended");
+  });
+
   it("marks a Hode the learner ended early", async () => {
     const store = new MemoryLearningStore();
     const recorder = new HodeRecorder(store, undefined, () => "h1");
@@ -95,6 +104,21 @@ describe("learning stats", () => {
   it("summarises Hodes, skills and time", () => {
     const stats = computeStats([hode("2026-10-03T10:00:00.000Z"), hode("2026-10-03T11:00:00.000Z", "ended")], [{ ...skillRecord("independent"), status: "mastered" }, skillRecord("hint", "excel.pivot.create")], new Date("2026-10-03T12:00:00Z"));
     expect(stats).toMatchObject({ hodesCompleted: 1, skillsMastered: 1, skillsLearning: 1, minutesLearning: 20 });
+  });
+
+  it("counts a day in the streak whenever the learner practised, finished or not", () => {
+    const now = new Date(2026, 9, 3, 18);
+    const practised = [hode(new Date(2026, 9, 3, 9).toISOString(), "ended"), hode(new Date(2026, 9, 2, 9).toISOString(), "ended")];
+    expect(streakDays(practised, now)).toBe(2);
+  });
+
+  it("sums the last seven days, oldest first, by the day each Hode started", () => {
+    const now = new Date(2026, 9, 3, 18);
+    const week = weekActivity([hode(new Date(2026, 9, 3, 9).toISOString()), hode(new Date(2026, 9, 3, 11).toISOString(), "ended"), hode(new Date(2026, 9, 1, 9).toISOString()), hode(new Date(2026, 8, 20, 9).toISOString())], now);
+    expect(week).toHaveLength(7);
+    expect(week.at(-1)).toMatchObject({ minutes: 20, hodes: 2, completed: 1, today: true });
+    expect(week.at(-3)).toMatchObject({ minutes: 10, hodes: 1, completed: 1, today: false });
+    expect(week[0]).toMatchObject({ minutes: 0, hodes: 0 });
   });
 
   it("maps help level to mastery", () => {

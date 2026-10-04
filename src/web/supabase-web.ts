@@ -68,6 +68,10 @@ export class SupabaseLearningStore implements LearningStore {
   endHode(): Promise<void> {
     return Promise.reject(new Error(PC_ONLY));
   }
+
+  closeOpenHodes(): Promise<number> {
+    return Promise.reject(new Error(PC_ONLY));
+  }
 }
 
 /** The account's synced settings, so the dashboard wears the learner's theme and accent. Read-only. */

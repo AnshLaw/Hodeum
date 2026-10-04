@@ -4,7 +4,7 @@ import { DEFAULT_ELEVENLABS_MODEL, DEFAULT_ELEVENLABS_VOICE, DEFAULT_GEMINI_MODE
 describe("parseSettings", () => {
   it("fills in fields added after a row was saved", () => {
     const old = { voice: { enabled: false, rate: 1.2 }, help: "guided", stuckSeconds: 20 };
-    expect(parseSettings(old)).toEqual({ ...DEFAULT_SETTINGS, voice: { enabled: false, rate: 1.2, name: "", conversation: true, handsFree: false, language: "auto", hindiScript: "devanagari", hindiVoice: "kokoro:31", wakeWords: [] }, mode: "teach", stuckSeconds: 20 });
+    expect(parseSettings(old)).toEqual({ ...DEFAULT_SETTINGS, voice: { enabled: false, rate: 1.2, name: "", conversation: true, handsFree: false, language: "auto", hindiScript: "devanagari", hindiVoice: "kokoro:31", wakeWords: [], inputDevice: "", outputDevice: "", asrModel: "" }, mode: "teach", stuckSeconds: 20 });
   });
 
   it("keeps cloud off for rows saved before cloud settings existed", () => {

@@ -33,9 +33,13 @@ export function isLiveHode(summary: HodeSummary): boolean {
 
 export type OutcomeTone = "done" | "ended" | "live";
 
-export function outcomeOf(hode: HodeRecord): { label: string; tone: OutcomeTone } {
+/** An unfinished Hode older than this isn't still running (Hodeum quit before it could close it). */
+const STALE_HODE_MS = 2 * HOUR;
+
+export function outcomeOf(hode: HodeRecord, now?: Date): { label: string; tone: OutcomeTone } {
   if (hode.outcome === "completed") return { label: "Completed", tone: "done" };
   if (hode.outcome === "ended") return { label: "Ended early", tone: "ended" };
+  if (now && now.getTime() - Date.parse(hode.startedAt) > STALE_HODE_MS) return { label: "Not finished", tone: "ended" };
   return { label: "In progress", tone: "live" };
 }
 

@@ -139,6 +139,14 @@ export class SqliteLearningStore extends SqliteSkillStore implements LearningSto
     await this.db.execute("UPDATE hodes SET outcome = $1, ended_at = $2 WHERE id = $3", [outcome, at, id]);
   }
 
+  async closeOpenHodes(): Promise<number> {
+    const open = await this.db.select<{ count: number }[]>("SELECT COUNT(*) AS count FROM hodes WHERE ended_at IS NULL");
+    await this.db.execute(
+      "UPDATE hodes SET outcome = 'ended', ended_at = COALESCE((SELECT MAX(at) FROM hode_events WHERE hode_events.hode_id = hodes.id), started_at) WHERE ended_at IS NULL",
+    );
+    return Number(open[0]?.count ?? 0);
+  }
+
   async listHodes(limit: number): Promise<HodeRecord[]> {
     const rows = await this.db.select<HodeRow[]>("SELECT * FROM hodes ORDER BY started_at DESC LIMIT $1", [limit]);
     return rows.map(hodeFromRow);

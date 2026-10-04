@@ -12,7 +12,12 @@ export interface DockPrefs {
   dock: Dock;
   visibility: Visibility;
   sidebar: SidebarStyle;
+  /** While hidden: how it was shown before, so showing again restores auto-hide instead of pinning. */
+  shownAs?: ShownVisibility;
 }
+
+type ShownVisibility = Exclude<Visibility, "hidden">;
+const SHOWN: ShownVisibility[] = ["pinned", "auto"];
 
 export const DEFAULT_PREFS: DockPrefs = { dock: "top", visibility: "auto", sidebar: "copilot" };
 const PREFS_KEY = "hodeum.dock";
@@ -30,11 +35,12 @@ export function loadPrefs(storage: ReadStorage): DockPrefs {
     return DEFAULT_PREFS;
   }
   const saved = (raw ?? {}) as Partial<Record<keyof DockPrefs, unknown>>;
-  return {
+  const prefs: DockPrefs = {
     dock: DOCKS.includes(saved.dock as Dock) ? (saved.dock as Dock) : DEFAULT_PREFS.dock,
     visibility: VISIBILITIES.includes(saved.visibility as Visibility) ? (saved.visibility as Visibility) : DEFAULT_PREFS.visibility,
     sidebar: SIDEBAR_STYLES.includes(saved.sidebar as SidebarStyle) ? (saved.sidebar as SidebarStyle) : DEFAULT_PREFS.sidebar,
   };
+  return SHOWN.includes(saved.shownAs as ShownVisibility) ? { ...prefs, shownAs: saved.shownAs as ShownVisibility } : prefs;
 }
 
 export function savePrefs(storage: WriteStorage, prefs: DockPrefs): void {
@@ -53,16 +59,25 @@ export function seedPrefs(storage: ReadStorage & WriteStorage, prefs: DockPrefs)
 /** Commands from the tray menu and the Hodey key + H. Must match ids in src-tauri/src/tray.rs. */
 export type ShellCommand = "show" | "toggle-visibility" | "dock-top" | "dock-left" | "dock-right" | "pinned" | "auto" | "sidebar-copilot" | "sidebar-floating";
 
+/** Out of Hide, back to the way it was shown before (auto-hide unless it was pinned). */
+function shown({ shownAs, ...prefs }: DockPrefs): DockPrefs {
+  return { ...prefs, visibility: shownAs ?? DEFAULT_PREFS.visibility };
+}
+
+function hidden(prefs: DockPrefs): DockPrefs {
+  return { ...prefs, visibility: "hidden", shownAs: prefs.visibility === "hidden" ? prefs.shownAs : prefs.visibility };
+}
+
 /**
- * Showing again after Hide pins the notch, so it doesn't immediately tuck away under auto-hide.
- * `show` (a left-click on the tray icon) only brings back a hidden notch; it never hides one.
+ * Hide remembers how the notch was shown, and showing again restores it: pinning on Show used to switch
+ * auto-hide off for good. `show` (a left-click on the tray icon) only brings back a hidden notch.
  */
 export function applyCommand(prefs: DockPrefs, command: string): DockPrefs {
   switch (command as ShellCommand) {
     case "show":
-      return prefs.visibility === "hidden" ? { ...prefs, visibility: "pinned" } : prefs;
+      return prefs.visibility === "hidden" ? shown(prefs) : prefs;
     case "toggle-visibility":
-      return { ...prefs, visibility: prefs.visibility === "hidden" ? "pinned" : "hidden" };
+      return prefs.visibility === "hidden" ? shown(prefs) : hidden(prefs);
     case "dock-top":
       return { ...prefs, dock: "top" };
     case "dock-left":
@@ -70,8 +85,10 @@ export function applyCommand(prefs: DockPrefs, command: string): DockPrefs {
     case "dock-right":
       return { ...prefs, dock: "right" };
     case "pinned":
-    case "auto":
-      return { ...prefs, visibility: command as Visibility };
+    case "auto": {
+      const { shownAs: _forgotten, ...rest } = prefs;
+      return { ...rest, visibility: command as Visibility };
+    }
     case "sidebar-copilot":
       return { ...prefs, sidebar: "copilot" };
     case "sidebar-floating":
@@ -94,7 +111,8 @@ export function shouldReveal(visibility: Visibility, hovered: boolean, phase: Ho
     case "hidden":
       return false;
     case "auto":
-      return hovered || hodeActive(phase);
+      // A paused Hode rests like a sleeping Hodey: tucked away until the learner hovers.
+      return hovered || (hodeActive(phase) && phase !== "paused");
   }
 }
 

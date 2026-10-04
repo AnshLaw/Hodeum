@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { HodeSummary } from "../lib/bus";
+import type { Bus, HodeSummary } from "../lib/bus";
+import type { AccountStatus } from "../features/account/types";
+import { RailAccount } from "./RailAccount";
 import { COPY } from "../lib/copy";
 import { HodeumMark } from "../components/shared/icons";
-import { railNote } from "../features/account/copy";
 import { useAccount } from "../features/account/use-account";
 import { useLiveHode } from "./hooks";
 import { ChatIcon, CloseWindowIcon, GearIcon, HodesIcon, HomeIcon, MaximizeIcon, MinimizeIcon, NotchIcon, PathIcon, RestoreIcon } from "./icons";
@@ -73,7 +74,7 @@ function LivePill({ live, onOpen }: { live?: HodeSummary; onOpen: () => void }) 
   );
 }
 
-function Rail({ page, onSelect, live, note }: { page: Page; onSelect: (page: Page) => void; live?: HodeSummary; note: string }) {
+function Rail({ page, onSelect, live, account, bus }: { page: Page; onSelect: (page: Page) => void; live?: HodeSummary; account?: AccountStatus; bus: Bus }) {
   return (
     <nav className="happ__rail" aria-label="Hodeum">
       {NAV.map((item) => (
@@ -84,7 +85,7 @@ function Rail({ page, onSelect, live, note }: { page: Page; onSelect: (page: Pag
       ))}
       <span className="happ__rail-spacer" />
       <LivePill live={live} onOpen={() => onSelect("home")} />
-      <p className="happ__local">{note}</p>
+      <RailAccount status={account} bus={bus} onOpen={() => onSelect("settings")} />
     </nav>
   );
 }
@@ -100,9 +101,9 @@ export function HodeumApp({ services }: { services: AppServices }) {
     <div className="happ">
       <TitleBar services={services} />
       <div className="happ__body">
-        <Rail page={page} onSelect={setPage} live={live} note={railNote(account)} />
+        <Rail page={page} onSelect={setPage} live={live} account={account} bus={services.bus} />
         <main className="happ__main" key={page}>
-          {page === "home" && <HomePage services={services} live={live} onNavigate={setPage} />}
+          {page === "home" && <HomePage services={services} live={live} account={account} onNavigate={setPage} />}
           {page === "hodes" && <HodesPage services={services} />}
           {page === "learning" && <LearningPage services={services} />}
           {page === "chat" && <ChatPage services={services} />}

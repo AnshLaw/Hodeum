@@ -1,4 +1,4 @@
-import type { PerformRequest, Rect, ScreenObservation, Surface } from "../lib/types";
+import type { AppLaunch, PerformRequest, Rect, ScreenObservation, Surface } from "../lib/types";
 import type { PerceptionAdapter } from "./interfaces";
 
 export interface WatchablePerception extends PerceptionAdapter {
@@ -33,6 +33,15 @@ export class SurfacePerception implements PerceptionAdapter {
 
   async focusApp(app: string): Promise<boolean> {
     return (await this.adapters[this.active].focusApp?.(app)) ?? false;
+  }
+
+  async launchApp(app: string, launch: AppLaunch): Promise<boolean> {
+    return (await this.adapters[this.active].launchApp?.(app, launch)) ?? false;
+  }
+
+  /** Only the desktop has windows to switch between. */
+  onAppSwitched(handler: () => void): () => void {
+    return this.adapters.windows.onAppSwitched?.(() => this.active === "windows" && handler()) ?? (() => undefined);
   }
 
   async perform(request: PerformRequest): Promise<void> {

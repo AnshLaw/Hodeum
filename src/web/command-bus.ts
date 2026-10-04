@@ -1,6 +1,7 @@
 import { LocalBus, type Bus, type BusEventName, type BusEvents, type BusHandler, type HodeSummary } from "../lib/bus";
 import { HEARTBEAT_MS } from "../features/sync/device-link";
 import type { CommandKind, DeviceRow, PcCommand } from "../features/sync/types";
+import { isOnline } from "./devices";
 
 /** How often the dashboard checks whether the PC picked a command up. */
 const POLL_MS = 1_500;
@@ -27,6 +28,11 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * The desktop pages' bus, on the web: Start/End a Hode become commands for the chosen PC, and its
  * live Hode answers summary requests. Everything else stays in the page.
  */
+/** A PC's running Hode, but only while the PC is online: a quit PC's last Hode isn't still running. */
+export function liveOn(pc: DeviceRow | undefined, now = Date.now()): HodeSummary {
+  return pc && isOnline(pc, now) ? (pc.live ?? IDLE) : IDLE;
+}
+
 export class WebBus implements Bus {
   private readonly local = new LocalBus();
 
@@ -41,7 +47,7 @@ export class WebBus implements Bus {
   emit<K extends BusEventName>(name: K, payload: BusEvents[K]): void {
     if (name === "hode:start") void this.command("start_hode", (payload as BusEvents["hode:start"]).goal);
     else if (name === "hode:end") void this.command("end_hode");
-    else if (name === "hode:summary-request") this.local.emit("hode:summary", this.target()?.live ?? IDLE);
+    else if (name === "hode:summary-request") this.local.emit("hode:summary", liveOn(this.target()));
     else this.local.emit(name, payload);
   }
 

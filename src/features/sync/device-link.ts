@@ -62,7 +62,14 @@ export class DeviceLink {
       cloud.onCommand(device.id, (command) => void this.handle(command)),
       bus.on("hode:summary", (summary) => this.liveChanged(isLiveHode(summary) ? summary : null)),
     ];
+    // A window Windows paused while hidden checks in the moment it's shown again.
+    const page = typeof document === "undefined" ? undefined : document;
+    const onVisible = () => {
+      if (page?.visibilityState === "visible") void this.refresh();
+    };
+    page?.addEventListener("visibilitychange", onVisible);
     this.stopAll = () => {
+      page?.removeEventListener("visibilitychange", onVisible);
       clearInterval(heartbeat);
       clearTimeout(this.liveTimer);
       offs.forEach((off) => off());

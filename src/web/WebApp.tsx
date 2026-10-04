@@ -12,6 +12,7 @@ import { googleClientId } from "../features/account/config";
 import { accountUser } from "../features/account/supabase-auth";
 import type { DeviceRow } from "../features/sync/types";
 import { isOnline, noPcMessage } from "./devices";
+import { timeAgo } from "../app/view";
 import { GoogleButton } from "./GoogleButton";
 import { useDashboard, useSession, type Dashboard } from "./use-dashboard";
 import "../app/app.css";
@@ -62,18 +63,22 @@ function PcPicker({ dashboard }: { dashboard: Dashboard }) {
   if (devices.state === "error") return <p className="hweb-pc hchat__error">Couldn't load your PCs.</p>;
   if (devices.value.length === 0) return <p className="hweb-pc hmuted">No PC linked yet.</p>;
   const now = Date.now();
+  const online = target ? isOnline(target, now) : false;
   return (
     <label className="hweb-pc">
-      <span className="heyebrow">Start Hodes on</span>
+      <span className="hweb-pc__label">Start Hodes on</span>
       <select className="field" value={target?.id} onChange={(e) => choose(e.target.value)}>
         {devices.value.map((d: DeviceRow) => (
           <option key={d.id} value={d.id}>
-            {isOnline(d, now) ? "● " : "○ "}
-            {d.name}
-            {isOnline(d, now) ? "" : " (offline)"}
+            {d.name} · {isOnline(d, now) ? "online" : `seen ${timeAgo(d.last_seen_at, new Date(now))}`}
           </option>
         ))}
       </select>
+      {target && (
+        <span className="hweb-pc__status" data-online={online || undefined}>
+          {online ? "Hodeum is running there" : "Open Hodeum on that PC to start Hodes there"}
+        </span>
+      )}
     </label>
   );
 }
@@ -105,8 +110,8 @@ function Rail({ page, onSelect, dashboard, client, email }: { page: WebPage; onS
 
 function Notice({ dashboard, email }: { dashboard: Dashboard; email?: string }) {
   const { feedback, target, devices } = dashboard;
-  const offline = target && !isOnline(target, Date.now());
-  // Missing PCs are explained up front, not only after "Start a Hode" fails.
+  // Missing PCs are explained up front, not only after "Start a Hode" fails. An offline PC is shown, quietly,
+  // under the PC picker; a Hode started there waits for it.
   const missing = !target && devices.state !== "loading" && !feedback;
   return (
     <div className="hweb-notices" aria-live="polite">
@@ -115,7 +120,6 @@ function Notice({ dashboard, email }: { dashboard: Dashboard; email?: string }) 
           {noPcMessage(devices, email)}
         </p>
       )}
-      {offline && <p className="hweb-notice" data-tone="error">{target.name} looks offline. A Hode you start now begins if Hodeum opens there within 2 minutes.</p>}
       {feedback && (
         <p className="hweb-notice" data-tone={feedback.tone}>
           {feedback.text}

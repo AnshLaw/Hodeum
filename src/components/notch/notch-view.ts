@@ -193,8 +193,11 @@ export function notchView(s: HodeState): NotchView {
   }
 }
 
-/** Cards that come with a highlight on the desktop, so they step aside when it's beneath them. */
-const PEEK_MODES = new Set<NotchMode>(["guidance", "answer"]);
+/**
+ * Cards that step aside when their highlight is beneath them. Not answers: they're said once with
+ * nothing to bring them back, so folding one away left Hodey talking behind a slim bar.
+ */
+const PEEK_MODES = new Set<NotchMode>(["guidance"]);
 
 export interface PeekContext {
   mode: NotchMode;
@@ -273,7 +276,7 @@ export interface ProviderBadge {
   variant: "local" | "enhanced";
 }
 
-/** "● Local" or "☁ Enhanced" (the glyph comes from CSS), per PRD §4.4. */
+/** "● Local" or "☁ Cloud" (the glyph comes from CSS), per PRD §4.4. */
 export function providerBadge(enhanced: boolean): ProviderBadge {
   return enhanced ? { label: COPY.enhanced, title: COPY.enhancedTitle, variant: "enhanced" } : { label: COPY.local, title: COPY.localTitle, variant: "local" };
 }

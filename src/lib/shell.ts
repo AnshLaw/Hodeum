@@ -1,6 +1,6 @@
 import type { Dock } from "../features/dock/dock";
 import type { WindowOrigin } from "../components/notch/footprint";
-import type { MonitorInfo, Rect } from "./types";
+import type { MonitorInfo, Rect, WindowRef } from "./types";
 
 /** Native window behaviour the UI needs. Tauri implements it; the browser stage simulates it in-page. */
 export interface NativeShell {
@@ -15,7 +15,13 @@ export interface NativeShell {
   notchOrigin(): Promise<WindowOrigin>;
   /** Fires when the overlay moves to another monitor (it follows the learner's app). */
   onOverlayMoved(handler: () => void): () => void;
+  /** The learner's front window (Hodeum's own windows don't count); null while none is (desktop, minimized). */
+  learnerWindow(): Promise<WindowRef | null>;
+  /** Fires when the learner's front window changes, moves or resizes. */
+  onLearnerWindow(handler: (window: WindowRef | null) => void): () => void;
   onNotchHover(handler: (inside: boolean) => void): () => void;
+  /** Fires when the learner presses a mouse button anywhere off the notch surface (to close its menus). */
+  onNotchOutsidePress(handler: () => void): () => void;
   /** Moves the notch window to a dock; side docks with `reserve` claim screen space as an app bar. */
   setDock(dock: Dock, reserve: boolean): Promise<void>;
   setNotchVisible(visible: boolean): Promise<void>;
@@ -71,7 +77,21 @@ export class BrowserShell implements NativeShell {
     return () => undefined;
   }
 
+  /** The stage's notch is a page element: a DOM listener sees presses outside it. */
+  onNotchOutsidePress(): () => void {
+    return () => undefined;
+  }
+
   onOverlayMoved(): () => void {
+    return () => undefined;
+  }
+
+  /** The stage's mock apps have no windows: its guidance is never anchored, so this never matters. */
+  async learnerWindow(): Promise<WindowRef | null> {
+    return null;
+  }
+
+  onLearnerWindow(): () => void {
     return () => undefined;
   }
 
