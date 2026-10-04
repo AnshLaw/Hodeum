@@ -226,14 +226,24 @@ export function pickOption(reply: string, options: string[]): number | undefined
 const OWN_NAME = "hodeum";
 /** Shorter names ("X") are too easily a letter or a word in a goal. */
 const MIN_NAME_CHARS = 3;
-/** A name of up to this many everyday words ("Photos", "Phone Link") must be used like an app; longer ones are names. */
-const MAX_EVERYDAY_NAME_WORDS = 2;
 /** Said right before an app's name: "in Paint", "on Discord", "using Notepad", "open Photos". */
 const BEFORE_APP = new Set("in on using use with open launch start run from into inside".split(" "));
 /** May come between that word and the name: "in the Photos app", "on my Phone Link". */
 const DETERMINERS = new Set("the my your this".split(" "));
 /** Said right after an app's name: "the Photos app", and Hinglish and Hindi postpositions ("Paint mein", "Discord pe"). */
 const AFTER_APP = new Set("app application program browser window mein me pe par se में पर पे से".split(" "));
+/** In a goal "my Dell" is the learner's own Dell: a name starting with one ("My Dell") must be written as a name. */
+const POSSESSIVES = new Set("my your our".split(" "));
+/** After a name that starts with a possessive, only these say it's the app: "the My Dell app". */
+const APP_WORDS = new Set("app application program".split(" "));
+/** People leave out an app's vendor ("Teams" for Microsoft Teams), but never "my" or "the"... */
+const VENDORS = new Set("microsoft ms google".split(" "));
+/** ...and a generic last word ("Opera" for Opera Browser, "ChatGPT" for ChatGPT Classic). */
+const GENERIC_TAILS = new Set("app application program browser classic".split(" "));
+/** Aliases for "open X" only: in a goal they're the learner's own things ("on my computer", "zip files", "my code"). */
+const OPEN_ONLY_ALIASES = new Set(["spreadsheet", "files", "my files", "this pc", "my computer", "calc", "code"]);
+/** A browser's web app ("Chrome._crx_…"): the browser gives its windows the app's id, so they go by its Start-menu name. */
+const WEB_APP_ID = /^[^\\!]+\._crx_/i;
 /** "(64bit)", "(classic)", "(work or school)": not what people call the app. */
 const QUALIFIER = /\s*\([^)]*\)/g;
 const WORD = /[\p{L}\p{M}\p{N}]+/gu;
@@ -241,17 +251,19 @@ const CAPITALISED = /^\p{Lu}/u;
 /** A name needs a letter: "365" of "Microsoft 365" is a number in a goal. */
 const LETTER = /\p{L}/u;
 
-/** One way to name an app, as words. */
+/** One way to name an app, as lowercase words. */
 interface Phrase {
   words: string[];
   /** Its whole Start-menu name, not a shortening ("ChatGPT", not "ChatGPT Classic" without "Classic"). */
   whole: boolean;
+  /** Only everyday words ("Photos", "Click to Do", "पेंट"): the goal has to use it like an app. */
+  everyday: boolean;
 }
 
 /** Where a goal names an app, in words. */
 interface Mention {
-  /** What the app's windows report as their app. */
-  app: string;
+  /** What the app's windows report as their app; undefined when Hodeum can't tell. */
+  app: string | undefined;
   start: number;
   /** One past the last word. */
   end: number;
@@ -264,34 +276,51 @@ function textWords(text: string): string[] {
 }
 
 const knownEntry = (app: InstalledApp) => KNOWN.find((known) => known.catalogId.test(app.id));
+const isEveryday = (words: string[]) => words.every((word) => COMMON_WORDS.has(word));
 
 /**
- * What the app's windows report as their app (apps/identity.rs): a known app's own name ("VS Code"), a packaged
- * app's Start-menu name, and a desktop app's without "(64bit)" and the like, since its windows go by its program's
- * description.
+ * What the app's windows report as their app (apps/identity.rs), when that's also a name Hodey can say: a known
+ * app's own name ("VS Code"); a packaged or web app's Start-menu name, since its windows carry its id; a desktop
+ * app's program description when the Start menu shows that name ("Discord", "OBS Studio" for "OBS Studio (64bit)").
+ * Undefined otherwise: WinRAR's windows say "WinRAR archiver", and a Hode would wait for "WinRAR" forever.
  */
-function windowName(app: InstalledApp): string {
+function windowName(app: InstalledApp): string | undefined {
   const known = knownEntry(app);
   if (known) return known.name;
-  return app.kind === "packaged" ? app.name : app.name.replace(QUALIFIER, "").trim();
+  if (app.kind === "packaged" || WEB_APP_ID.test(app.id)) return app.name;
+  const shown = app.name.replace(QUALIFIER, "").trim().toLowerCase();
+  return app.kind === "desktop" && app.windowName?.toLowerCase() === shown ? app.windowName : undefined;
 }
 
-/** How a goal can name the app: its whole name, the name without "Microsoft" and the like, and a known app's aliases. */
+/** A name without its vendor or generic last word: "microsoft to do" → "to do", "opera browser" → "opera". */
+function shortened(words: string[]): string[] {
+  const start = words.length > 1 && VENDORS.has(words[0]) ? 1 : 0;
+  const last = words.length - 1;
+  return words.slice(start, last > start && GENERIC_TAILS.has(words[last]) ? last : words.length);
+}
+
+/** A known app's aliases that name it in a goal too ("vs code", "whats app", "पेंट"): everyday when its own name is. */
+function aliasPhrases(app: InstalledApp): Phrase[] {
+  const known = knownEntry(app);
+  if (!known) return [];
+  const everydayName = isEveryday(textWords(known.name.toLowerCase()));
+  return known.aliases
+    .filter((alias) => !OPEN_ONLY_ALIASES.has(alias))
+    .map((alias) => textWords(alias.toLowerCase()))
+    .map((words) => ({ words, whole: false, everyday: everydayName || isEveryday(words) }));
+}
+
+/** How a goal can name the app: its whole Start-menu name, that name shortened, and a known app's aliases. */
 function phrasesOf(app: InstalledApp): Phrase[] {
-  const name = app.name.replace(QUALIFIER, " ");
-  const whole = textWords(name.toLowerCase());
-  const shortened = [normalizeName(name), ...(knownEntry(app)?.aliases ?? []).map(normalizeName)].map(textWords);
+  const whole = textWords(app.name.replace(QUALIFIER, " ").toLowerCase());
+  const short = shortened(whole);
+  const candidates: Phrase[] = [{ words: whole, whole: true, everyday: isEveryday(whole) }, { words: short, whole: false, everyday: isEveryday(short) }, ...aliasPhrases(app)];
   const phrases = new Map<string, Phrase>();
-  for (const words of [whole, ...shortened]) {
-    const text = words.join(" ");
-    if (!phrases.has(text) && text.length >= MIN_NAME_CHARS && LETTER.test(text)) phrases.set(text, { words, whole: words === whole });
+  for (const phrase of candidates) {
+    const text = phrase.words.join(" ");
+    if (!phrases.has(text) && text.length >= MIN_NAME_CHARS && LETTER.test(text)) phrases.set(text, phrase);
   }
   return [...phrases.values()];
-}
-
-/** Only everyday words: then the goal has to use it like an app. */
-function isEveryday(phrase: string[]): boolean {
-  return phrase.length <= MAX_EVERYDAY_NAME_WORDS && phrase.every((word) => COMMON_WORDS.has(word));
 }
 
 /** Capitalised where a plain word wouldn't be: not the first word, and not in text written all in capitals. */
@@ -307,6 +336,13 @@ function usedAsApp(words: string[], lower: string[], start: number, end: number)
   return cued || AFTER_APP.has(lower[end] ?? "") || capitalisedMidSentence(words, start, end);
 }
 
+/** Whether the phrase at `start` names the app: anywhere, or for everyday words only where they're used like one. */
+function namesApp(phrase: Phrase, words: string[], lower: string[], start: number): boolean {
+  const end = start + phrase.words.length;
+  if (POSSESSIVES.has(phrase.words[0])) return capitalisedMidSentence(words, start, end) || APP_WORDS.has(lower[end] ?? "");
+  return !phrase.everyday || usedAsApp(words, lower, start, end);
+}
+
 /** Where `phrase` occurs in `lower` as whole words. */
 function startsOf(lower: string[], phrase: string[]): number[] {
   const starts: number[] = [];
@@ -318,10 +354,10 @@ function startsOf(lower: string[], phrase: string[]): number[] {
 
 function mentionsOf(app: InstalledApp, words: string[], lower: string[]): Mention[] {
   const name = windowName(app);
-  return phrasesOf(app).flatMap(({ words: phrase, whole }) =>
-    startsOf(lower, phrase)
-      .filter((start) => !isEveryday(phrase) || usedAsApp(words, lower, start, start + phrase.length))
-      .map((start) => ({ app: name, start, end: start + phrase.length, whole })),
+  return phrasesOf(app).flatMap((phrase) =>
+    startsOf(lower, phrase.words)
+      .filter((start) => namesApp(phrase, words, lower, start))
+      .map((start) => ({ app: name, start, end: start + phrase.words.length, whole: phrase.whole })),
   );
 }
 
@@ -329,17 +365,23 @@ function mentionsOf(app: InstalledApp, words: string[], lower: string[]): Mentio
 const within = (inner: Mention, outer: Mention) => outer.start <= inner.start && inner.end <= outer.end && outer.end - outer.start > inner.end - inner.start;
 const sameSpan = (a: Mention, b: Mention) => a.start === b.start && a.end === b.end;
 
-/** The mentions that say which app: none inside a longer one, and a whole name over a shortening of the same words. */
+/**
+ * The mentions that say which app: none inside a longer one; of apps named by the same words, one whose windows
+ * Hodeum can tell ("Microsoft Teams" over "Microsoft Teams (work or school)"), then a whole name over a shortening
+ * ("ChatGPT" over "ChatGPT Classic").
+ */
 function deciding(mentions: Mention[]): Mention[] {
   const outer = mentions.filter((mention) => !mentions.some((other) => within(mention, other)));
-  return outer.filter((mention) => mention.whole || !outer.some((other) => other.whole && sameSpan(other, mention)));
+  const told = outer.filter((mention) => mention.app !== undefined || !outer.some((other) => other.app !== undefined && sameSpan(other, mention)));
+  return told.filter((mention) => mention.whole || !told.some((other) => other.whole && sameSpan(other, mention)));
 }
 
 /**
- * The installed app a goal names ("send a message on Discord" → "Discord"), as its windows report it, or
- * undefined when it names none or several. The whole name must be there as words; a name of everyday words
- * ("Photos", "Phone Link") counts only when used like an app: "in Photos", "open Photos", "the Photos app",
- * "Photos mein", or capitalised mid-sentence.
+ * The installed app a goal names ("send a message on Discord" → "Discord"), as its windows report it. Undefined
+ * when it names none, several, or one whose windows go by a name Hodey can't say. The whole name must be there
+ * as words (or without its vendor, or a known app's alias); a name of everyday words ("Photos", "Click to Do")
+ * counts only when used like an app: "in Photos", "open Photos", "the Photos app", "Photos mein", or capitalised
+ * mid-sentence.
  */
 export function appNamedIn(goal: string, catalog: InstalledApp[]): string | undefined {
   const words = textWords(goal);
@@ -348,4 +390,3 @@ export function appNamedIn(goal: string, catalog: InstalledApp[]): string | unde
   const names = new Set(deciding(mentions).map((mention) => mention.app));
   return names.size === 1 ? [...names][0] : undefined;
 }
-

@@ -1,9 +1,13 @@
 /**
- * Everyday English words found in app names ("Photos", "Phone Link", "Teams", "Zoom", "To Do"). A goal that uses
- * them ("take photos", "zoom in", "how to do") isn't naming the app unless it says so ("in Photos"). Lowercase.
- * Not a dictionary: a word missing here makes a name count as a name wherever it appears.
+ * Everyday English words found in app names ("Photos", "Phone Link", "Teams", "Zoom", "Click to Do"). A goal that
+ * uses them ("take photos", "zoom in", "what do I click to do") isn't naming the app unless it says so ("in Photos").
+ * Lowercase. Not a dictionary: a word missing here makes a name count as a name wherever it appears.
  */
 const GROUPS = [
+  // Function words, and the verbs of a how-to goal.
+  "a an and or of for the in on at by with from into my your our this that it is are be how what which why when where",
+  "click tap type press select send share save copy paste print draw write read edit make create add remove delete change",
+  "set turn switch join call talk see look watch listen learn show tell ask go take use work",
   // Windows' own apps and tools.
   "mail calendar people photos photo camera clock alarms alarm maps map weather news money sports tips tip settings setting store",
   "paint terminal calculator media player music movies movie tv films film video videos phone link sticky notes note voice sound",
