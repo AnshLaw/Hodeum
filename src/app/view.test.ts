@@ -33,8 +33,8 @@ describe("app view helpers", () => {
   it("suggests untried packs first and hides mastered ones", () => {
     const [excel, zip] = TASK_PACKS;
     const mastered = zip.steps.map((s) => ({ ...skillRecord("independent", s.skill), status: "mastered" as const }));
-    expect(suggestedPacks(TASK_PACKS, mastered).map((p) => p.id)).toEqual([excel.id]);
-    expect(suggestedPacks(TASK_PACKS, []).map((p) => p.id)).toEqual([excel.id, zip.id]);
+    expect(suggestedPacks([excel, zip], mastered).map((p) => p.id)).toEqual([excel.id]);
+    expect(suggestedPacks([excel, zip], []).map((p) => p.id)).toEqual([excel.id, zip.id]);
   });
 
   it("titles skills within their app", () => {
