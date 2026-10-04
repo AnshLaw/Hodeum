@@ -146,3 +146,16 @@ describe("LocalReasoningProvider", () => {
     await expect(neither.reason(ctx({ step: undefined }))).rejects.toThrow(/No task step/);
   });
 });
+
+describe("phone prompt", () => {
+  it("tells the model it is looking at a mirrored iPhone", () => {
+    const [system] = buildMessages(ctx({ pack: { ...PACK, surface: "phone" } }), [], FRAME) as [{ content: string }, unknown];
+    expect(system.content).toContain("iPhone");
+    expect(system.content).not.toContain("inside Windows");
+  });
+
+  it("keeps the Windows prompt for desktop packs", () => {
+    const [system] = buildMessages(ctx(), [], FRAME) as [{ content: string }, unknown];
+    expect(system.content).toContain("inside Windows");
+  });
+});

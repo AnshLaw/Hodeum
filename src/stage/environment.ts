@@ -14,15 +14,16 @@ import { WebSpeechTTSProvider } from "../providers/web-speech-tts";
 import { TASK_PACKS } from "../task-packs";
 import { ExcelScene } from "./scenes/excel";
 import { ExplorerScene } from "./scenes/explorer";
+import { IphoneScene } from "./scenes/iphone";
 
-export type StageAppId = "excel" | "explorer";
+export type StageAppId = "excel" | "explorer" | "iphone";
 
 /** About what a UI Automation read plus reasoning takes on the real desktop. */
 const STAGE_LOOK_MS = 650;
 const STAGE_LIMITATION = "Chat uses the local vision model, which runs in the Hodeum desktop app. The practice stage has no model.";
 
 export interface StageEnvironment {
-  apps: { excel: ExcelScene; explorer: ExplorerScene };
+  apps: { excel: ExcelScene; explorer: ExplorerScene; iphone: IphoneScene };
   bus: LocalBus;
   shell: BrowserShell;
   perception: MockPerception;
@@ -36,7 +37,7 @@ export interface StageEnvironment {
 
 /** Wires the real runtime, history, and app to scripted practice apps, all inside one browser page. */
 export function createStageEnvironment(): StageEnvironment {
-  const apps = { excel: new ExcelScene(), explorer: new ExplorerScene() };
+  const apps = { excel: new ExcelScene(), explorer: new ExplorerScene(), iphone: new IphoneScene() };
   let current: MockApp = apps.excel;
   const bus = new LocalBus();
   const perception = new MockPerception(() => current, STAGE_LOOK_MS);

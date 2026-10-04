@@ -32,3 +32,10 @@ supabase/.temp/
 dist-site/
 !site/public/*.png
 .vercel/
+
+# iOS app: generated project and build output (built in CI, see .github/workflows/ios.yml)
+ios/Hodeum.xcodeproj/
+ios/build/
+ios/dist/
+ios/HodeyCore/.build/
+*.ipa

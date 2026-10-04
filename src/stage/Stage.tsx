@@ -2,22 +2,33 @@ import { useEffect, useReducer, useState } from "react";
 import { StageKeys, hodeyKeySetting } from "../lib/keys";
 import type { Bus } from "../lib/bus";
 import type { BrowserShell } from "../lib/shell";
+import type { Surface } from "../lib/types";
 import type { MouseButton } from "../providers/mock-perception";
 import { Notch } from "../components/notch/Notch";
 import { GuidanceOverlay } from "../components/overlay/GuidanceOverlay";
 import { HodeumMark } from "../components/shared/icons";
 import { TASK_PACKS } from "../task-packs";
-import { ExcelBackdrop, ExplorerBackdrop } from "./Backdrops";
+import { ExcelBackdrop, ExplorerBackdrop, IphoneBackdrop } from "./Backdrops";
 import { MockAppView } from "./MockAppView";
 import { STAGE_OPEN_APP_EVENT, StageAppWindow } from "./StageAppWindow";
 import type { StageAppId, StageEnvironment } from "./environment";
 import { DESKTOP } from "./scenes/layout";
+import { PHONE_FRAME } from "./scenes/iphone";
 import "./stage.css";
 
 const APP_TABS: { id: StageAppId; label: string }[] = [
   { id: "excel", label: "Excel" },
   { id: "explorer", label: "File Explorer" },
+  { id: "iphone", label: "iPhone" },
 ];
+/** The stage's iPhone lives on the page, so phone highlights draw on the page overlay here. */
+const STAGE_SURFACES: Surface[] = ["windows", "phone"];
+
+function backdropFor(appId: StageAppId, env: StageEnvironment) {
+  if (appId === "excel") return <ExcelBackdrop scene={env.apps.excel} />;
+  if (appId === "iphone") return <IphoneBackdrop scene={env.apps.iphone} />;
+  return <ExplorerBackdrop />;
+}
 
 /** Mirrors the native Hodey key in the browser: Hodey key + P, H or A (no hold-to-talk: no voice here). */
 function useStageHotkeys(bus: Bus, shell: BrowserShell): void {
@@ -86,11 +97,11 @@ export function Stage({ env }: { env: StageEnvironment }) {
         </span>
       </header>
       <main className="stage-desktop" style={{ width: DESKTOP.width, height: DESKTOP.height }}>
-        <MockAppView app={app} onPress={press}>
-          {appId === "excel" ? <ExcelBackdrop scene={env.apps.excel} /> : <ExplorerBackdrop />}
+        <MockAppView app={app} onPress={press} frame={appId === "iphone" ? PHONE_FRAME : undefined}>
+          {backdropFor(appId, env)}
         </MockAppView>
         <div className="stage-layer stage-layer--overlay">
-          <GuidanceOverlay bus={env.bus} shell={env.shell} />
+          <GuidanceOverlay bus={env.bus} shell={env.shell} surfaces={STAGE_SURFACES} />
         </div>
         <StageAppWindow env={env} />
         <div className="stage-layer stage-layer--notch">

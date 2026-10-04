@@ -2,7 +2,7 @@ import { COPY } from "../../lib/copy";
 import { MODE_COPY } from "../../lib/modes";
 import { currentStep, type HodeState } from "../../features/hode/model";
 
-export type NotchSize = "idle" | "orb" | "compact" | "guidance" | "lesson" | "success";
+export type NotchSize = "idle" | "orb" | "compact" | "guidance" | "lesson" | "success" | "phone";
 export type NotchMode = "idle" | "goal" | "status" | "guidance" | "answer" | "annotate" | "paused" | "error" | "success";
 export type NotchControl =
   | "start"
@@ -36,9 +36,9 @@ export interface NotchView {
 }
 
 /** Pill widths in CSS px, per PRD §8.2. Height follows content. */
-export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, orb: 44, compact: 380, guidance: 496, lesson: 500, success: 340 };
+export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, orb: 44, compact: 380, guidance: 496, lesson: 500, success: 340, phone: 580 };
 
-const EXPANDED: NotchSize[] = ["guidance", "lesson", "success"];
+const EXPANDED: NotchSize[] = ["guidance", "lesson", "success", "phone"];
 const QUIET_LEVELS = new Set(["hint", "observe", "independent"]);
 
 /** Longest learner question shown above an answer before it's shortened. */
@@ -152,11 +152,14 @@ export interface IslandContext {
   peek: boolean;
   /** The microphone is on: the pill and orb open into a bar showing what Hodey hears. */
   listening: boolean;
+  /** The iPhone mirror is open: the notch grows to hold it beside Hodey's guidance. */
+  phone: boolean;
 }
 
 /** The shape the top notch takes right now: the view's size, adjusted for hover, menu and peek. */
 export function islandSize(view: NotchView, context: IslandContext): NotchSize {
   if (context.menuOpen) return "lesson";
+  if (context.phone) return "phone";
   if (context.listening && (view.size === "idle" || view.size === "orb")) return "compact";
   if (view.size === "orb") return context.settled && !context.hovered ? "orb" : "compact";
   if (context.peek) return "compact";

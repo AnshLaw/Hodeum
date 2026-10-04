@@ -39,7 +39,15 @@ function locateTarget(step: TaskStep, elements: UiElement[], focus?: Rect): Acti
 function guideStep(context: TeachingContext, step: TaskStep): TeachingAction {
   const level = context.assistanceLevel;
   const target = locateTarget(step, context.observation.elements, context.focusRegion?.shape.bounds);
-  if (!target) return { kind: "clarify", speech: spoken(context.language).clarify, skill: step.skill, assistanceLevel: level };
+  if (!target) {
+    const phone = context.pack?.surface === "phone";
+    // On the phone the learner has usually left the page the target is on: the correction still helps.
+    // On Windows, clarify lets the vision model try to locate the target before Hodey gives up on it.
+    if (phone && context.correction) return { kind: "correct", speech: context.correction, skill: step.skill, assistanceLevel: level };
+    const words = spoken(context.language);
+    const speech = phone ? words.clarifyPhone : words.clarify;
+    return { kind: "clarify", speech, skill: step.skill, assistanceLevel: level };
+  }
   return {
     kind: context.correction ? "correct" : "guide",
     speech: context.correction ?? step.speech[level],

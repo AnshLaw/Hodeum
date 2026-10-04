@@ -93,5 +93,47 @@
         "corrections": []
       }
     }
+  },
+  "iphone-dark-mode": {
+    "title": "iPhone पर Dark Mode on करना",
+    "prerequisites": [
+      "अपने iPhone को Hodey में mirror कीजिए (menu → Show iPhone) और Light mode में Home Screen से start कीजिए।"
+    ],
+    "steps": {
+      "open-settings": {
+        "objective": "Settings खोलिए",
+        "speech": {
+          "demonstrate": "अपने iPhone पर Settings पर tap कीजिए, जो grey gear है। मैंने उसे highlight कर दिया है।",
+          "guide": "Settings पर tap कीजिए।",
+          "hint": "Phone के सारे options किस app में होते हैं?"
+        },
+        "explain": "iPhone का हर option Settings में होता है, screen कैसी दिखे ये भी।",
+        "corrections": []
+      },
+      "open-display": {
+        "objective": "Display & Brightness खोलिए",
+        "speech": {
+          "demonstrate": "थोड़ा नीचे scroll कीजिए और Display & Brightness पर tap कीजिए।",
+          "guide": "Display & Brightness पर tap कीजिए।",
+          "hint": "Screen वाली setting ढूँढिए।"
+        },
+        "explain": "Display & Brightness में light और dark look, text size और brightness होते हैं।",
+        "corrections": [
+          "ये Wallpaper है। वापस जाने के लिए top left में Settings पर tap कीजिए, फिर Display & Brightness चुनिए।"
+        ]
+      },
+      "choose-dark": {
+        "objective": "Dark चुनिए",
+        "speech": {
+          "demonstrate": "Appearance के नीचे Dark पर tap कीजिए। पूरी screen dark हो जाएगी।",
+          "guide": "Dark पर tap कीजिए।",
+          "hint": "Appearance में दो choices हैं। रात में आँखों के लिए कौन सी आसान है?"
+        },
+        "explain": "Dark Mode में dark background पर light text होता है, जो कम light में आँखों के लिए आसान है।",
+        "corrections": [
+          "इससे Text Size खुल गया। वापस जाइए; Dark सबसे ऊपर Appearance में है।"
+        ]
+      }
+    }
   }
 }

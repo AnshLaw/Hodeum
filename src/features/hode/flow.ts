@@ -48,7 +48,8 @@ export function sameApp(observed: string, expected: string): boolean {
 /** The learner is in another app: say so and point at nothing until they're back. */
 export function waitForApp(s: HodeState, observation: ScreenObservation): Transition {
   const app = s.app ?? "";
-  const speech = spoken(s.language).switchToApp(app);
+  const words = spoken(s.language);
+  const speech = s.pack?.surface === "phone" ? words.connectPhone : words.switchToApp(app);
   const action: TeachingAction = { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
   if (s.waitingForApp === app) return { state: { ...s, observation }, effects: [] };
   const effects: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "say", text: speech }];
@@ -125,17 +126,23 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   if (action.kind === "answer") return showAnswer(withNotice, action);
   if (action.kind === "complete" && s.open) return finishOpenHode(withNotice, action);
   const band = action.target ? confidenceBand(action.target.confidence) : "uncertain";
+  // A correction is worth saying even when its target isn't on screen (the learner left the page).
+  if (band === "uncertain" && action.kind === "correct") return showGuidance(withNotice, { ...action, target: undefined });
   if (band === "uncertain" && !s.reobserved) {
     return { state: { ...withNotice, phase: "observing", reobserved: true }, effects: [{ type: "observe" }] };
   }
-  const shown: TeachingAction = band === "uncertain" ? { ...action, kind: "clarify", speech: spoken(s.language).clarify, target: undefined } : action;
+  const words = spoken(s.language);
+  const clarify = s.pack?.surface === "phone" ? words.clarifyPhone : words.clarify;
+  const shown: TeachingAction = band === "uncertain" ? { ...action, kind: "clarify", speech: clarify, target: undefined } : action;
   return showGuidance(withNotice, shown);
 }
 
 function showGuidance(s: HodeState, action: TeachingAction): Transition {
   const primitives = overlayFor(action, pinFor(s));
   const effects: HodeEffect[] = [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }];
-  if (action.speech !== "") effects.push({ type: "say", text: action.speech });
+  // On the phone every scroll re-locates the target; saying the same sentence again would nag.
+  const repeat = s.pack?.surface === "phone" && action.speech === s.action?.speech;
+  if (action.speech !== "" && !repeat) effects.push({ type: "say", text: action.speech });
   effects.push({ type: "startStuckTimer", ms: STUCK_MS });
   return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false }, effects };
 }

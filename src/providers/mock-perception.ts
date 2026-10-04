@@ -1,5 +1,5 @@
 import { intersects } from "../lib/coords";
-import type { Rect, ScreenObservation, UiElement } from "../lib/types";
+import type { Rect, ScreenObservation, ScreenTone, UiElement } from "../lib/types";
 import type { PerceptionAdapter } from "./interfaces";
 
 export type MouseButton = "left" | "right";
@@ -9,6 +9,8 @@ export interface MockScene {
   windowTitle: string;
   /** In paint order: containers before their children. */
   elements: UiElement[];
+  /** Phone scenes report their brightness, as the OCR mirror does. */
+  tone?: ScreenTone;
 }
 
 /** A scripted practice app with real state transitions, standing in for UI Automation. */
@@ -55,6 +57,6 @@ export class MockPerception implements PerceptionAdapter {
   private snapshot(region?: Rect): ScreenObservation {
     const scene = this.currentApp().snapshot();
     const elements = region ? scene.elements.filter((e) => intersects(e.bounds, region)) : scene.elements;
-    return { app: scene.app, windowTitle: scene.windowTitle, elements, at: Date.now() };
+    return { app: scene.app, windowTitle: scene.windowTitle, elements, at: Date.now(), tone: scene.tone };
   }
 }

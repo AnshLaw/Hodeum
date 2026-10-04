@@ -243,7 +243,7 @@ npm test                         # vitest: unit + end-to-end teaching loop
 cd src-tauri; cargo test --lib   # Rust geometry / hit-test
 ```
 
-`npm run dev` serves the browser practice stage (`index.html`): real notch, overlay and runtime driving scripted Excel / File Explorer mocks. Use it to rehearse Gate 6 without native perception.
+`npm run dev` serves the browser practice stage (`index.html`): real notch, overlay and runtime driving scripted Excel / File Explorer mocks. Use it to rehearse Gate 6 without native perception. Its iPhone tab rehearses the Dark Mode phone Hode; real iPhone mirroring setup is in `docs/iphone-mirroring.md`.
 
 ## Validation gates
 

@@ -28,8 +28,8 @@ impl PxRect {
     }
 }
 
-/// Logical size of the top notch window; the pill animates inside it.
-pub const NOTCH_WINDOW: (f64, f64) = (600.0, 340.0);
+/// Logical size of the top notch window; the pill animates inside it. Tall enough for the iPhone mirror panel.
+pub const NOTCH_WINDOW: (f64, f64) = (600.0, 620.0);
 /// Logical width of the side sidebar window.
 pub const SIDEBAR_WIDTH: f64 = 360.0;
 /// Drops in the outer thirds of the monitor dock to that side; the middle docks to the top.
@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn centres_the_notch_on_the_full_monitor() {
-        assert_eq!(dock_rect(Dock::Top, MONITOR, WORK, 1.25), PxRect { x: 1920 + 825, y: 0, width: 750, height: 425 });
+        assert_eq!(dock_rect(Dock::Top, MONITOR, WORK, 1.25), PxRect { x: 1920 + 825, y: 0, width: 750, height: 775 });
     }
 
     #[test]

@@ -10,6 +10,7 @@ const signalSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("element_absent"), names }).strict(),
   z.object({ kind: z.literal("element_selected"), names }).strict(),
   z.object({ kind: z.literal("window_title_contains"), text: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal("screen_tone"), tone: z.enum(["dark", "light"]), names: names.optional() }).strict(),
 ]);
 
 const speechSchema = z
@@ -41,6 +42,7 @@ const packSchema = z
     id: z.string().min(1),
     title: z.string().min(1),
     app: z.string().min(1),
+    surface: z.enum(["windows", "phone"]).optional(),
     goalPhrases: names,
     prerequisites: z.array(z.string().min(1)),
     steps: z.array(stepSchema).min(1),

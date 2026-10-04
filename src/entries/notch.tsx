@@ -19,6 +19,13 @@ import { MemorySettingsStore, type SettingsStore } from "../data/settings";
 import { openDatabase } from "../data/sql";
 import { SqliteLearningStore, SqliteSettingsStore } from "../data/sqlite-stores";
 import { NativePerception } from "../providers/native-perception";
+import { SurfacePerception } from "../providers/surface-perception";
+import { AirPlayPhoneSource } from "../features/phone/airplay-source";
+import { CameraPhoneSource } from "../features/phone/camera-source";
+import { FrameCanvas } from "../features/phone/frame-canvas";
+import { PhoneMirror } from "../features/phone/phone-mirror";
+import { PhonePerception, type OcrSegment } from "../features/phone/phone-perception";
+import { loadPhonePrefs } from "../features/phone/prefs";
 import { LocalReasoningProvider } from "../providers/local-reasoner";
 import { TaskPackReasoningProvider } from "../providers/task-pack-reasoner";
 import { QwenVisionProvider } from "../providers/vision/qwen-vision-provider";
@@ -46,19 +53,30 @@ async function openStores(): Promise<Stores> {
   }
 }
 
+/**
+ * Perception for both surfaces: UI Automation on the desktop, OCR on the mirrored iPhone. The running
+ * Hode's pack picks one; screen captures for the vision model follow the same choice.
+ */
+function createPerception(activity: ActivityTracker) {
+  const native = new NativePerception({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
+  const mirror = new PhoneMirror(new FrameCanvas(), (kind) =>
+    kind === "camera" ? new CameraPhoneSource(() => loadPhonePrefs().cameraLabel) : new AirPlayPhoneSource(invoke),
+  );
+  const phone = new PhonePerception(mirror, (png) => invoke<OcrSegment[]>("ocr_frame", { png }));
+  const surfaces = new SurfacePerception({ windows: native, phone });
+  const capture = () => activity.track("screen", () => (surfaces.current() === "phone" ? mirror.grabFrame() : invoke<CapturedFrame>("capture_active_window")));
+  return { mirror, surfaces, perception: withScreenActivity(surfaces, activity), capture };
+}
+
 async function boot(): Promise<void> {
   const bus = new TauriBus();
   const { learning, settings, notice } = await openStores();
   const activity = new ActivityTracker();
   mirrorRemoteActivity(bus, activity);
   connectAppearance(settings, bus, document.documentElement);
-  const native = new NativePerception({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
-  const perception = withScreenActivity(native, activity);
+  const { mirror, surfaces, perception, capture } = createPerception(activity);
   const vision = new TauriVisionStatus();
-  const qwen = new QwenVisionProvider({
-    connection: () => connectionOf(vision.current()),
-    capture: () => activity.track("screen", () => invoke<CapturedFrame>("capture_active_window")),
-  });
+  const qwen = new QwenVisionProvider({ connection: () => connectionOf(vision.current()), capture });
   const local = new LocalReasoningProvider(new TaskPackReasoningProvider(), qwen, () => vision.current().state === "ready");
   /** Talk back and forth (Settings > Voice); updated when settings load or change. */
   let conversation = true;
@@ -68,7 +86,12 @@ async function boot(): Promise<void> {
   showMicDot(voice.speech, activity);
   showStandbyDot(voice.status, activity);
   const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts: voice.tts });
-  runtime.subscribe(() => native.setWatching(WATCHING_PHASES.includes(runtime.getState().phase)));
+  // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
+  runtime.subscribe(() => {
+    const state = runtime.getState();
+    surfaces.setSurface(state.pack?.surface ?? "windows");
+    surfaces.setWatching(WATCHING_PHASES.includes(state.phase));
+  });
   connectHodeBridge({
     runtime,
     bus,
@@ -103,7 +126,7 @@ async function boot(): Promise<void> {
     openAllowed: () => vision.current().state === "ready",
   });
   connectAccount({ bus, settings, activity, invoke, listen: (event, handler) => subscribeTauri(event, handler) }).catch((error) => console.error("Accounts didn't start; Hodeum stays local", error));
-  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} />);
+  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} phone={mirror} />);
 }
 
 boot().catch((error) => console.error("Hodey failed to start", error));

@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
 
-use crate::dock::geometry::PxRect;
+use crate::dock::geometry::{PxRect, NOTCH_WINDOW};
 use crate::perception::foreground::{root_window, window_pid};
 
 use crate::hit_test::{HitRect, NotchHitRect};
@@ -14,10 +14,6 @@ use crate::hit_test::{HitRect, NotchHitRect};
 pub const NOTCH: &str = "main_notch";
 pub const OVERLAY: &str = "guidance_overlay";
 
-/// Logical size of the notch window. The pill animates inside it; the rest is click-through,
-/// so the window never has to resize per state (which is what makes transparent windows stutter).
-const NOTCH_WINDOW_WIDTH: f64 = 600.0;
-const NOTCH_WINDOW_HEIGHT: f64 = 340.0;
 
 /// A monitor in physical pixels, mirrored by `MonitorInfo` in `src/lib/types.ts`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -59,8 +55,10 @@ fn monitor_of(win: &WebviewWindow) -> Result<MonitorInfo, String> {
 }
 
 fn place_notch(notch: &WebviewWindow, monitor: &MonitorInfo) -> tauri::Result<()> {
-    let width = (NOTCH_WINDOW_WIDTH * monitor.scale).round() as u32;
-    let height = (NOTCH_WINDOW_HEIGHT * monitor.scale).round() as u32;
+    // The pill animates inside a fixed window and the rest is click-through, so the window never
+    // resizes per state (which is what makes transparent windows stutter).
+    let width = (NOTCH_WINDOW.0 * monitor.scale).round() as u32;
+    let height = (NOTCH_WINDOW.1 * monitor.scale).round() as u32;
     notch.set_size(PhysicalSize::new(width, height))?;
     let (x, y) = notch_origin(monitor, width);
     notch.set_position(PhysicalPosition::new(x, y))

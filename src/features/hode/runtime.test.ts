@@ -24,7 +24,11 @@ function setup(reasoners: ReasoningProvider[] = [new TaskPackReasoningProvider()
   const perception = new MockPerception(() => scene);
   const bus = new LocalBus();
   const overlays: string[] = [];
-  bus.on("overlay:render", ({ primitives }) => overlays.push(primitives.map((p) => p.kind).join("+")));
+  const surfaces: string[] = [];
+  bus.on("overlay:render", ({ primitives, surface }) => {
+    overlays.push(primitives.map((p) => p.kind).join("+"));
+    surfaces.push(surface ?? "unset");
+  });
   bus.on("overlay:clear", () => overlays.push("clear"));
   const spoken: string[] = [];
   const tts: TTSProvider = {
@@ -49,7 +53,7 @@ function setup(reasoners: ReasoningProvider[] = [new TaskPackReasoningProvider()
       await settle();
     }
   };
-  return { scene, bus, runtime, overlays, spoken, start, act, state: () => runtime.getState() };
+  return { scene, bus, runtime, overlays, surfaces, spoken, start, act, state: () => runtime.getState() };
 }
 
 const failing: ReasoningProvider = { id: "gemini", reason: () => Promise.reject(new Error("quota")), healthCheck: async () => false };
@@ -60,6 +64,12 @@ afterEach(() => {
 });
 
 describe("HodeRuntime end to end", () => {
+  it("tags Windows guidance with the windows surface", async () => {
+    const h = setup();
+    await h.start();
+    expect(h.surfaces.at(-1)).toBe("windows");
+  });
+
   it("teaches the Excel PivotTable Hode, correcting a wrong tab", async () => {
     const h = setup();
     await h.start();

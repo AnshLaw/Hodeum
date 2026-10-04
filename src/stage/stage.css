@@ -346,3 +346,9 @@ body {
   border-radius: 12px;
   box-shadow: 0 30px 80px rgb(0 0 0 / 0.55);
 }
+
+.mock-window--iphone { border-radius: 36px; overflow: hidden; }
+.mock-window--iphone .mock-window__title { display: none; }
+.iphone-screen { position: absolute; border-radius: 36px; background: #f2f2f7; transition: background 300ms ease; }
+.iphone-screen[data-tone="dark"] { background: #000; }
+.iphone-screen[data-tone="dark"] ~ .mock-el span { color: #fff; }

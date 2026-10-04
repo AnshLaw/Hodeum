@@ -66,6 +66,9 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
     const corrected = escalateState(next, { correction: mistake.correction, countsAsMistake: true });
     return withLeadingEffects(requestReason(corrected), [CANCEL_TIMER]);
   }
+  // On the phone, screen changes are mostly navigation (scrolling, going back), not mistakes; known
+  // mistakes are caught above and hesitation by the stuck timer. Re-locate so the highlight follows.
+  if (s.pack?.surface === "phone") return withLeadingEffects(requestReason(next), [CANCEL_TIMER]);
   const wrongActions = s.wrongActions + 1;
   if (wrongActions >= MAX_WRONG_ACTIONS) {
     return withLeadingEffects(requestReason(escalateState(next, { countsAsMistake: true })), [CANCEL_TIMER]);

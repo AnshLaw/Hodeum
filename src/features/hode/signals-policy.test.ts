@@ -116,3 +116,26 @@ describe("overlayFor", () => {
     expect(kinds(action, INSERT_BOUNDS)).toEqual(["pin"]);
   });
 });
+
+describe("screen_tone signal", () => {
+  const observation = (tone?: "dark" | "light") => ({ app: "iPhone", windowTitle: "", elements: [], at: 0, tone });
+
+  it("holds when the screen's tone matches", () => {
+    expect(evaluateSignal({ kind: "screen_tone", tone: "dark" }, observation("dark"))).toBe(true);
+  });
+
+  it("fails for the other tone or an unknown tone", () => {
+    expect(evaluateSignal({ kind: "screen_tone", tone: "dark" }, observation("light"))).toBe(false);
+    expect(evaluateSignal({ kind: "screen_tone", tone: "dark" }, observation())).toBe(false);
+  });
+});
+
+describe("screen_tone with names", () => {
+  const appearance = { id: "a", name: "APPEARANCE", role: "text", bounds: { x: 0, y: 0, width: 1, height: 1 }, source: "ocr" as const, confidence: 0.9 };
+  const signal = { kind: "screen_tone" as const, tone: "dark" as const, names: ["Appearance"] };
+
+  it("needs the named text too, so a black lock screen isn't success", () => {
+    expect(evaluateSignal(signal, { app: "iPhone", windowTitle: "", elements: [], at: 0, tone: "dark" })).toBe(false);
+    expect(evaluateSignal(signal, { app: "iPhone", windowTitle: "", elements: [appearance], at: 0, tone: "dark" })).toBe(true);
+  });
+});

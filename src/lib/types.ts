@@ -32,7 +32,13 @@ export interface MonitorInfo {
   scale: number;
 }
 
-export type ElementSource = "uia" | "detector" | "vlm" | "mock";
+export type ElementSource = "uia" | "detector" | "vlm" | "mock" | "ocr";
+
+/** Where an app lives: the Windows desktop, or the learner's iPhone mirrored into the notch. */
+export type Surface = "windows" | "phone";
+
+/** Overall screen brightness; only reported where pixels are read (the phone mirror). */
+export type ScreenTone = "dark" | "light";
 
 export interface UiElement {
   id: string;
@@ -50,13 +56,16 @@ export interface ScreenObservation {
   windowTitle: string;
   elements: UiElement[];
   at: number;
+  tone?: ScreenTone;
 }
 
 export type StateSignal =
   | { kind: "element_visible"; names: string[] }
   | { kind: "element_absent"; names: string[] }
   | { kind: "element_selected"; names: string[] }
-  | { kind: "window_title_contains"; text: string };
+  | { kind: "window_title_contains"; text: string }
+  /** `names` must be visible too, so a dark lock screen or a black frame never counts. */
+  | { kind: "screen_tone"; tone: ScreenTone; names?: string[] };
 
 export interface TaskStep {
   id: string;
@@ -73,6 +82,8 @@ export interface TaskPack {
   id: string;
   title: string;
   app: string;
+  /** Defaults to "windows". Phone packs are taught on the mirrored iPhone, read by OCR. */
+  surface?: Surface;
   goalPhrases: string[];
   prerequisites: string[];
   steps: TaskStep[];
