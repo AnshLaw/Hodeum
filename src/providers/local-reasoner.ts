@@ -1,5 +1,5 @@
 import type { TeachingAction, TeachingContext } from "../lib/types";
-import type { ReasoningHooks, ReasoningProvider } from "./interfaces";
+import { ReasonerSkipped, type ReasoningHooks, type ReasoningProvider } from "./interfaces";
 
 /**
  * Cheapest reliable signal first (PRD §10): the deterministic task-pack planner answers whenever it
@@ -28,11 +28,33 @@ export class LocalReasoningProvider implements ReasoningProvider {
     if (!this.visionReady()) return orThrow(planned, plannerError);
     hooks?.onThinking?.();
     try {
-      return await this.vision.reason(context);
+      return await this.vision.reason(context, hooks);
     } catch (error) {
+      hooks?.signal?.throwIfAborted();
       console.error("Local vision model failed; using the task-pack answer", error);
       return orThrow(planned, plannerError ?? error);
     }
+  }
+
+  async healthCheck(): Promise<boolean> {
+    return this.planner.healthCheck();
+  }
+}
+
+/**
+ * The task-pack planner on its own, ahead of every slower reasoner (the cloud, the vision model): a
+ * lesson step that UI Automation grounds is answered in a millisecond; anything else is left to them.
+ */
+export class GroundedPlannerProvider implements ReasoningProvider {
+  readonly id = "local-task-pack-first";
+
+  constructor(private readonly planner: ReasoningProvider) {}
+
+  async reason(context: TeachingContext): Promise<TeachingAction> {
+    if (!context.step) throw new ReasonerSkipped("no lesson step: the planner has nothing to ground");
+    const planned = await this.planner.reason(context);
+    if (needsVision(planned)) throw new ReasonerSkipped("the planner can't ground this; a reasoner that sees the screen answers");
+    return planned;
   }
 
   async healthCheck(): Promise<boolean> {

@@ -1,7 +1,6 @@
 import { errorMessage } from "../lib/errors";
 import type { TeachingAction, TeachingContext } from "../lib/types";
-import { CloudSkipped } from "./cloud/gated";
-import type { ReasoningHooks, ReasoningProvider } from "./interfaces";
+import { ReasonerSkipped, type ReasoningHooks, type ReasoningProvider } from "./interfaces";
 
 export interface RoutedAction {
   action: TeachingAction;
@@ -13,10 +12,13 @@ export interface RoutedAction {
 export async function reasonWithFallback(providers: ReasoningProvider[], context: TeachingContext, hooks?: ReasoningHooks): Promise<RoutedAction> {
   const failures: string[] = [];
   for (const provider of providers) {
+    // Called off (the Hode moved on): trying the next provider would only waste its time.
+    hooks?.signal?.throwIfAborted();
     try {
       return { action: await provider.reason(context, hooks), failures };
     } catch (error) {
-      if (error instanceof CloudSkipped) continue;
+      hooks?.signal?.throwIfAborted();
+      if (error instanceof ReasonerSkipped) continue;
       const message = `${provider.id}: ${errorMessage(error)}`;
       console.error("Reasoning provider failed", message);
       failures.push(message);

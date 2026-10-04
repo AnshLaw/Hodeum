@@ -1,7 +1,7 @@
 import { spoken } from "../../lib/spoken";
 import { ASSISTANCE_LEVELS, type ActionVerdict, type ScreenObservation, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
 import { assessAction, mattered } from "./change";
-import { beginStep, inWrongApp, onObserved, requestReason, waitForApp } from "./flow";
+import { beginStep, inWrongApp, onObserved, onSkillLoaded, requestReason, waitForApp } from "./flow";
 import { takeOver } from "./execute";
 import {
   MAX_WRONG_ACTIONS,
@@ -16,7 +16,7 @@ import {
   type Transition,
 } from "./model";
 import { escalate } from "./policy";
-import { becameTrue, evaluateSignal } from "./signals";
+import { becameTrue, evaluateSignal, findByNames } from "./signals";
 import { detectStuck, remember, stillShowing, type StuckSignal } from "./stuck";
 
 const CANCEL_TIMER: HodeEffect = { type: "cancelStuckTimer" };
@@ -148,7 +148,7 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
   // Said with the next step's guidance, so the next instruction doesn't cut the acknowledgement off.
   const ack = acknowledgement(s);
   const acknowledged: HodeState = ack ? { ...finished, pendingAck: ack, lastAck: ack, pendingReason: reasonFor(s, step) } : finished;
-  return withLeadingEffects(beginStep(acknowledged, nextIndex), done);
+  return withLeadingEffects(beginStep({ ...acknowledged, freshRead: true }, nextIndex), done);
 }
 
 /** Open-ended Hodes have no success signal to check, so every action that changed something asks the model what's next. */
@@ -164,6 +164,18 @@ function onOpenAction(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
 const preparingStep = (s: HodeState): boolean => s.phase === "observing" && !s.open && s.spokenQuestion === undefined && s.question === undefined;
 
 const newer = (a: ScreenObservation | undefined, b: ScreenObservation): ScreenObservation => (a && a.at > b.at ? a : b);
+
+/**
+ * A step's skill is loaded. The read that finished the last step was taken a moment ago: when it
+ * already shows this step's control, the step starts from it instead of waiting on another read.
+ */
+export function onSkillLoadedStep(s: HodeState, e: EventOf<"SKILL_LOADED">): Transition {
+  const loaded = onSkillLoaded(s, e);
+  const step = currentStep(loaded.state);
+  const read = s.freshRead === true ? s.observation : undefined;
+  if (loaded.state === s || !step || !read || findByNames(read.elements, step.target.names).length === 0) return loaded;
+  return onObservedStep(loaded.state, { type: "OBSERVED", observation: read });
+}
 
 /**
  * The screen read for a new step. A learner who already did the step (often one who knows it well)

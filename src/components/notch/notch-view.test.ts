@@ -93,8 +93,12 @@ describe("re-checking after a learner action", () => {
     expect(view).toMatchObject({ mode: "guidance", size: "guidance", busy: false, title: guideAction().speech });
   });
 
-  it("shows Hodey thinking once a vision model or the cloud is really working", () => {
-    expect(notchView(guiding({ phase: "reasoning", thinking: true }))).toMatchObject({ size: "orb", busy: true, title: COPY.looking });
+  it("keeps the guidance up, marked busy, while a vision model or the cloud re-checks it unasked", () => {
+    expect(notchView(guiding({ phase: "reasoning", thinking: true }))).toMatchObject({ mode: "guidance", size: "guidance", busy: true });
+  });
+
+  it("shows Hodey thinking when the learner asked and a vision model or the cloud is really working", () => {
+    expect(notchView(guiding({ phase: "reasoning", thinking: true, prompted: true }))).toMatchObject({ size: "orb", busy: true, title: COPY.looking });
   });
 
   it("still looks when the learner asked something or there's no guidance yet", () => {

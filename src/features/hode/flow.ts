@@ -15,7 +15,7 @@ import {
   type HodeState,
   type Transition,
 } from "./model";
-import { summarizeActions } from "./change";
+import { diffScreens, isUnchanged, summarizeActions } from "./change";
 import { neighboursOf } from "./neighbours";
 import { confidenceBand, nudgeStartLevel, overlayFor } from "./policy";
 import { regionAround } from "./region";
@@ -112,7 +112,7 @@ export function onSkillLoaded(s: HodeState, e: EventOf<"SKILL_LOADED">): Transit
   const level = nudgeStartLevel(s.mode, e.record, remembered);
   // A learner who already does this with Hodey only watching doesn't need the idea explained again.
   const pendingIntro = level === "observe" || level === "independent" ? undefined : s.pendingIntro;
-  return { state: { ...s, level, pendingIntro }, effects: [{ type: "observe" }] };
+  return { state: { ...s, level, pendingIntro, freshRead: false }, effects: [{ type: "observe" }] };
 }
 
 export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {
@@ -120,7 +120,17 @@ export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {
   // A question is answered wherever the learner is looking; only guidance waits for the right app.
   const asking = s.spokenQuestion !== undefined || s.question !== undefined;
   if (!asking && inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
+  // A second look at a screen that hasn't changed would only get the same unsure answer: ask the learner instead.
+  const sameScreen = s.reobserved && !asking && s.observation !== undefined && isUnchanged(diffScreens(s.observation, e.observation));
+  if (sameScreen) return showGuidance({ ...s, observation: e.observation }, clarifyFor(s));
   return requestReason({ ...s, observation: e.observation, waitingForApp: asking ? s.waitingForApp : undefined });
+}
+
+/** "I'm not sure which control you need": said instead of pointing when Hodey can't tell where. */
+function clarifyFor(s: HodeState): TeachingAction {
+  const words = spoken(s.language);
+  const speech = s.pack?.surface === "phone" ? words.clarifyPhone : words.clarify;
+  return { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
 }
 
 function contextFor(s: HodeState, observation: ScreenObservation): TeachingContext {
@@ -168,13 +178,12 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   const band = action.target ? confidenceBand(action.target.confidence) : "uncertain";
   // A correction is worth saying even when its target isn't on screen (the learner left the page).
   if (band === "uncertain" && action.kind === "correct") return showGuidance(withNotice, { ...action, target: undefined });
+  // An open-ended Hode has only the model's words: an unsure target isn't drawn, but the line is still said.
+  if (band === "uncertain" && s.open && action.speech !== "") return showGuidance(withNotice, { ...action, target: undefined });
   if (band === "uncertain" && !s.reobserved) {
     return { state: { ...withNotice, phase: "observing", reobserved: true }, effects: [{ type: "observe" }] };
   }
-  const words = spoken(s.language);
-  const clarify = s.pack?.surface === "phone" ? words.clarifyPhone : words.clarify;
-  const shown: TeachingAction = band === "uncertain" ? { ...action, kind: "clarify", speech: clarify, target: undefined } : action;
-  return showGuidance(withNotice, shown);
+  return showGuidance(withNotice, band === "uncertain" ? clarifyFor(s) : action);
 }
 
 /** The action's overlay, with the text around its target so the label can keep clear of it, and a hint's area. */

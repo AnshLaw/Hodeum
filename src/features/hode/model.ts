@@ -122,6 +122,8 @@ export interface HodeState {
   claimedDone?: boolean;
   /** Hodey couldn't see the step done when the learner said it was: Skip is offered for the rest of the step. */
   offerSkip?: boolean;
+  /** The screen read in hand just finished the previous step: the next step starts from it if it shows its control. */
+  freshRead?: boolean;
   /** That acknowledgement, shown in the notch until the learner acts again. */
   ack?: string;
   /** The last acknowledgement used, so the next one is a different phrase. */
@@ -244,12 +246,14 @@ export function withLeadingEffects(transition: Transition, effects: HodeEffect[]
 }
 
 /**
- * Reasoning that's only a quick local re-check of guidance already shown (no vision model or cloud
- * working, no question asked): the guidance stays up instead of Hodey visibly "thinking".
+ * Reasoning that only re-checks guidance already shown, unasked (after the learner's action, a scroll):
+ * the guidance stays up, marked busy while a slow reasoner works, instead of Hodey visibly "thinking".
  */
 export function rechecking(s: HodeState): boolean {
   const asking = s.spokenQuestion !== undefined || s.question !== undefined;
-  return s.phase === "reasoning" && s.thinking !== true && !asking && s.action !== undefined && s.action.kind !== "answer";
+  // Asked for (a hint, look again) and a slow reasoner is on it: show Hodey working instead.
+  const shownWorking = s.thinking === true && s.prompted === true;
+  return s.phase === "reasoning" && !shownWorking && !asking && s.action !== undefined && s.action.kind !== "answer";
 }
 
 /** The learner's mark as an overlay pin, drawn only over the window they marked it on. */

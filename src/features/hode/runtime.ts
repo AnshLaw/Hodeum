@@ -62,6 +62,8 @@ export class HodeRuntime {
   /** What learning memory recalled for the running Hode; skill loads wait for it. */
   private recalled: Promise<LearningMemory[]> = Promise.resolve([]);
   private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
+  /** The reasoning in flight, called off as soon as the Hode's request id moves past it. */
+  private reasoning: { requestId: number; controller: AbortController } | undefined;
 
   constructor(private readonly deps: RuntimeDeps) {
     this.disposers = [
@@ -102,6 +104,7 @@ export class HodeRuntime {
     if (event.type === "GOAL_SUBMITTED" && prev.phase === "goal_entry" && state.pack) this.recall(state);
     if (state !== prev) {
       this.state = state;
+      this.abandonStaleReasoning();
       this.listeners.forEach((listener) => listener());
     }
     this.transitionListeners.forEach((listener) => listener(event, prev, state));
@@ -238,11 +241,28 @@ export class HodeRuntime {
   }
 
   private reason(requestId: number, context: TeachingContext): void {
-    const hooks = { onThinking: () => this.dispatch({ type: "THINKING", requestId }) };
-    reasonWithFallback(this.deps.reasoners, context, hooks).then(
-      ({ action, failures }) => this.dispatch({ type: "ACTION_READY", requestId, action, failures }),
-      (error) => this.fail("Hodey couldn't work out the next step", error, requestId),
-    );
+    this.reasoning?.controller.abort();
+    const controller = new AbortController();
+    this.reasoning = { requestId, controller };
+    const hooks = { onThinking: () => this.dispatch({ type: "THINKING", requestId }), signal: controller.signal };
+    reasonWithFallback(this.deps.reasoners, context, hooks)
+      .finally(() => {
+        if (this.reasoning?.controller === controller) this.reasoning = undefined;
+      })
+      .then(
+        ({ action, failures }) => this.dispatch({ type: "ACTION_READY", requestId, action, failures }),
+        (error) => {
+          // Called off because the Hode moved on: nothing failed.
+          if (!controller.signal.aborted) this.fail("Hodey couldn't work out the next step", error, requestId);
+        },
+      );
+  }
+
+  /** A newer request, a pause or the end of the Hode: stop the reasoning (and the model) working on an old one. */
+  private abandonStaleReasoning(): void {
+    if (!this.reasoning || this.reasoning.requestId === this.state.requestId) return;
+    this.reasoning.controller.abort();
+    this.reasoning = undefined;
   }
 
   /** Still acting on this request: the learner hasn't paused, taken over, asked something, or ended the Hode. */

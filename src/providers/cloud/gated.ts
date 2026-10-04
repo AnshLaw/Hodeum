@@ -1,7 +1,7 @@
 import type { CloudProvider } from "../../data/settings";
 import type { ActivityChannel } from "../../lib/activity";
 import type { TeachingAction, TeachingContext } from "../../lib/types";
-import type { ReasoningHooks, ReasoningProvider } from "../interfaces";
+import { ReasonerSkipped, type ReasoningHooks, type ReasoningProvider } from "../interfaces";
 import type { CloudPolicy } from "./policy";
 
 export type GatePolicy = Pick<CloudPolicy, "allowed" | "reportSuccess" | "reportFailure">;
@@ -12,7 +12,7 @@ export interface CloudActivity {
 }
 
 /** A cloud provider didn't run (policy said no, or the request isn't one it may see). Not a failure. */
-export class CloudSkipped extends Error {
+export class CloudSkipped extends ReasonerSkipped {
   constructor(
     readonly provider: CloudProvider,
     reason: string,

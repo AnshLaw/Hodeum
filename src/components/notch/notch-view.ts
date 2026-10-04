@@ -105,13 +105,16 @@ function guidanceView(s: HodeState): NotchView {
     // The why of the step just done stays readable (muted too) until the learner acts again.
     detail: s.explanation ?? s.notice ?? cantSee ?? s.reason ?? prerequisites,
     progress: { current: s.stepIndex, total },
-    busy: false,
+    busy: workingInBackground(s),
     controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), ...(skippable ? (["skip"] as const) : []), "repeat", "look_again", ...(s.mode === "teach" ? (["all_steps"] as const) : []), "point", "pause", "end"],
     hintLabel: QUIET_LEVELS.has(s.level) ? COPY.needHint : COPY.hint,
     // Agent shows the whole flow; Teach only once the learner asks for All steps.
     steps: s.mode === "agent" || s.showAllSteps ? stepItems(s) : undefined,
   };
 }
+
+/** A slow reasoner re-checks the guidance on show: the card stays, with the scan line running. */
+const workingInBackground = (s: HodeState): boolean => s.phase === "reasoning" && s.thinking === true;
 
 function stepEyebrow(s: HodeState): string {
   const mode = s.mode === "agent" ? `${MODE_COPY.agent.title} · ${AGENT_STYLE_COPY[s.agentStyle].title}` : MODE_COPY[s.mode].title;
@@ -160,7 +163,7 @@ function openGuidanceView(s: HodeState): NotchView {
     eyebrow: COPY.openHode(s.goal),
     title: s.action?.speech ?? "",
     detail: s.notice,
-    busy: false,
+    busy: workingInBackground(s),
     controls: ["hint", "repeat", "look_again", "point", "pause", "end"],
     hintLabel: COPY.needHint,
   };

@@ -42,7 +42,7 @@ import { FrameCanvas } from "../features/phone/frame-canvas";
 import { PhoneMirror } from "../features/phone/phone-mirror";
 import { PhonePerception, type OcrSegment } from "../features/phone/phone-perception";
 import { loadPhonePrefs } from "../features/phone/prefs";
-import { LocalReasoningProvider } from "../providers/local-reasoner";
+import { GroundedPlannerProvider, LocalReasoningProvider } from "../providers/local-reasoner";
 import { TaskPackReasoningProvider } from "../providers/task-pack-reasoner";
 import { QwenVisionProvider } from "../providers/vision/qwen-vision-provider";
 import { TauriVisionStatus } from "../providers/vision/tauri-vision-status";
@@ -51,7 +51,8 @@ import { TASK_PACKS } from "../task-packs";
 import { mount } from "./mount";
 
 /** Learner input is only worth re-reading the screen for while guidance waits on the learner. */
-const WATCHING_PHASES: HodePhase[] = ["guiding", "reasoning"];
+/** Clicks are watched while a step is being prepared too, so a learner who's quicker than Hodey still counts. */
+const WATCHING_PHASES: HodePhase[] = ["guiding", "reasoning", "observing"];
 
 interface Stores {
   learning: SqliteLearningStore | MemoryLearningStore;
@@ -98,7 +99,8 @@ async function boot(): Promise<void> {
   const { mirror, surfaces, perception, capture } = createPerception(activity);
   const vision = new TauriVisionStatus();
   const qwen = new QwenVisionProvider({ connection: () => connectionOf(vision.current()), capture });
-  const local = new LocalReasoningProvider(new TaskPackReasoningProvider(), qwen, () => vision.current().state === "ready");
+  const planner = new TaskPackReasoningProvider();
+  const local = new LocalReasoningProvider(planner, qwen, () => vision.current().state === "ready");
   /** Talk back and forth (Settings > Voice); updated when settings load or change. */
   let conversation = true;
   let wakeWords: string[] = [];
@@ -116,7 +118,8 @@ async function boot(): Promise<void> {
   const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity, shareable: (text) => shareableText(text, lessonLines) });
   // SQLite always; Backboard only while the cloud policy allows it (and writes only in "auto").
   const memory = new RoutedMemory(localMemory, new BackboardMemoryProvider({ invoke, policy: cloud.policy, kv }), () => cloud.policy.reportFailure("backboard"));
-  const runtime = new HodeRuntime({ perception, reasoners: [gemini, local], skills: learning, bus, tts, memory });
+  // A lesson step UI Automation grounds is answered locally at once; the cloud and the vision model only take the rest.
+  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   const watchDot = screenWatch(activity);
   runtime.subscribe(() => {

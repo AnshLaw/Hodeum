@@ -1,6 +1,6 @@
-import { onGoalSubmitted, onSkillLoaded, onStartHode, onThinking } from "./flow";
+import { onGoalSubmitted, onStartHode, onThinking } from "./flow";
 import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
-import { onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onSkipStep, onStuckTimeout } from "./learner";
+import { onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
 import type { EventOf, HodeEvent, HodeState, Transition } from "./model";
 import {
   onAnnotateCancel,
@@ -25,7 +25,7 @@ type Handlers = { [T in HodeEvent["type"]]: (s: HodeState, e: EventOf<T>) => Tra
 const handlers: Handlers = {
   START_HODE: onStartHode,
   GOAL_SUBMITTED: onGoalSubmitted,
-  SKILL_LOADED: onSkillLoaded,
+  SKILL_LOADED: onSkillLoadedStep,
   OBSERVED: onObservedStep,
   ACTION_READY: onActionReadyActing,
   THINKING: onThinking,

@@ -10,10 +10,20 @@ import type {
   TeachingContext,
 } from "../lib/types";
 
-/** What a reasoner tells the Hode while it works. */
+/** What a reasoner tells the Hode while it works, and how the Hode calls it off. */
 export interface ReasoningHooks {
   /** The request reached a slow reasoner (a vision model or the cloud), so Hodey shows it's thinking. */
   onThinking?(): void;
+  /** Aborted once the Hode has moved on (a newer request, a pause, the end): stop working on this one. */
+  signal?: AbortSignal;
+}
+
+/** A reasoner that didn't take a request (it isn't one it may see, or one it can answer well). Not a failure. */
+export class ReasonerSkipped extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "ReasonerSkipped";
+  }
 }
 
 /** Local planners, Qwen3-VL, and (opt-in) Gemini all implement this. The Hode engine never sees which. */

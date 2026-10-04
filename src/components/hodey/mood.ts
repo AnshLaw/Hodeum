@@ -64,7 +64,8 @@ export function hodeyMood(s: HodeState, hovered: boolean): HodeyMood {
     case "observing":
       return "looking";
     case "reasoning":
-      return rechecking(s) ? guidingMood(s) : "thinking";
+      // A slow reasoner at work shows on Hodey's face, even while the guidance card stays up.
+      return s.thinking === true || !rechecking(s) ? "thinking" : guidingMood(s);
     case "guiding":
       return guidingMood(s);
     case "answering":

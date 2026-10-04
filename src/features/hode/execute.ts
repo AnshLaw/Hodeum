@@ -102,7 +102,7 @@ function finishHodeyStep(acted: HodeState, step: TaskStep): Transition {
     const state: HodeState = { ...s, hodeyDid, phase: "checkpoint", stepIndex: nextIndex, sinceCheckpoint: 0, action: undefined };
     return { state, effects: [...done, { type: "say", text: words.checkpoint(step.objective) }] };
   }
-  return withLeadingEffects(beginStep({ ...s, hodeyDid, sinceCheckpoint }, nextIndex), done);
+  return withLeadingEffects(beginStep({ ...s, hodeyDid, sinceCheckpoint, freshRead: true }, nextIndex), done);
 }
 
 export function onHodeyActed(s: HodeState, e: EventOf<"HODEY_ACTED">): Transition {
