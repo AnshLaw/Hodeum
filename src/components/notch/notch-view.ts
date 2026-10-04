@@ -196,3 +196,8 @@ export interface ProviderBadge {
 export function providerBadge(enhanced: boolean): ProviderBadge {
   return enhanced ? { label: COPY.enhanced, title: COPY.enhancedTitle, variant: "enhanced" } : { label: COPY.local, title: COPY.localTitle, variant: "local" };
 }
+
+/** Shown on the idle notch when Hodey's natural voice is missing, so the Windows fallback isn't a mystery. */
+export function voiceNotice(tts: "loading" | "ready" | "missing" | undefined): string | undefined {
+  return tts === "missing" ? COPY.naturalVoiceMissing : undefined;
+}

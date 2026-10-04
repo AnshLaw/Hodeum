@@ -99,6 +99,7 @@ export const COPY = {
   mic: "Talk to Hodey",
   micStop: "Stop listening",
   listening: "Hodey is listening…",
+  naturalVoiceMissing: "Hodey's natural voice isn't installed, so it's using the Windows voice. Run scripts/setup-local-ai.ps1 to add it.",
   voiceNotInstalled: "Voice input needs local speech recognition, which isn't installed yet.",
   privacyScreen: "Hodey is reading your screen",
   privacyMic: "Microphone is on",

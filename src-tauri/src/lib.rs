@@ -1,4 +1,6 @@
 mod account;
+#[cfg(test)]
+mod ai_root;
 mod app_focus;
 mod app_window;
 mod chat_context;
