@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PhoneMirror } from "./phone-mirror";
 import type { FrameSink, FrameSurface, PhoneSource, PhoneSourceKind, PhoneSourceStatus } from "./phone-source";
 
@@ -49,6 +49,44 @@ describe("PhoneMirror", () => {
     expect(offline).toBe(1);
     await mirror.close();
     expect(offline).toBe(1);
+  });
+
+  it("stops a source that finishes starting after the learner already closed it", async () => {
+    let finishStart: (() => void) | undefined;
+    const slow = new FakeSource("camera");
+    slow.start = () => new Promise<void>((resolve) => (finishStart = resolve));
+    const mirror = new PhoneMirror(surface, () => slow);
+    const opening = mirror.open("camera");
+    await vi.waitFor(() => expect(finishStart).toBeDefined());
+    await mirror.close();
+    slow.stopped = false;
+    finishStart?.();
+    await opening;
+    expect(slow.stopped).toBe(true);
+    expect(mirror.status()).toEqual({ state: "off" });
+  });
+
+  it("never starts a source the learner closed before it began", async () => {
+    let created = 0;
+    const mirror = new PhoneMirror(surface, (kind) => (created++, new FakeSource(kind)));
+    const opening = mirror.open("camera");
+    await mirror.close();
+    await opening;
+    expect(created).toBe(0);
+    expect(mirror.isOpen()).toBe(false);
+  });
+
+  it("ignores a late start failure from a source that was replaced", async () => {
+    let failStart: (error: Error) => void = () => undefined;
+    const slow = new FakeSource("camera");
+    slow.start = () => new Promise<void>((_, reject) => (failStart = reject));
+    const mirror = new PhoneMirror(surface, (kind) => (kind === "camera" ? slow : new FakeSource(kind)));
+    const opening = mirror.open("camera");
+    await mirror.open("airplay");
+    failStart(new Error("Permission denied"));
+    await opening;
+    expect(mirror.kind()).toBe("airplay");
+    expect(mirror.status()).toEqual({ state: "connecting" });
   });
 
   it("switching source stops the old one", async () => {

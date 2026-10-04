@@ -9,6 +9,8 @@ export class PhoneMirror {
   private stopListening: (() => void) | undefined;
   private current: PhoneSourceStatus = OFF;
   private readonly listeners = new Set<() => void>();
+  /** Bumped by every open and close, so a slower, older request never overrides a newer one. */
+  private generation = 0;
   private readonly liveHandlers = new Set<() => void>();
   private readonly offlineHandlers = new Set<() => void>();
 
@@ -46,7 +48,9 @@ export class PhoneMirror {
 
   async open(kind: PhoneSourceKind): Promise<void> {
     if (this.source?.kind === kind && this.current.state !== "error") return;
-    await this.close();
+    const ticket = ++this.generation;
+    await this.release();
+    if (ticket !== this.generation) return;
     const source = this.create(kind);
     this.source = source;
     this.stopListening = source.onStatus((status) => this.setStatus(status));
@@ -55,11 +59,19 @@ export class PhoneMirror {
       await source.start(this.surface);
     } catch (error) {
       console.error(`Couldn't start the iPhone ${kind} source`, error);
-      this.setStatus({ state: "error", message: error instanceof Error ? error.message : String(error) });
+      if (this.source === source) this.setStatus({ state: "error", message: error instanceof Error ? error.message : String(error) });
+      return;
     }
+    // Closed or switched while it was starting (e.g. the camera prompt was slow): don't leave it running.
+    if (this.source !== source) await source.stop().catch((error) => console.error("Stopping a replaced iPhone source failed", error));
   }
 
   async close(): Promise<void> {
+    this.generation++;
+    await this.release();
+  }
+
+  private async release(): Promise<void> {
     const source = this.source;
     this.stopListening?.();
     this.source = undefined;
