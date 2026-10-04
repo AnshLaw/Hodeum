@@ -6,4 +6,5 @@ pub mod catalog;
 pub mod dev_env;
 pub mod elevenlabs;
 pub mod gemini;
+pub mod gemini_guard;
 pub mod keys;
