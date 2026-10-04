@@ -42,6 +42,7 @@ const PLAYBACK_POLL: Duration = Duration::from_millis(20);
 /// Phrases kept as audio: the acknowledgements plus a lesson's worth of lines.
 const PHRASE_CACHE_SIZE: usize = 64;
 pub const DONE_EVENT: &str = "tts:done";
+const NO_SPEAKER: &str = "Hodey's speaker isn't ready yet.";
 
 pub struct SpeakJob {
     pub id: String,
@@ -77,6 +78,46 @@ impl StopSwitch {
             player.clear();
         }
         Ok(())
+    }
+
+    /// The stop generation now; speech started now is cancelled once it changes.
+    pub fn current(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
+    }
+
+    pub fn is_current(&self, generation: u64) -> bool {
+        self.current() == generation
+    }
+
+    /// Runs `act` on the speaker unless a stop came after `generation`. The player lock makes the check and
+    /// the action atomic against `stop`, which bumps the generation before taking the lock: no tail audio.
+    fn with_current_player(&self, generation: u64, act: impl FnOnce(&Player)) -> Result<bool, String> {
+        let slot = self.player.lock().map_err(|e| e.to_string())?;
+        let player = slot.as_ref().ok_or(NO_SPEAKER)?;
+        if !self.is_current(generation) {
+            return Ok(false);
+        }
+        act(player);
+        Ok(true)
+    }
+
+    /// Clears leftover audio and resumes playback for a new utterance (another engine's stream).
+    pub fn restart_if_current(&self, generation: u64) -> Result<bool, String> {
+        self.with_current_player(generation, |player| {
+            player.clear();
+            player.play();
+        })
+    }
+
+    /// Queues streamed audio; false (nothing queued) if a stop arrived after `generation`.
+    pub fn append_if_current(&self, generation: u64, audio: SamplesBuffer) -> Result<bool, String> {
+        self.with_current_player(generation, |player| player.append(audio))
+    }
+
+    /// Whether everything queued has played.
+    pub fn idle(&self) -> Result<bool, String> {
+        let slot = self.player.lock().map_err(|e| e.to_string())?;
+        Ok(slot.as_ref().ok_or(NO_SPEAKER)?.empty())
     }
 }
 
@@ -268,34 +309,31 @@ fn report(app: &AppHandle, id: String, interrupted: bool, error: Option<String>)
     }
 }
 
-/// The speaker thread: loads Supertonic and the output device once, then speaks queued jobs in order.
+/// No natural voice: every queued line fails with `reason` (the caller keeps the speaker open meanwhile).
+fn refuse_all(app: &AppHandle, jobs: Receiver<SpeakJob>, reason: String) {
+    set_tts_voices(app, Err(reason.clone()));
+    for job in jobs {
+        report(app, job.id, false, Some(reason.clone()));
+    }
+}
+
+/// The speaker thread: opens the output device and loads the natural voices once, then speaks queued
+/// jobs in order. The device opens first and stays open, so the cloud voice can play through the same
+/// speaker (and the same barge-in stop) even when no local voice is installed.
 pub fn worker(app: AppHandle, jobs: Receiver<SpeakJob>, stop: Arc<StopSwitch>) {
-    let engines = match Engines::load() {
-        Ok(engines) => engines,
-        Err(reason) => {
-            set_tts_voices(&app, Err(reason.clone()));
-            for job in jobs {
-                report(&app, job.id, false, Some(reason.clone()));
-            }
-            return;
-        }
-    };
     let sink = match DeviceSinkBuilder::open_default_sink() {
         Ok(sink) => sink,
-        Err(e) => {
-            let reason = format!("No speakers or headphones found: {e}");
-            set_tts_voices(&app, Err(reason.clone()));
-            for job in jobs {
-                report(&app, job.id, false, Some(reason.clone()));
-            }
-            return;
-        }
+        Err(e) => return refuse_all(&app, jobs, format!("No speakers or headphones found: {e}")),
     };
     let player = Arc::new(Player::connect_new(sink.mixer()));
     match stop.player.lock() {
         Ok(mut slot) => *slot = Some(Arc::clone(&player)),
         Err(e) => eprintln!("couldn't share the speech player for interruptions: {e}"),
     }
+    let engines = match Engines::load() {
+        Ok(engines) => engines,
+        Err(reason) => return refuse_all(&app, jobs, reason),
+    };
     set_tts_voices(&app, Ok(engines.voices()));
     let mut cache = PhraseCache::new(PHRASE_CACHE_SIZE);
     for job in jobs {

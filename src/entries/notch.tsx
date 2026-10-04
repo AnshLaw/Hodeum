@@ -12,6 +12,7 @@ import { Notch } from "../components/notch/Notch";
 import { connectAccount } from "../features/account/connect";
 import { CloudContext } from "../components/notch/cloud-context";
 import { connectCloud } from "../providers/cloud/connect";
+import { CloudFirstTTS, ElevenLabsTTSProvider } from "../providers/cloud/elevenlabs-tts";
 import { connectHodeBridge } from "../features/hode/bridge";
 import { connectVoice, withoutEcho } from "../features/voice/connect";
 import type { HodePhase } from "../features/hode/model";
@@ -88,7 +89,10 @@ async function boot(): Promise<void> {
   showMicDot(voice.speech, activity);
   showStandbyDot(voice.status, activity);
   const cloud = connectCloud({ invoke, bus, activeApp: () => runtime.getState().observation });
-  const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts: voice.tts });
+  // ElevenLabs first when Settings > Cloud allows it right now; the local voice says anything it skips or fails.
+  const elevenlabs = new ElevenLabsTTSProvider(invoke);
+  const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity });
+  const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   runtime.subscribe(() => {
     const state = runtime.getState();
@@ -105,6 +109,7 @@ async function boot(): Promise<void> {
     openGoalsAllowed: () => vision.current().state === "ready",
     applyVoice: (settings) => {
       voice.apply(settings);
+      elevenlabs.rate = settings.rate;
       conversation = settings.conversation;
       wakeWords = settings.wakeWords;
       script = settings.hindiScript;
