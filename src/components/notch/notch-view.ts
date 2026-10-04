@@ -138,6 +138,23 @@ export function notchView(s: HodeState): NotchView {
   }
 }
 
+/** Cards that come with a highlight on the desktop, so they step aside when it's beneath them. */
+const PEEK_MODES = new Set<NotchMode>(["guidance", "answer"]);
+
+export interface PeekContext {
+  mode: NotchMode;
+  /** The highlighted target sits under the expanded card. */
+  covering: boolean;
+  hovered: boolean;
+  menuOpen: boolean;
+  skillsOpen: boolean;
+}
+
+/** Whether the card shrinks to a slim bar so the learner can see the target under it; hovering brings it back. */
+export function shouldPeek({ mode, covering, hovered, menuOpen, skillsOpen }: PeekContext): boolean {
+  return covering && !hovered && !menuOpen && !skillsOpen && PEEK_MODES.has(mode);
+}
+
 export interface IslandContext {
   /** Hodey has been busy long enough that shrinking won't flicker. */
   settled: boolean;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { center, intersects, padRect, toOverlay, toScreen } from "../../lib/coords";
+import { center, intersects, toOverlay, toScreen } from "../../lib/coords";
 import type { MonitorInfo, Point, Rect, Size } from "../../lib/types";
-import { ARROW_GAP_PX, LABEL_GAP_PX, type ArrowGeometry, approachSide, arrowBounds, arrowGeometry, labelPosition, pulseScale } from "./placement";
+import { ARROW_GAP_PX, LABEL_GAP_PX, TARGET_CLEARANCE_PX, type ArrowGeometry, approachSide, arrowBounds, arrowGeometry, labelPosition, pulseScale } from "./placement";
 
 const viewport: Size = { width: 1000, height: 800 };
 const chip: Size = { width: 70, height: 26 };
@@ -124,10 +124,16 @@ describe("arrowGeometry", () => {
     expect(intersects(arrowBounds(arrow), notch)).toBe(false);
   });
 
-  it("still points from the roomiest side when every side is blocked", () => {
+  it("draws no arrow rather than one under the notch when every side that fits is blocked", () => {
     const target = { x: 480, y: 380, width: 40, height: 40 };
     const everywhere = { x: 0, y: 0, width: 1000, height: 800 };
-    expect(must(arrowGeometry(target, viewport, [everywhere])).side).toBe(approachSide(target, viewport));
+    expect(arrowGeometry(target, viewport, [everywhere])).toBeUndefined();
+  });
+
+  it("omits the arrow for a huge target whose only roomy side runs under the notch (the Explorer list case)", () => {
+    const list = { x: 30, y: 184, width: 1220, height: 548 };
+    const notch = { x: 392, y: 0, width: 496, height: 160 };
+    expect(arrowGeometry(list, { width: 1280, height: 760 }, [notch])).toBeUndefined();
   });
 
   it("shortens to fit when the free side is tight but still usable", () => {
@@ -156,30 +162,70 @@ describe("arrows through the DPI pipeline", () => {
 describe("labelPosition", () => {
   const row = { x: 976, y: 238, width: 252, height: 36 };
   const stage = { width: 1280, height: 760 };
+  const chipAt = (at: Point): Rect => ({ ...at, ...chip });
 
-  it("falls back to the arrow's tail when the far side is cramped, clear of the text above", () => {
+  it("sits on the box's top edge at its end: over the ring, never inside the target", () => {
     const arrow = must(arrowGeometry(row, stage));
-    const at = labelPosition({ target: row, chip, viewport: stage, arrow, avoid: [] });
-    const rect = { ...at, ...chip };
-    expect(intersects(rect, padRect(row, LABEL_GAP_PX))).toBe(false);
+    const rect = chipAt(labelPosition({ target: row, chip, viewport: stage, arrow, avoid: [] }));
+    expect(rect.y + rect.height).toBe(row.y);
+    expect(rect.y + rect.height).toBeGreaterThan(row.y - TARGET_CLEARANCE_PX - 1);
+    expect(rect.x + rect.width).toBeLessThanOrEqual(row.x + row.width);
+    expect(rect.x).toBeGreaterThan(row.x + row.width / 2);
+    expect(intersects(rect, row)).toBe(false);
     expect(intersects(rect, arrowBounds(arrow))).toBe(false);
-    expect(rect.x + rect.width).toBeLessThanOrEqual(arrow.start.x);
-    expect(rect.y).toBeGreaterThan(row.y - chip.height);
   });
 
-  it("sits opposite the arrow when that side has room", () => {
-    const item = { x: 648, y: 334, width: 212, height: 26 };
-    const arrow = must(arrowGeometry(item, stage));
-    const at = labelPosition({ target: item, chip, viewport: stage, arrow, avoid: [] });
-    if (arrow.side === "left") expect(at.x).toBeGreaterThanOrEqual(item.x + item.width + LABEL_GAP_PX);
-    else expect(at.x + chip.width).toBeLessThanOrEqual(item.x - LABEL_GAP_PX);
-    expect(at.y + chip.height / 2).toBeCloseTo(item.y + item.height / 2);
+  it("moves to the bottom edge when the top edge would cover nearby text", () => {
+    const heading = { x: row.x, y: row.y - 30, width: row.width, height: 24 };
+    const rect = chipAt(labelPosition({ target: row, chip, viewport: stage, avoid: [heading] }));
+    expect(rect.y).toBe(row.y + row.height);
+    expect(intersects(rect, heading)).toBe(false);
+    expect(intersects(rect, row)).toBe(false);
   });
 
-  it("without an arrow, sits beside the target on its roomiest side", () => {
-    const at = labelPosition({ target: row, chip, viewport: stage, avoid: [] });
-    expect(at.x + chip.width).toBeLessThanOrEqual(row.x - LABEL_GAP_PX);
-    expect(at.y + chip.height / 2).toBeCloseTo(row.y + row.height / 2);
+  it("tries the other end of the top edge before giving up on it", () => {
+    const corner = { x: row.x + row.width - 90, y: row.y - 30, width: 90, height: 24 };
+    const rect = chipAt(labelPosition({ target: row, chip, viewport: stage, avoid: [corner] }));
+    expect(rect.y + rect.height).toBe(row.y);
+    expect(rect.x).toBeLessThan(row.x + row.width / 2);
+    expect(intersects(rect, corner)).toBe(false);
+  });
+
+  it("goes beside the target when text sits on both edges", () => {
+    const above = { x: row.x, y: row.y - 30, width: row.width, height: 24 };
+    const below = { x: row.x, y: row.y + row.height + 2, width: row.width, height: 30 };
+    const rect = chipAt(labelPosition({ target: row, chip, viewport: stage, avoid: [above, below] }));
+    expect([above, below, row].some((r) => intersects(rect, r))).toBe(false);
+    expect(rect.x + rect.width).toBeLessThanOrEqual(row.x - LABEL_GAP_PX);
+  });
+
+  it("never sits under the notch, even when nothing else fits", () => {
+    const tab = { x: 420, y: 150, width: 90, height: 28 };
+    const notch = { x: 392, y: 0, width: 496, height: 160 };
+    const crowd = [{ x: 0, y: 178, width: 1280, height: 582 }];
+    const rect = chipAt(labelPosition({ target: tab, chip, viewport: stage, avoid: crowd, keepOut: [notch] }));
+    expect(intersects(rect, notch)).toBe(false);
+    expect(intersects(rect, tab)).toBe(false);
+  });
+
+  it("when every spot covers something, takes the one that covers least", () => {
+    const item = { x: 500, y: 300, width: 200, height: 30 };
+    const covers = (rect: Rect, zone: Rect) => intersects(rect, zone);
+    const above = { x: 400, y: 200, width: 400, height: 98 };
+    const besides = [{ x: 300, y: 250, width: 196, height: 130 }, { x: 704, y: 250, width: 296, height: 130 }];
+    // Only the top few pixels of whatever is below reach the bottom edge's chip.
+    const below = { x: 400, y: 352, width: 400, height: 60 };
+    const rect = chipAt(labelPosition({ target: item, chip, viewport, avoid: [above, below, ...besides] }));
+    expect(covers(rect, above)).toBe(false);
+    expect(besides.some((b) => covers(rect, b))).toBe(false);
+    expect(rect.y).toBe(item.y + item.height);
+  });
+
+  it("centres on a target narrower than the chip", () => {
+    const checkbox = { x: 600, y: 300, width: 16, height: 16 };
+    const rect = chipAt(labelPosition({ target: checkbox, chip, viewport, avoid: [] }));
+    expect(rect.x + rect.width / 2).toBeCloseTo(checkbox.x + checkbox.width / 2);
+    expect(rect.y + rect.height).toBe(checkbox.y);
   });
 
   it("stays on-screen next to a corner target", () => {

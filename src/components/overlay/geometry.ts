@@ -33,6 +33,9 @@ export function shapeToScreen(shape: AnnotationShape, monitor: MonitorInfo): Ann
 
 export function primitiveToOverlay(primitive: OverlayPrimitive, monitor: MonitorInfo): OverlayPrimitive {
   if (primitive.kind === "arrow") return { ...primitive, to: toOverlay(primitive.to, monitor) };
+  if (primitive.kind === "highlight" && primitive.keepClear) {
+    return { ...primitive, bounds: toOverlay(primitive.bounds, monitor), keepClear: primitive.keepClear.map((r) => toOverlay(r, monitor)) };
+  }
   return { ...primitive, bounds: toOverlay(primitive.bounds, monitor) };
 }
 

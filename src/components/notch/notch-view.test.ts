@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { COPY } from "../../lib/copy";
 import { initialState, type HodeState } from "../../features/hode/model";
 import { PACK, guideAction } from "../../features/hode/test-fixtures";
-import { NOTCH_WIDTHS, isExpanded, islandSize, notchView, providerBadge, skillLabel, stepItems, voiceNotice } from "./notch-view";
+import { NOTCH_WIDTHS, isExpanded, islandSize, notchView, providerBadge, shouldPeek, skillLabel, stepItems, voiceNotice } from "./notch-view";
 
 const guiding = (overrides: Partial<HodeState> = {}): HodeState => ({
   ...initialState,
@@ -163,5 +163,29 @@ describe("voiceNotice", () => {
     expect(voiceNotice("ready")).toBeUndefined();
     expect(voiceNotice("loading")).toBeUndefined();
     expect(voiceNotice(undefined)).toBeUndefined();
+  });
+});
+
+describe("shouldPeek", () => {
+  const covered = { covering: true, hovered: false, menuOpen: false, skillsOpen: false };
+
+  it("steps aside while a guidance step's target is under the card", () => {
+    expect(shouldPeek({ ...covered, mode: "guidance" })).toBe(true);
+  });
+
+  it("steps aside for a Point & Ask answer too: its highlight sat under the card before", () => {
+    expect(shouldPeek({ ...covered, mode: "answer" })).toBe(true);
+  });
+
+  it("stays open while the learner hovers it, uses the menu or reads their skills", () => {
+    expect(shouldPeek({ ...covered, mode: "guidance", hovered: true })).toBe(false);
+    expect(shouldPeek({ ...covered, mode: "guidance", menuOpen: true })).toBe(false);
+    expect(shouldPeek({ ...covered, mode: "guidance", skillsOpen: true })).toBe(false);
+  });
+
+  it("never peeks when nothing is covered, or for cards without a highlight (success, errors, goal entry)", () => {
+    expect(shouldPeek({ ...covered, mode: "guidance", covering: false })).toBe(false);
+    expect(shouldPeek({ ...covered, mode: "success" })).toBe(false);
+    expect(shouldPeek({ ...covered, mode: "goal" })).toBe(false);
   });
 });

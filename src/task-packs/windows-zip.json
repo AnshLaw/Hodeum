@@ -9,7 +9,7 @@
       "id": "open-menu",
       "objective": "Right-click your selected files",
       "skill": "windows.explorer.context_menu",
-      "target": { "names": ["Items View"], "role": "list", "label": "Your files" },
+      "target": { "names": ["Items View"], "role": "list", "label": "Your files", "prefer": "selected" },
       "speech": {
         "demonstrate": "Right-click one of the files you selected. A menu will open.",
         "guide": "Right-click your selected files.",

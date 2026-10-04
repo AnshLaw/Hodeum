@@ -1,6 +1,6 @@
 import type { HindiScript } from "../../data/settings";
 import { romanize } from "../../lib/hinglish";
-import { useEffect, useRef, useState, type CSSProperties, type Ref, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import type { Bus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
 import { reportError } from "../../lib/errors";
@@ -13,12 +13,12 @@ import { SurfaceMenu } from "./DockMenu";
 import { SkillsPanel, successExtra } from "./SkillsPanel";
 import { useNotchSkills, type SkillSource } from "./use-skills";
 import { GoalForm } from "./GoalForm";
-import { useAutoDismiss, useControlHandler, useCoveringTarget, useHitRect, useNotchHover, useSettled } from "./hooks";
+import { useAutoDismiss, useCardBottom, useControlHandler, useCoveringTarget, useHitRect, useNotchHover, useSettled } from "./hooks";
 import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
-import { EXPANDED_SIZES, NOTCH_WIDTHS, inScript, islandSize, notchView, stepItems, voiceNotice, type NotchSize, type NotchView } from "./notch-view";
+import { EXPANDED_SIZES, NOTCH_WIDTHS, inScript, islandSize, notchView, shouldPeek, stepItems, voiceNotice, type NotchSize, type NotchView } from "./notch-view";
 import type { NativeVoiceStatus } from "../../providers/speech/native-voice";
 import { HodeyFace } from "../hodey/HodeyFace";
 import { hodeyMood, type HodeyMood } from "../hodey/mood";
@@ -160,16 +160,17 @@ function notchWidth(size: NotchSize, phoneScreen: Size | undefined): number {
 }
 
 /** The dynamic island: one surface that morphs between pill, orb, bar and card as Hodey works. */
-function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering: boolean }) {
+function TopNotch(props: SurfaceProps & { surfaceRef: RefObject<HTMLElement | null>; covering: boolean; onCardBottom: (bottom: number) => void }) {
   const { menuOpen, hovered, revealed } = props;
   const stageRef = useRef<HTMLDivElement>(null);
   const phoneScreen = usePhoneScreen(props.phone, stageRef, "beside");
   const settled = useSettled(props.view.size === "orb", ORB_DELAY_MS);
   // Step aside to a slim bar while the highlighted control sits under the card; hovering brings it back.
   const skillsOpen = props.skills?.open === true;
-  const peek = props.covering && !hovered && !menuOpen && !skillsOpen && props.view.mode === "guidance";
+  const peek = shouldPeek({ mode: props.view.mode, covering: props.covering, hovered, menuOpen, skillsOpen });
   const listening = props.micStatus === "listening";
   const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening, phone: props.phoneOpen === true, skills: skillsOpen });
+  useCardBottom(props.surfaceRef, size === "guidance", props.onCardBottom);
   const view = skillsOpen ? { ...props.view, eyebrow: COPY.yourSkills, progress: undefined, controls: [] } : peek ? { ...props.view, controls: [] } : props.view;
   const style = { "--notch-width": `${notchWidth(size, phoneScreen)}px` } as CSSProperties;
   const classes = ["notch", `notch--${size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
@@ -246,10 +247,11 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   // Hodey stays out while the learner is in its menu or reading their skills.
   const revealed = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true, state.phase);
   const onControl = useControlHandler(runtime, bus);
-  useHitRect(surfaceRef, shell, `${layoutKey}:${revealed}`);
+  useHitRect(surfaceRef, shell, bus, `${layoutKey}:${revealed}`);
   // The success card stays while the learner reads it (hovering), then makes way.
   useAutoDismiss(view.mode === "success" && !hovered, runtime);
-  const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top");
+  const [cardBottom, setCardBottom] = useState<number>();
+  const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top", cardBottom);
   const activity = useActivity(tracker);
   const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
   const { phoneOpen, onTogglePhone } = usePhoneControls(phone, state, () => setMenuOpen(false));
@@ -302,6 +304,6 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
     onTogglePhone,
     skills,
   };
-  if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} covering={covering} />;
+  if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} covering={covering} onCardBottom={setCardBottom} />;
   return <Sidebar {...props} side={dock.prefs.dock} surfaceRef={surfaceRef} />;
 }

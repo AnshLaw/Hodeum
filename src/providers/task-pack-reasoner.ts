@@ -27,13 +27,23 @@ function roleMatches(element: UiElement, role?: string): boolean {
   return role === undefined || element.role.toLowerCase() === role.toLowerCase();
 }
 
+/** The first selected element (top to bottom, then left to right) inside `container`, if any. */
+function firstSelectedIn(container: UiElement, elements: UiElement[]): UiElement | undefined {
+  const inside = elements.filter((e) => e !== container && e.selected === true && containsPoint(container.bounds, center(e.bounds)));
+  return inside.sort((a, b) => a.bounds.y - b.bounds.y || a.bounds.x - b.bounds.x)[0];
+}
+
 function locateTarget(step: TaskStep, elements: UiElement[], focus?: Rect): ActionTarget | undefined {
   const candidates = findByNames(elements, step.target.names);
   if (candidates.length === 0) return undefined;
   const score = (e: UiElement) => (roleMatches(e, step.target.role) ? 2 : 0) + (focus && intersects(e.bounds, focus) ? 1 : 0);
   const best = [...candidates].sort((a, b) => score(b) - score(a))[0];
   const confidence = roleMatches(best, step.target.role) ? best.confidence : best.confidence * ROLE_MISMATCH_PENALTY;
-  return { elementId: best.id, bounds: best.bounds, confidence, label: step.target.label ?? best.name };
+  const label = step.target.label ?? best.name;
+  // A whole file list is too big to point at: one of the learner's selected files is what they act on.
+  const selected = step.target.prefer === "selected" ? firstSelectedIn(best, elements) : undefined;
+  if (selected) return { elementId: selected.id, bounds: selected.bounds, confidence: Math.min(confidence, selected.confidence), label };
+  return { elementId: best.id, bounds: best.bounds, confidence, label };
 }
 
 function guideStep(context: TeachingContext, step: TaskStep): TeachingAction {

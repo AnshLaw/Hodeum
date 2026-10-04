@@ -56,6 +56,29 @@ describe("TaskPackReasoningProvider", () => {
     expect(action.target?.confidence).toBeCloseTo(0.76);
   });
 
+  describe("a step that prefers a selected item (right-click one of your selected files)", () => {
+    const list = el("Items View", "list", { bounds: { x: 200, y: 180, width: 1000, height: 540 } });
+    const file = (name: string, row: number, selected: boolean) => el(name, "list item", { bounds: { x: 208, y: 212 + row * 32, width: 984, height: 30 }, selected });
+    const step = { ...PACK.steps[0], target: { names: ["Items View"], role: "list", label: "Your files", prefer: "selected" as const } };
+    const explorer = (files: ReturnType<typeof file>[]) => ctx({ step, observation: obs([list, ...files]) });
+
+    it("points at the first selected item inside the matched container, not the whole list", async () => {
+      const action = await reasoner.reason(explorer([file("notes.txt", 0, false), file("report.docx", 1, true), file("budget.xlsx", 2, true)]));
+      expect(action.target).toMatchObject({ elementId: "list item:report.docx", label: "Your files", bounds: { y: 244, height: 30 } });
+    });
+
+    it("falls back to the container when nothing in it is selected", async () => {
+      const action = await reasoner.reason(explorer([file("notes.txt", 0, false)]));
+      expect(action.target).toMatchObject({ elementId: "list:Items View", bounds: list.bounds });
+    });
+
+    it("ignores selected items outside the container", async () => {
+      const elsewhere = el("Documents", "tree item", { bounds: { x: 20, y: 300, width: 160, height: 28 }, selected: true });
+      const action = await reasoner.reason(ctx({ step, observation: obs([list, elsewhere]) }));
+      expect(action.target).toMatchObject({ elementId: "list:Items View" });
+    });
+  });
+
   it("asks for clarification when the target is missing", async () => {
     const action = await reasoner.reason(ctx({ observation: obs([tab("Home", 0)]) }));
     expect(action).toMatchObject({ kind: "clarify", speech: COPY.clarify });
