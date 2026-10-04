@@ -22,6 +22,12 @@ describe("asking Hodey to look it up", () => {
     expect(route(guiding, "look up how to sort by date")).toEqual([{ type: "VOICE_QUESTION", question: "how to sort by date", lookUp: true }]);
   });
 
+  it("leaves emails, links, paths and file names out of the question it takes to the web", () => {
+    expect(route(guiding, "look up how to email jane.doe@example.com from outlook")).toEqual([{ type: "VOICE_QUESTION", question: "how to email from outlook", lookUp: true }]);
+    expect(route(guiding, "search the web for how to open Q3-salaries.xlsx in excel")).toEqual([{ type: "VOICE_QUESTION", question: "how to open in excel", lookUp: true }]);
+    expect(route(guiding, String.raw`Google how to back up C:\Users\anshr\Documents or www.acme-intranet.com/payroll`)).toEqual([{ type: "VOICE_QUESTION", question: "how to back up or", lookUp: true }]);
+  });
+
   it("looks up the question just asked when told to look it up", () => {
     expect(route(asked, "look it up")).toEqual([{ type: "VOICE_QUESTION", question: "how do I freeze the top row", lookUp: true }]);
     expect(route(asked, "can you google it please")).toEqual([{ type: "VOICE_QUESTION", question: "how do I freeze the top row", lookUp: true }]);

@@ -26,7 +26,8 @@ fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
 
 /// Removes anything personal a query might carry: emails, links, file paths, numbers of four or more
 /// digits (spaced or not), the Windows user name (as a whole word), and file names. What's left is
-/// capped and trimmed.
+/// capped and trimmed. src/providers/web/scrub.ts applies the email, link, path and file-name rules to a
+/// spoken question before its punctuation is dropped: keep them in step.
 pub fn scrub_query(query: &str, user_name: &str) -> String {
     static EMAIL: OnceLock<Regex> = OnceLock::new();
     static URL: OnceLock<Regex> = OnceLock::new();

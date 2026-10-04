@@ -1,4 +1,5 @@
 import type { InstalledApp, TaskPack } from "../../lib/types";
+import { withoutAddresses } from "../../providers/web/scrub";
 import { goalEvent, goalEvents } from "../hode/bridge";
 import type { HodeEvent, HodeState } from "../hode/model";
 import { idleOpenAppEvent, openAppEvent } from "../hode/open-app";
@@ -142,8 +143,9 @@ const LOOK_UP_PATTERNS: RegExp[] = [
   /^(.+?) (?:गूगल|सर्च) (?:करो|कर दो|कीजिए)$/,
 ];
 
+/** The words of a possible look-up request. Emails, links, paths and file names go first, while their punctuation still shows them. */
 const lookUpText = (text: string) =>
-  text
+  withoutAddresses(text)
     .toLowerCase()
     .replace(/[^\p{L}\p{M}\p{N}' ]/gu, " ")
     .replace(/\s+/g, " ")
