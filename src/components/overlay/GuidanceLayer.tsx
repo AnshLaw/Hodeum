@@ -3,13 +3,12 @@ import { padRect } from "../../lib/coords";
 import type { OverlayPrimitive, Point, Rect, Size } from "../../lib/types";
 import { GUIDANCE_CARD_HEIGHT } from "../notch/footprint";
 import { NOTCH_WIDTHS } from "../notch/notch-view";
+import { BeamRing } from "./BeamRing";
 import { roundedRectPath } from "./geometry";
-import { type ArrowGeometry, arrowBounds, arrowGeometry, labelPosition, pulseScale } from "./placement";
+import { type ArrowGeometry, arrowBounds, arrowGeometry, labelPosition } from "./placement";
 
 const HIGHLIGHT_OUTSET_PX = 4;
 const HIGHLIGHT_RADIUS_PX = 8;
-/** How far the precise ring's pulse grows on every side before fading. */
-const PULSE_SPREAD_PX = 8;
 const SPOTLIGHT_PADDING_PX = 10;
 const PIN_RADIUS_PX = 6;
 const LABEL_HEIGHT_PX = 26;
@@ -24,22 +23,9 @@ function rectProps(r: Rect, rx: number) {
   return { x: r.x, y: r.y, width: r.width, height: r.height, rx };
 }
 
+/** Consecutive highlights share a channel, so each new target's ring glides over from the last one. */
 function Highlight({ bounds, emphasis }: { bounds: Rect; emphasis: "precise" | "broad" }) {
-  const ring = padRect(bounds, HIGHLIGHT_OUTSET_PX);
-  const props = rectProps(ring, HIGHLIGHT_RADIUS_PX);
-  return (
-    <g className={`hl hl--${emphasis}`}>
-      <rect className="hl__under" {...props} />
-      <rect className="hl__ring" {...props} />
-      {emphasis === "precise" && <rect className="hl__pulse" style={pulseStyle(ring)} {...props} />}
-    </g>
-  );
-}
-
-function pulseStyle(ring: Rect): CSSProperties | undefined {
-  if (ring.width <= 0 || ring.height <= 0) return undefined;
-  const scale = pulseScale(ring, PULSE_SPREAD_PX);
-  return { "--pulse-sx": scale.x, "--pulse-sy": scale.y } as CSSProperties;
+  return <BeamRing ring={padRect(bounds, HIGHLIGHT_OUTSET_PX)} radius={HIGHLIGHT_RADIUS_PX} emphasis={emphasis} channel="guidance" />;
 }
 
 function Arrow({ geometry }: { geometry: ArrowGeometry }) {
@@ -49,6 +35,7 @@ function Arrow({ geometry }: { geometry: ArrowGeometry }) {
     <g className="arrow">
       <path className="arrow__under" d={d} />
       <path className="arrow__line" d={d} pathLength={ARROW_PATH_LENGTH} />
+      <path className="arrow__flow" d={d} pathLength={ARROW_PATH_LENGTH} />
       <path className="arrow__head" d="M0 0L-13 -7.5L-13 7.5Z" transform={`translate(${end.x} ${end.y}) rotate(${angle})`} />
     </g>
   );
