@@ -1,12 +1,14 @@
 import { applyOutcome } from "../features/hode/policy";
 import { ASSISTANCE_LEVELS, type AssistanceLevel, type SkillRecord, type SkillStatus, type StepOutcome } from "../lib/types";
 import type { SkillStore } from "../providers/interfaces";
+import type { KeyValueStore } from "./kv";
 import { DEFAULT_SETTINGS, parseSettings, type Settings, type SettingsStore } from "./settings";
 import type { SqlDatabase } from "./sql";
 import type { ChatMessage, ChatRole, ChatStore, ChatThread, HodeDetail, HodeEventKind, HodeEventRecord, HodeOutcome, HodeRecord, LearningStore } from "./types";
 
 const SKILL_STATUSES: SkillStatus[] = ["new", "learning", "mastered"];
 const SETTINGS_KEY = "settings";
+const UPSERT_SETTING = "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
 
 interface SkillRow {
   skill_id: string;
@@ -211,6 +213,20 @@ export class SqliteSettingsStore implements SettingsStore {
 
   async save(settings: Settings): Promise<void> {
     const value = JSON.stringify(parseSettings(settings));
-    await this.db.execute("INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [SETTINGS_KEY, value]);
+    await this.db.execute(UPSERT_SETTING, [SETTINGS_KEY, value]);
+  }
+}
+
+/** Shares the `settings` key/value table; callers use dotted keys that never clash with `settings`. */
+export class SqliteKeyValueStore implements KeyValueStore {
+  constructor(private readonly db: SqlDatabase) {}
+
+  async get(key: string): Promise<string | undefined> {
+    const [row] = await this.db.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [key]);
+    return row?.value;
+  }
+
+  async set(key: string, value: string): Promise<void> {
+    await this.db.execute(UPSERT_SETTING, [key, value]);
   }
 }

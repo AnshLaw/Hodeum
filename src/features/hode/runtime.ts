@@ -2,8 +2,9 @@ import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
 import type { AssistanceLevel, HodeMode, Rect, StepOutcome, TeachingContext } from "../../lib/types";
-import type { PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
+import type { LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { reasonWithFallback } from "../../providers/router";
+import { rememberedLevel } from "../memory/tracker";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState } from "./model";
 import { step } from "./reducer";
 
@@ -14,6 +15,8 @@ export interface RuntimeDeps {
   skills: SkillStore;
   bus: Bus;
   tts: TTSProvider;
+  /** Learning memory recalled at the start of a pack Hode; nudges each skill's starting level. */
+  memory?: Pick<MemoryProvider, "getRelevantMemory">;
 }
 
 async function* once(text: string): AsyncIterable<string> {
@@ -40,6 +43,8 @@ export class HodeRuntime {
   private defaultMode: HodeMode = "teach";
   private stuckMs: number | undefined;
   private autoLanguage = false;
+  /** What learning memory recalled for the running Hode; skill loads wait for it. */
+  private recalled: Promise<LearningMemory[]> = Promise.resolve([]);
   private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
 
   constructor(private readonly deps: RuntimeDeps) {
@@ -74,6 +79,7 @@ export class HodeRuntime {
     const event = incoming.type === "GOAL_SUBMITTED" && !incoming.mode ? { ...incoming, mode: this.defaultMode } : incoming;
     const prev = this.state;
     const { state, effects } = step(prev, event);
+    if (event.type === "GOAL_SUBMITTED" && prev.phase === "goal_entry" && state.pack) this.recall(state);
     if (state !== prev) {
       this.state = state;
       this.listeners.forEach((listener) => listener());
@@ -149,12 +155,22 @@ export class HodeRuntime {
   }
 
   private loadSkill(skillId: string): void {
-    this.pendingWrite
-      .then(() => this.deps.skills.get(skillId))
-      .then(
-        (record) => this.dispatch({ type: "SKILL_LOADED", skillId, record }),
-        (error) => this.fail("Couldn't load your skill progress", error),
-      );
+    Promise.all([this.pendingWrite.then(() => this.deps.skills.get(skillId)), this.recalled]).then(
+      ([record, memories]) => this.dispatch({ type: "SKILL_LOADED", skillId, record, remembered: rememberedLevel(memories, skillId) }),
+      (error) => this.fail("Couldn't load your skill progress", error),
+    );
+  }
+
+  /** Asks by the pack's title and skills only: the learner's own goal words never leave this window. */
+  private recall(state: HodeState): void {
+    const memory = this.deps.memory;
+    const pack = state.pack;
+    if (!memory || !pack) return;
+    const query = { goal: pack.title, skillIds: [...new Set(pack.steps.map((step) => step.skill))] };
+    this.recalled = memory.getRelevantMemory(query).catch((error: unknown) => {
+      console.error("Recalling learning memory failed; starting from skill progress alone", error);
+      return [];
+    });
   }
 
   /** Observations wait for this, so the first read is of the app being brought forward. */

@@ -93,7 +93,11 @@ pub fn run() {
             account::device_name,
             cloud::keys::cloud_key_status,
             cloud::keys::cloud_key_set,
-            cloud::keys::cloud_key_clear
+            cloud::keys::cloud_key_clear,
+            cloud::backboard::backboard_create_assistant,
+            cloud::backboard::backboard_create_thread,
+            cloud::backboard::backboard_add_message,
+            cloud::backboard::backboard_search_memories
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())

@@ -5,6 +5,8 @@ import { HodeRecorder } from "../../data/recorder";
 import type { Settings, SettingsStore } from "../../data/settings";
 import type { HodeLog } from "../../data/types";
 import { appFromGoal, matchGoal } from "../../task-packs/match";
+import type { MemoryProvider } from "../../providers/interfaces";
+import { HodeMemoryTracker } from "../memory/tracker";
 import { currentStep, type HodeEvent, type HodeState } from "./model";
 import type { HodeRuntime } from "./runtime";
 
@@ -34,6 +36,8 @@ export interface BridgeDeps {
   applyHodeyKey?: (key: Settings["hodeyKey"]) => void;
   /** Tells the cloud policy which cloud providers are turned on. */
   applyCloud?: (cloud: Settings["cloud"]) => void;
+  /** Learning memory: a compact summary is stored when each Hode completes or is ended. */
+  memory?: Pick<MemoryProvider, "storeLearningSummary">;
 }
 
 /** A typed goal as an event: its task pack, or (when vision can plan) the app it names. */
@@ -78,8 +82,10 @@ export function connectHodeBridge(deps: BridgeDeps): () => void {
     last = key;
   };
   loadSettings(deps);
+  const memory = deps.memory ? new HodeMemoryTracker(deps.memory) : undefined;
   const offs = [
     runtime.onTransition(recorder.observe),
+    ...(memory ? [runtime.onTransition(memory.observe)] : []),
     runtime.subscribe(broadcast),
     bus.on("hode:summary-request", () => bus.emit("hode:summary", summaryOf(runtime.getState()))),
     bus.on("hode:start", ({ goal }) => startFromApp(runtime, goal, deps.packs, deps.openGoalsAllowed())),

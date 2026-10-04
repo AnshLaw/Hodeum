@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import type { SqlDatabase } from "./sql";
 
-const MIGRATIONS = ["0001_skills.sql", "0002_learning.sql", "0003_chat_web.sql"];
+const MIGRATIONS = ["0001_skills.sql", "0002_learning.sql", "0003_chat_web.sql", "0004_learning_memory.sql"];
 
 /** node:sqlite reads `$1` as a parameter name, so bind by name instead of by position. */
 const named = (values: unknown[]): Record<string, SQLInputValue> => Object.fromEntries(values.map((value, i) => [`$${i + 1}`, value as SQLInputValue]));
