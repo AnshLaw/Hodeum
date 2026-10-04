@@ -131,6 +131,10 @@ export interface HodeState {
   practice?: boolean;
   /** Hodey gave more help than the step started with at least once this Hode. */
   neededHelp?: boolean;
+  /** Open-ended Hodes: the instructions the learner has carried out, oldest first. */
+  openDone?: string[];
+  /** Open-ended Hodes: the learner did something that mattered since the instruction on show was given. */
+  actedSinceInstruction?: boolean;
   /** That acknowledgement, shown in the notch until the learner acts again. */
   ack?: string;
   /** The last acknowledgement used, so the next one is a different phrase. */
@@ -265,6 +269,11 @@ export function rechecking(s: HodeState): boolean {
   // Asked for (a hint, look again) and a slow reasoner is on it: show Hodey working instead.
   const shownWorking = s.thinking === true && s.prompted === true;
   return s.phase === "reasoning" && !shownWorking && !asking && s.action !== undefined && s.action.kind !== "answer";
+}
+
+/** Help with an open goal, before anyone asked: Hodey watches and leaves the vision model alone. */
+export function standingBy(s: HodeState): boolean {
+  return s.open && s.mode === "help" && (s.level === "observe" || s.level === "independent");
 }
 
 /** The learner's mark as an overlay pin, drawn only over the window they marked it on. */

@@ -33,6 +33,8 @@ export interface SpokenCopy {
   practiceIntro: string;
   /** A practice round finished with no help at all. */
   didItAlone: string;
+  /** Explain in an open-ended Hode, asked of the vision model as the learner's question. */
+  whyThisStep: string;
   /** Said when the learner gets a step right (Teach, or Help once Hodey stepped in); varied so it doesn't sound canned. */
   stepDone: readonly string[];
   /** Agent mode's lighter acknowledgement of a step done right. */
@@ -77,6 +79,7 @@ const ENGLISH: SpokenCopy = {
   pickAnAnswer: "Tap one of the answers on the card, or say it.",
   practiceIntro: "Your turn to do it on your own. I'll stay quiet unless you get stuck.",
   didItAlone: "You did the whole thing on your own.",
+  whyThisStep: "Why is this the next step?",
   stepDone: ["Nice, that's it.", "Exactly right.", "Good, that's the one.", "Yes, well done."],
   stepDoneLight: ["Good.", "Done."],
   nothingMarked: COPY.nothingMarked,
@@ -114,6 +117,7 @@ const HINDI: SpokenCopy = {
   pickAnAnswer: "कार्ड पर किसी एक जवाब पर टैप कीजिए, या उसे बोलिए।",
   practiceIntro: "अब आप खुद कीजिए। आप अटकें, तभी मदद मिलेगी।",
   didItAlone: "आपने पूरा काम खुद कर लिया।",
+  whyThisStep: "ये अगला स्टेप क्यों है?",
   stepDone: ["बढ़िया, यही था।", "बिल्कुल सही।", "हाँ, यही वाला।", "शाबाश, सही किया।"],
   stepDoneLight: ["ठीक है।", "हो गया।"],
   nothingMarked: "वहाँ अभी कोई कंट्रोल समझ नहीं आ रहा। किसी एक बटन के आसपास छोटा हिस्सा मार्क करके देखिए।",
@@ -151,6 +155,7 @@ const HINGLISH: SpokenCopy = {
   pickAnAnswer: "Card पर किसी एक answer पर tap कीजिए, या उसे बोलिए।",
   practiceIntro: "अब आप खुद कीजिए। अटकें, तभी help मिलेगी।",
   didItAlone: "आपने पूरा काम खुद कर लिया।",
+  whyThisStep: "ये next step क्यों है?",
   stepDone: ["बढ़िया, यही था।", "Perfect, बिल्कुल सही।", "हाँ, यही वाला।", "Great, सही किया।"],
   stepDoneLight: ["Good।", "Done।"],
   nothingMarked: "वहाँ अभी कोई control समझ नहीं आ रहा। किसी एक button के आसपास छोटा area mark करके देखिए।",

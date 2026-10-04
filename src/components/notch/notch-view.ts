@@ -1,7 +1,7 @@
 import { COPY } from "../../lib/copy";
 import { spoken } from "../../lib/spoken";
 import { AGENT_STYLE_COPY, MODE_COPY } from "../../lib/modes";
-import { currentStep, rechecking, type HodeState } from "../../features/hode/model";
+import { currentStep, rechecking, standingBy, type HodeState } from "../../features/hode/model";
 import { skillName } from "../../features/skills/graph";
 
 export type NotchSize = "idle" | "orb" | "compact" | "guidance" | "lesson" | "success" | "phone" | "skills";
@@ -166,16 +166,18 @@ function checkpointView(s: HodeState): NotchView {
   };
 }
 
-/** Open-ended Hode: the goal is the eyebrow and there's no step list or Explain text. */
+/** Open-ended Hode: the goal is the eyebrow; Explain asks the model why; Help stands by until asked. */
 function openGuidanceView(s: HodeState): NotchView {
+  const eyebrow = s.ack ?? COPY.openHode(s.goal);
+  if (standingBy(s) && !s.action) return { mode: "guidance", size: "guidance", eyebrow, title: COPY.helpStandingBy, detail: s.notice, busy: false, controls: ["hint", "point", "pause", "end"], hintLabel: COPY.needHint };
   return {
     mode: "guidance",
     size: "guidance",
-    eyebrow: COPY.openHode(s.goal),
+    eyebrow,
     title: s.action?.speech ?? "",
     detail: s.notice,
     busy: workingInBackground(s),
-    controls: ["hint", "repeat", "look_again", "point", "pause", "end"],
+    controls: ["hint", "explain", "repeat", "look_again", "point", "pause", "end"],
     hintLabel: COPY.needHint,
   };
 }
@@ -241,7 +243,9 @@ function successView(s: HodeState): NotchView {
   const learned = hodeyOnly ? COPY.hodeyDidIt : s.learnedSkills.length > 0 ? COPY.skillLearned : undefined;
   // A finished Teach lesson can be done again with Hodey only watching.
   const controls: NotchControl[] = s.mode === "teach" && s.pack && !s.open ? ["practice"] : [];
-  const base: NotchView = { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail: learned, busy: false, controls, skills: s.learnedSkills.map(skillLabel) };
+  // An open-ended Hode lists what the learner did, since it had no plan to tick off.
+  const steps = s.open && s.openDone?.length ? s.openDone.map((objective, index) => ({ id: `open-${index}`, objective, state: "done" as const })) : undefined;
+  const base: NotchView = { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail: learned, busy: false, controls, skills: s.learnedSkills.map(skillLabel), steps };
   return s.review ? { ...base, ...reviewView(s, s.review) } : base;
 }
 

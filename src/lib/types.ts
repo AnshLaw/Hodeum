@@ -208,6 +208,8 @@ export interface TeachingContext {
   openGoal?: boolean;
   /** The instruction the learner was last given (open-ended Hodes). */
   lastInstruction?: string;
+  /** Open-ended Hodes: the instructions the learner has already carried out, oldest first. */
+  doneSteps?: string[];
   /** What to reply in; English when absent. */
   language?: ReplyLanguage;
   /** The learner's last few actions this step, oldest first: what they did and what it changed. */

@@ -1,6 +1,6 @@
 import { center, containsPoint, intersects } from "../../lib/coords";
 import type { ReplyLanguage } from "../../lib/language";
-import type { Rect, TeachingContext, UiElement } from "../../lib/types";
+import type { AssistanceLevel, Rect, TeachingContext, UiElement } from "../../lib/types";
 import { nameMatches } from "../../features/hode/signals";
 import { describeActions } from "../../features/hode/change";
 import { BOX_SCALE } from "./schema";
@@ -33,12 +33,27 @@ if (PHONE_SYSTEM_PROMPT === SYSTEM_PROMPT) throw new Error("PHONE_SYSTEM_PROMPT 
 /** Longest piece of screen or learner text passed to the model. */
 const MAX_UNTRUSTED_CHARS = 80;
 
+/** Longest instruction of Hodey's own passed back to the model (its words can quote screen text). */
+const MAX_OWN_WORDS_CHARS = 240;
+
 /** Screen text is untrusted: flatten it to one short, quote-free line so it can't pose as prompt structure. */
-export function untrusted(text: string): string {
+export function untrusted(text: string, maxChars = MAX_UNTRUSTED_CHARS): string {
   // eslint-disable-next-line no-control-regex -- stripping control characters is the point
   const flat = text.replace(/[\u0000-\u001f\u007f<>"`]/g, " ").replace(/\s+/g, " ").trim();
-  return flat.length > MAX_UNTRUSTED_CHARS ? `${flat.slice(0, MAX_UNTRUSTED_CHARS)}…` : flat;
+  return flat.length > maxChars ? `${flat.slice(0, maxChars)}…` : flat;
 }
+
+/** Hodey's own earlier words, flattened like screen text but kept whole. */
+const ownWords = (text: string) => untrusted(text, MAX_OWN_WORDS_CHARS);
+
+/** What the model does at each rung of the help ladder (docs/teach-loop.md). */
+const HELP_LINES: Record<AssistanceLevel, string> = {
+  demonstrate: "Help level: demonstrate. Name the exact control and where it is, and add a few words on why it's the right step.",
+  guide: "Help level: guide. Name the control to use, in one short sentence.",
+  hint: "Help level: hint. Don't name the control: ask a short question or give a clue about where to look (which tab, menu or part of the window), so the learner works it out. Still give its number in target_index; Hodey lights up only the area around it.",
+  observe: "Help level: observe. The learner is working on their own: say the next step in five words or fewer.",
+  independent: "Help level: independent. Say the next step in five words or fewer.",
+};
 
 /** On the phone every control is OCR text, so text is what can be pointed at. */
 function pointable(element: UiElement, context: TeachingContext): boolean {
@@ -92,7 +107,7 @@ function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
   const lines = [`App: <screen>${untrusted(context.observation.app)} — ${untrusted(context.observation.windowTitle)}</screen>.`];
   if (context.goal) lines.push(`The learner's goal: <learner>${untrusted(context.goal)}</learner>.`);
   if (context.step) lines.push(`Current step: ${context.step.objective}. Expected labels: ${context.step.target.names.join(", ")}.`);
-  lines.push(`How much help to give: ${context.assistanceLevel} (demonstrate = explicit, hint = a nudge without naming the control).`);
+  lines.push(HELP_LINES[context.assistanceLevel]);
   if (context.correction) lines.push(`The learner just made a mistake: ${context.correction}`);
   const recent = context.recentActions ?? [];
   if (recent.length > 0) {
@@ -107,7 +122,9 @@ function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
     lines.push(`The learner asks: <learner>${untrusted(context.utterance)}</learner>. Answer with kind "answer" in one or two short sentences, warm and natural, the way you'd say it out loud to someone next to you; point at the control it's about if there is one.`);
   } else if (context.openGoal) {
     lines.push("There is no fixed plan: decide the single next action toward the goal from what is on screen, and point at where to do it.");
-    if (context.lastInstruction) lines.push(`You last told the learner: ${untrusted(context.lastInstruction)}. Check whether they did it.`);
+    const done = context.doneSteps ?? [];
+    if (done.length > 0) lines.push(`Steps the learner has already done: ${done.map((step, i) => `${i + 1}. ${ownWords(step)}`).join(" ")}`);
+    if (context.lastInstruction) lines.push(`You last told the learner: ${ownWords(context.lastInstruction)}. If the screen shows they did it, give the next step; if not, help them with this one.`);
     lines.push('If the screen shows the goal is achieved, reply kind "complete" with a short congratulation. Otherwise reply kind "guide".');
   } else {
     lines.push('Tell the learner the next thing to do with kind "guide".');

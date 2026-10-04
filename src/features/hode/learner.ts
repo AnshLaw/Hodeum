@@ -3,6 +3,8 @@ import { ASSISTANCE_LEVELS, type ActionVerdict, type ScreenObservation, type Ste
 import { assessAction, mattered } from "./change";
 import { beginStep, inWrongApp, onObserved, onSkillLoaded, requestReason, waitForApp } from "./flow";
 import { takeOver } from "./execute";
+import { acknowledgement, watchedOnly } from "./ack";
+import { onVoiceQuestion } from "./session";
 import { finishHode } from "./closing";
 import {
   MAX_WRONG_ACTIONS,
@@ -10,6 +12,7 @@ import {
   currentStep,
   noop,
   pinOverlay,
+  standingBy,
   withLeadingEffects,
   type EventOf,
   type HodeEffect,
@@ -113,24 +116,7 @@ function onUnfinishedAction(s: HodeState, step: TaskStep, wasReasoning: boolean,
   return { state: { ...s, wrongActions }, effects: [] };
 }
 
-/**
- * A short "that's right" for a step just done: always in Teach (a remembered step gets its own line),
- * in Help only when Hodey stepped in on it, and a lighter one in Agent. Never the same phrase twice running.
- */
-export function acknowledgement(s: HodeState): string | undefined {
-  if (s.mode === "help" && !s.escalated) return undefined;
-  const words = spoken(s.language);
-  const unaided = s.mode === "teach" && !s.escalated && watchedOnly(s);
-  // A skill picked up earlier in this Hode isn't remembered from before: the learner has the hang of it now.
-  const skill = currentStep(s)?.skill;
-  const own = skill !== undefined && s.learnedSkills.includes(skill) ? words.gotTheHang : words.rememberedOnYourOwn;
-  if (unaided && s.lastAck !== own) return own;
-  const pool = (s.mode === "agent" ? words.stepDoneLight : words.stepDone).filter((line) => line !== s.lastAck);
-  return pool[s.stepIndex % pool.length];
-}
-
-/** Hodey only watched this step (escalating moves the level, so a step that needed help never counts). */
-const watchedOnly = (s: HodeState): boolean => s.level === "observe" || s.level === "independent";
+export { acknowledgement } from "./ack";
 
 /** Teach confirms a step the learner needed help with by the idea behind it, unless that was said this step. */
 const reasonFor = (s: HodeState, step: TaskStep): string | undefined => (s.mode === "teach" && s.whySaid !== true && !watchedOnly(s) ? step.explain : undefined);
@@ -148,13 +134,20 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
   return withLeadingEffects(beginStep({ ...acknowledged, freshRead: true }, nextIndex), done);
 }
 
-/** Open-ended Hodes have no success signal to check, so every action that changed something asks the model what's next. */
+/**
+ * Open-ended Hodes have no success signal to check, so an action that changed something asks the model
+ * what's next (it says whether the step was done by moving on). Help only watches until asked or stuck.
+ */
 function onOpenAction(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
   if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
-  const next: HodeState = { ...s, observation: e.observation, waitingForApp: undefined };
-  if (!s.waitingForApp && !mattered(assessAction({ before: s.observation, after: e.observation }))) return quiet(next);
+  const action = { before: s.observation, after: e.observation };
+  const next: HodeState = { ...s, observation: e.observation, waitingForApp: undefined, stepActions: remember(s.stepActions, action), ack: undefined };
+  if (!s.waitingForApp && !mattered(assessAction(action))) return quiet(next);
+  // Acting is the opposite of being stuck: Help keeps watching, with the stuck timer started afresh.
+  if (standingBy(next)) return { state: next, effects: [CANCEL_TIMER, { type: "startStuckTimer", ms: STUCK_MS }] };
   // Something that matters happened (or they're back in the app): the stuck timer may climb the ladder again.
-  return withLeadingEffects(requestReason({ ...next, toppedOut: false, prompted: s.waitingForApp !== undefined }), [CANCEL_TIMER]);
+  const asked: HodeState = { ...next, toppedOut: false, actedSinceInstruction: true, prompted: s.waitingForApp !== undefined };
+  return withLeadingEffects(requestReason(asked), [CANCEL_TIMER]);
 }
 
 /** A lesson step being prepared (skill loading, screen being read), not a question being answered. */
@@ -242,6 +235,8 @@ export function onSaidStuck(s: HodeState): Transition {
 }
 
 export function onExplainRequested(s: HodeState): Transition {
+  // An open-ended Hode has no written why: Hodey asks the model, as a question about the screen.
+  if (s.open && s.phase === "guiding" && s.action) return onVoiceQuestion(s, { type: "VOICE_QUESTION", question: spoken(s.language).whyThisStep });
   const step = currentStep(s);
   if (s.phase !== "guiding" || !step) return noop(s);
   return { state: { ...s, explanation: step.explain, whySaid: true }, effects: [{ type: "say", text: step.explain }] };

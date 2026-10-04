@@ -7,6 +7,7 @@ import {
   QUESTION_PADDING_PX,
   STUCK_MS,
   currentStep,
+  standingBy,
   initialState,
   noop,
   pinFor,
@@ -19,6 +20,7 @@ import { diffScreens, isUnchanged, summarizeActions } from "./change";
 import { neighboursOf } from "./neighbours";
 import { confidenceBand, nudgeStartLevel, overlayFor, quieterOf } from "./policy";
 import { regionAround } from "./region";
+import { acknowledgement } from "./ack";
 
 /** Open-ended Hodes have no saved skill: the vision model phrases each step at the mode's level. */
 const OPEN_START: Record<HodeMode, AssistanceLevel> = { teach: "hint", help: "observe", agent: "guide" };
@@ -122,6 +124,8 @@ export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {
   // A question is answered wherever the learner is looking; only guidance waits for the right app.
   const asking = s.spokenQuestion !== undefined || s.question !== undefined;
   if (!asking && inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
+  // Help with an open goal watches until the learner asks or gets stuck: no model call yet.
+  if (!asking && standingBy(s) && s.action === undefined) return { state: { ...s, phase: "guiding", observation: e.observation }, effects: [{ type: "startStuckTimer", ms: STUCK_MS }] };
   // A second look at a screen that hasn't changed would only get the same unsure answer: ask the learner instead.
   const sameScreen = s.reobserved && !asking && s.observation !== undefined && isUnchanged(diffScreens(s.observation, e.observation));
   if (sameScreen) return showGuidance({ ...s, observation: e.observation }, clarifyFor(s));
@@ -147,7 +151,8 @@ function contextFor(s: HodeState, observation: ScreenObservation): TeachingConte
     correction: s.correction,
     recentMistakes: s.mistakes,
     openGoal: s.open,
-    lastInstruction: s.open ? s.action?.speech : undefined,
+    lastInstruction: s.open ? (s.instructionSaid ?? s.action?.speech) : undefined,
+    doneSteps: s.open ? s.openDone : undefined,
     language: s.language,
     recentActions: summarizeActions(s.stepActions, currentStep(s)),
   };
@@ -176,16 +181,63 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   if (asking) return showAnswer(withNotice, { ...e.action, kind: "answer" });
   // An answer nobody asked for is guidance: shown as an answer, it would fold away and end the Hode.
   const action: TeachingAction = e.action.kind === "answer" ? { ...e.action, kind: "guide" } : e.action;
-  if (action.kind === "complete" && s.open) return finishOpenHode(withNotice, action);
+  if (action.kind === "complete" && s.open) return finishOpenHode(openProgress(withNotice, action), action);
+  if (s.open) return showOpenAction(openProgress(withNotice, action), action);
   const band = action.target ? confidenceBand(action.target.confidence) : "uncertain";
   // A correction is worth saying even when its target isn't on screen (the learner left the page).
   if (band === "uncertain" && action.kind === "correct") return showGuidance(withNotice, { ...action, target: undefined });
-  // An open-ended Hode has only the model's words: an unsure target isn't drawn, but the line is still said.
-  if (band === "uncertain" && s.open && action.speech !== "") return showGuidance(withNotice, { ...action, target: undefined });
   if (band === "uncertain" && !s.reobserved) {
     return { state: { ...withNotice, phase: "observing", reobserved: true }, effects: [{ type: "observe" }] };
   }
   return showGuidance(withNotice, band === "uncertain" ? clarifyFor(s) : action);
+}
+
+/** Two instructions that share at least this share of their words are one step said two ways. */
+const SAME_STEP_OVERLAP = 0.6;
+/** Words this short ("ok", "to") don't tell instructions apart. */
+const MIN_INSTRUCTION_WORD = 3;
+
+const instructionWords = (text: string): Set<string> =>
+  new Set(
+    text
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((word) => word.length >= MIN_INSTRUCTION_WORD),
+  );
+
+/** The model gave a new instruction, not the last one reworded. */
+function movedOn(previous: string, next: string): boolean {
+  const a = instructionWords(previous);
+  const b = instructionWords(next);
+  const shared = [...a].filter((word) => b.has(word)).length;
+  return shared / Math.max(1, Math.min(a.size, b.size)) < SAME_STEP_OVERLAP;
+}
+
+/**
+ * An open-ended Hode has no success signal: when the learner acted and the model moved on to a new
+ * instruction, the last one was done. It's acknowledged, and the next step starts at the mode's level.
+ */
+function openProgress(s: HodeState, action: TeachingAction): HodeState {
+  const previous = s.action;
+  const actionable = (kind: TeachingAction["kind"]) => kind === "guide" || kind === "correct";
+  const done = s.actedSinceInstruction === true && previous !== undefined && actionable(previous.kind) && action.kind !== "clarify" && movedOn(previous.speech, action.speech);
+  if (!done) return s;
+  const openDone = [...(s.openDone ?? []), previous.speech];
+  if (action.kind === "complete") return { ...s, openDone };
+  const ack = acknowledgement(s);
+  const acknowledged: HodeState = ack ? { ...s, pendingAck: ack, lastAck: ack } : s;
+  const fresh = { level: OPEN_START[s.mode], escalated: false, toppedOut: false, mistakes: 0, wrongActions: 0, stepActions: [], instructionSaid: undefined };
+  return { ...acknowledged, ...fresh, openDone, actedSinceInstruction: false };
+}
+
+/** An open-ended Hode's next instruction, after any step it closes. It has only the model's words: an unsure target isn't drawn, but the line is still said. */
+function showOpenAction(s: HodeState, action: TeachingAction): Transition {
+  const band = action.target ? confidenceBand(action.target.confidence) : "uncertain";
+  if (band !== "uncertain") return showGuidance(s, action);
+  if (action.speech !== "") return showGuidance(s, { ...action, target: undefined });
+  if (!s.reobserved) return { state: { ...s, phase: "observing", reobserved: true }, effects: [{ type: "observe" }] };
+  return showGuidance(s, clarifyFor(s));
 }
 
 /** The action's overlay, with the text around its target so the label can keep clear of it, and a hint's area. */
@@ -248,6 +300,7 @@ export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
     reason: s.pendingReason ?? s.reason,
     instructionSaid: instruction === "" ? s.instructionSaid : instruction,
     whySaid: s.whySaid === true || (why !== undefined && instruction.includes(why)),
+    actedSinceInstruction: instruction === "" ? s.actedSinceInstruction : false,
     prompted: false,
   };
   return { state, effects };
