@@ -43,12 +43,13 @@ export class BackboardMemoryProvider implements MemoryProvider {
 
   constructor(private readonly deps: BackboardDeps) {}
 
+  /** Searched by skill ids alone: `goal` may be the learner's own words, which stay on this PC. */
   async getRelevantMemory(query: MemoryQuery): Promise<LearningMemory[]> {
-    if (!this.deps.policy.allowed("backboard")) return [];
+    if (query.skillIds.length === 0 || !this.deps.policy.allowed("backboard")) return [];
     const assistantId = await this.deps.kv.get(ASSISTANT_ID_KEY);
     if (!assistantId) return [];
     const memories = await this.reported(() =>
-      this.deps.invoke<BackboardMemory[]>("backboard_search_memories", { assistantId, query: [query.goal, ...query.skillIds].join(" "), limit: MAX_CLOUD_MEMORIES }),
+      this.deps.invoke<BackboardMemory[]>("backboard_search_memories", { assistantId, query: query.skillIds.join(" "), limit: MAX_CLOUD_MEMORIES }),
     );
     return memories.map((memory) => toLearningMemory(memory, query.skillIds));
   }

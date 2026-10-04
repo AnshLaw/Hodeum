@@ -69,6 +69,16 @@ describe("BackboardMemoryProvider", () => {
     ]);
   });
 
+  it("searches by skill ids only, so a goal in the learner's own words never leaves the PC", async () => {
+    const h = setup("auto", { assistant: "asst-9" });
+    await h.provider.getRelevantMemory({ goal: "pivot my HDFC salary sheet", skillIds: ["excel.pivot.create"] });
+    expect(h.invoke).toHaveBeenCalledWith("backboard_search_memories", expect.objectContaining({ query: "excel.pivot.create" }));
+    expect(JSON.stringify(h.invoke.mock.calls)).not.toMatch(/HDFC|salary/);
+    h.invoke.mockClear();
+    expect(await h.provider.getRelevantMemory({ goal: "fix my resume", skillIds: [] })).toEqual([]);
+    expect(h.invoke).not.toHaveBeenCalled();
+  });
+
   it("recalls nothing before an assistant exists", async () => {
     const h = setup("auto");
     expect(await h.provider.getRelevantMemory(QUERY)).toEqual([]);
