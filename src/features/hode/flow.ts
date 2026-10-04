@@ -96,6 +96,8 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       hodeyTries: 0,
       instructionSaid: undefined,
       whySaid: false,
+      claimedDone: false,
+      offerSkip: false,
       prompted: false,
       toppedOut: false,
     },
@@ -157,10 +159,11 @@ export function onThinking(s: HodeState, e: EventOf<"THINKING">): Transition {
 export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transition {
   if (s.phase !== "reasoning" || e.requestId !== s.requestId) return noop(s);
   const withNotice = { ...s, notice: e.failures.length > 0 ? COPY.fallbackNotice : s.notice };
-  const action = e.action;
-  // Whatever form a reply to a question takes, it's shown as the answer, so the question never lingers.
+  // Whatever form a reply to a question takes (even "complete"), it's shown as the answer, so the question never lingers.
   const asking = s.spokenQuestion !== undefined || s.question !== undefined;
-  if (action.kind === "answer" || (asking && action.kind !== "complete")) return showAnswer(withNotice, { ...action, kind: "answer" });
+  if (asking) return showAnswer(withNotice, { ...e.action, kind: "answer" });
+  // An answer nobody asked for is guidance: shown as an answer, it would fold away and end the Hode.
+  const action: TeachingAction = e.action.kind === "answer" ? { ...e.action, kind: "guide" } : e.action;
   if (action.kind === "complete" && s.open) return finishOpenHode(withNotice, action);
   const band = action.target ? confidenceBand(action.target.confidence) : "uncertain";
   // A correction is worth saying even when its target isn't on screen (the learner left the page).
@@ -208,7 +211,7 @@ export function withWhy(s: HodeState, action: TeachingAction): TeachingAction {
 function lineFor(s: HodeState, action: TeachingAction): { line: string; instruction: string } {
   const heard = s.prompted !== true && action.speech === s.instructionSaid;
   const instruction = heard ? "" : action.speech;
-  const parts = [s.pendingIntro, s.pendingAck, s.pendingReason, instruction];
+  const parts = [s.pendingIntro, s.pendingAck, s.pendingReason, s.pendingNote, instruction];
   return { line: parts.filter((part): part is string => part !== undefined && part !== "").join(" "), instruction };
 }
 
@@ -229,6 +232,7 @@ export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
     pendingIntro: undefined,
     pendingAck: undefined,
     pendingReason: undefined,
+    pendingNote: undefined,
     ack: s.pendingAck ?? s.ack,
     reason: s.pendingReason ?? s.reason,
     instructionSaid: instruction === "" ? s.instructionSaid : instruction,

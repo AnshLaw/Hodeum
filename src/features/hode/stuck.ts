@@ -11,8 +11,8 @@ export const ABSENT_ACTION_LIMIT = 3;
 /** Learner actions remembered per step; enough for every pattern above. */
 export const STEP_HISTORY_LIMIT = 8;
 
-/** Big containers are never "the control" a click landed on. */
-const CONTAINER_ROLES = new Set(["window", "pane", "dialog", "group", "document", "custom", "title bar", "tool bar"]);
+/** Big containers are never "the control" a click landed on; nor is a sheet's grid (clicking a cell isn't a wrong control). */
+const CONTAINER_ROLES = new Set(["window", "pane", "dialog", "group", "document", "custom", "title bar", "tool bar", "data grid", "datagrid", "table", "data item"]);
 const MENU_ROLE = "menu";
 const DIALOG_ROLE = "dialog";
 const WINDOW_ROLE = "window";

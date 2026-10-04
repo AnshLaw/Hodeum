@@ -58,7 +58,8 @@ describe("orient: a Teach Hode opens with what the learner is about to make", ()
     expect(said(t)).toEqual([`${CONCEPT} ${EN.youDoTheClicking} ${HINT}`]);
     expect(t.state.pendingIntro).toBeUndefined();
     const again = play(t.state, { type: "LOOK_AGAIN" }, { type: "OBSERVED", observation: HOME_SELECTED });
-    expect(said(play(again.state, { type: "ACTION_READY", requestId: again.state.requestId, action: hint(), failures: [] }))).toEqual([HINT]);
+    // Not said again; "look again" on an unfinished step says Hodey can't see it done, then the question.
+    expect(said(play(again.state, { type: "ACTION_READY", requestId: again.state.requestId, action: hint(), failures: [] }))).toEqual([`${EN.cantSeeItDone} ${HINT}`]);
   });
 
   it("says it while asking the learner to open the app, if it isn't open yet", () => {

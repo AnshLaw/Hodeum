@@ -1,6 +1,6 @@
 import { onGoalSubmitted, onSkillLoaded, onStartHode, onThinking } from "./flow";
 import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
-import { onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onStuckTimeout } from "./learner";
+import { onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onSkipStep, onStuckTimeout } from "./learner";
 import type { EventOf, HodeEvent, HodeState, Transition } from "./model";
 import {
   onAnnotateCancel,
@@ -39,6 +39,7 @@ const handlers: Handlers = {
   REPEAT: onRepeat,
   LOOK_AGAIN: onLookAgain,
   LET_ME_TRY: onLetMeTry,
+  SKIP_STEP: onSkipStep,
   ANNOTATE_START: onAnnotateStart,
   ANNOTATE_CANCEL: onAnnotateCancel,
   ANNOTATION_SUBMITTED: onAnnotationSubmitted,

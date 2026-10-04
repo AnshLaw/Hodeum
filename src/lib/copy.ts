@@ -129,6 +129,7 @@ export const COPY = {
   visionFailed: "Local vision stopped",
   repeat: "Say that again",
   lookAgain: "Look again",
+  skipStep: "Skip step",
   openApp: "Open Hodeum",
   backToNotch: "Back to notch",
   mic: "Talk to Hodey",

@@ -21,6 +21,8 @@ export interface SpokenCopy {
   gotTheHang: string;
   /** Teach mode's opening, after the pack's idea: who does the clicking. */
   youDoTheClicking: string;
+  /** The learner said they did the step, but the screen doesn't show it. */
+  cantSeeItDone: string;
   /** Said when the learner gets a step right (Teach, or Help once Hodey stepped in); varied so it doesn't sound canned. */
   stepDone: readonly string[];
   /** Agent mode's lighter acknowledgement of a step done right. */
@@ -59,6 +61,7 @@ const ENGLISH: SpokenCopy = {
   rememberedOnYourOwn: COPY.rememberedOnYourOwn,
   gotTheHang: "You've got the hang of it.",
   youDoTheClicking: "You do the clicking; I'll help if you get stuck.",
+  cantSeeItDone: "I can't see that done yet. If it is, you can skip this step.",
   stepDone: ["Nice, that's it.", "Exactly right.", "Good, that's the one.", "Yes, well done."],
   stepDoneLight: ["Good.", "Done."],
   nothingMarked: COPY.nothingMarked,
@@ -90,6 +93,7 @@ const HINDI: SpokenCopy = {
   rememberedOnYourOwn: "बढ़िया, ये आपको खुद याद था।",
   gotTheHang: "अब आपको ये आ गया है।",
   youDoTheClicking: "क्लिक आप करेंगे; अटकने पर मदद मिलेगी।",
+  cantSeeItDone: "मुझे ये अभी हुआ हुआ नहीं दिख रहा। अगर हो गया है, तो ये स्टेप छोड़ सकते हैं।",
   stepDone: ["बढ़िया, यही था।", "बिल्कुल सही।", "हाँ, यही वाला।", "शाबाश, सही किया।"],
   stepDoneLight: ["ठीक है।", "हो गया।"],
   nothingMarked: "वहाँ अभी कोई कंट्रोल समझ नहीं आ रहा। किसी एक बटन के आसपास छोटा हिस्सा मार्क करके देखिए।",
@@ -121,6 +125,7 @@ const HINGLISH: SpokenCopy = {
   rememberedOnYourOwn: "बढ़िया, ये आपको खुद याद था।",
   gotTheHang: "अब आपको ये आ गया।",
   youDoTheClicking: "Click आप करेंगे; अटके तो help मिलेगी।",
+  cantSeeItDone: "मुझे ये अभी done नहीं दिख रहा। अगर हो गया है, तो ये step skip कर सकते हैं।",
   stepDone: ["बढ़िया, यही था।", "Perfect, बिल्कुल सही।", "हाँ, यही वाला।", "Great, सही किया।"],
   stepDoneLight: ["Good।", "Done।"],
   nothingMarked: "वहाँ अभी कोई control समझ नहीं आ रहा। किसी एक button के आसपास छोटा area mark करके देखिए।",

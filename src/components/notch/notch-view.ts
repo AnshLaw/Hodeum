@@ -1,4 +1,5 @@
 import { COPY } from "../../lib/copy";
+import { spoken } from "../../lib/spoken";
 import { AGENT_STYLE_COPY, MODE_COPY } from "../../lib/modes";
 import { currentStep, rechecking, type HodeState } from "../../features/hode/model";
 import { skillName } from "../../features/skills/graph";
@@ -25,7 +26,9 @@ export type NotchControl =
   /** Agent · Do it for me: the learner does it from here, with guidance. */
   | "take_over"
   /** Stop the app's web search and answer. */
-  | "stop_search";
+  | "stop_search"
+  /** Past a step Hodey can't see done. */
+  | "skip";
 
 export interface NotchView {
   mode: NotchMode;
@@ -91,16 +94,19 @@ function guidanceView(s: HodeState): NotchView {
   const speech = s.action?.speech ?? "";
   const showObjective = speech === "" || (silent && s.action?.kind === "guide");
   const prerequisites = s.stepIndex === 0 ? s.pack?.prerequisites.join(" ") : undefined;
+  // Hodey couldn't see the step done when the learner said it was, or they've had the most help: they may move on.
+  const skippable = s.offerSkip === true || s.toppedOut === true;
+  const cantSee = s.offerSkip ? spoken(s.language).cantSeeItDone : undefined;
   return {
     mode: "guidance",
     size: "guidance",
     eyebrow,
     title: showObjective ? `${COPY.yourTurn}: ${step?.objective ?? ""}` : speech,
     // The why of the step just done stays readable (muted too) until the learner acts again.
-    detail: s.explanation ?? s.notice ?? s.reason ?? prerequisites,
+    detail: s.explanation ?? s.notice ?? cantSee ?? s.reason ?? prerequisites,
     progress: { current: s.stepIndex, total },
     busy: false,
-    controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "repeat", "look_again", ...(s.mode === "teach" ? (["all_steps"] as const) : []), "point", "pause", "end"],
+    controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), ...(skippable ? (["skip"] as const) : []), "repeat", "look_again", ...(s.mode === "teach" ? (["all_steps"] as const) : []), "point", "pause", "end"],
     hintLabel: QUIET_LEVELS.has(s.level) ? COPY.needHint : COPY.hint,
     // Agent shows the whole flow; Teach only once the learner asks for All steps.
     steps: s.mode === "agent" || s.showAllSteps ? stepItems(s) : undefined,
@@ -217,7 +223,8 @@ export function shouldPeek({ mode, covering, hovered, menuOpen, skillsOpen }: Pe
 /** Steps Hodey did aren't the learner's skills: then the card says Hodey clicked, and to check the result. */
 function successView(s: HodeState): NotchView {
   const hodeyOnly = s.hodeyDid > 0 && s.learnedSkills.length === 0;
-  const detail = hodeyOnly ? COPY.hodeyDidIt : COPY.skillLearned;
+  // No skill to claim (an open-ended Hode, or every step skipped): just "Hode complete".
+  const detail = hodeyOnly ? COPY.hodeyDidIt : s.learnedSkills.length > 0 ? COPY.skillLearned : undefined;
   return { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail, busy: false, controls: [], skills: s.learnedSkills.map(skillLabel) };
 }
 

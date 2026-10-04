@@ -116,6 +116,12 @@ export interface HodeState {
   reason?: string;
   /** The current step's why has been said (in a demonstration, a correction, or Explain). */
   whySaid?: boolean;
+  /** A short line said once, ahead of the next guidance ("I can't see that done yet."). */
+  pendingNote?: string;
+  /** The learner said they did the step ("I did it", look again): the next screen read may finish it. */
+  claimedDone?: boolean;
+  /** Hodey couldn't see the step done when the learner said it was: Skip is offered for the rest of the step. */
+  offerSkip?: boolean;
   /** That acknowledgement, shown in the notch until the learner acts again. */
   ack?: string;
   /** The last acknowledgement used, so the next one is a different phrase. */
@@ -188,6 +194,8 @@ export type HodeEvent =
   /** The learner asks Hodey to re-read the screen now (PRD §11 "look again"). */
   | { type: "LOOK_AGAIN" }
   | { type: "LET_ME_TRY" }
+  /** Past a step Hodey can't see done; nothing is learned or failed for it. */
+  | { type: "SKIP_STEP" }
   | { type: "ANNOTATE_START" }
   | { type: "ANNOTATE_CANCEL" }
   | { type: "ANNOTATION_SUBMITTED"; annotation: LearnerAnnotation }

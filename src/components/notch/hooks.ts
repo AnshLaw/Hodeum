@@ -198,6 +198,8 @@ export function useControlHandler(runtime: HodeRuntime, bus: Bus): (control: Not
           return dispatch({ type: "LET_ME_TRY" });
         case "stop_search":
           return bus.emit("web:cancel", {});
+        case "skip":
+          return dispatch({ type: "SKIP_STEP" });
       }
     },
     [runtime, bus],

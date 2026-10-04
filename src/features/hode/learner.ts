@@ -173,10 +173,13 @@ export function onObservedStep(s: HodeState, e: EventOf<"OBSERVED">): Transition
   const step = currentStep(s);
   if (!preparingStep(s) || !step) return onObserved(s, e);
   const observation = newer(s.observation, e.observation);
-  // Only a learner action finishes a step here: a screen that already met the goal still gets taught.
-  const acted = s.actedWhilePreparing === true;
-  if (acted && !inWrongApp(s, observation) && evaluateSignal(step.success, observation)) return completeStep({ ...s, observation }, step);
-  return onObserved(s, { ...e, observation });
+  // Only a learner action (or their word that they did it) finishes a step here: a screen that already met the goal still gets taught.
+  const acted = s.actedWhilePreparing === true || s.claimedDone === true;
+  if (acted && !inWrongApp(s, observation) && evaluateSignal(step.success, observation)) return completeStep({ ...s, observation, claimedDone: false }, step);
+  if (!s.claimedDone) return onObserved(s, { ...e, observation });
+  // They said they did it, but the screen doesn't show it: say so, and let them skip ahead.
+  const missed: HodeState = { ...s, claimedDone: false, offerSkip: true, pendingNote: spoken(s.language).cantSeeItDone };
+  return onObserved(missed, { ...e, observation });
 }
 
 export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
@@ -243,13 +246,34 @@ export function onRepeat(s: HodeState): Transition {
   return { state, effects: [{ type: "say", text: speech }] };
 }
 
-/** Fresh eyes on the current screen: drop the old observation and reason again. */
+/**
+ * Fresh eyes on the current screen: drop the old observation and reason again. "I did it" and Look
+ * again also check whether the step is done; a look prompted by switching back to the app doesn't.
+ */
 export function onLookAgain(s: HodeState): Transition {
   if (s.phase !== "guiding" && s.phase !== "recovering") return noop(s);
+  const claimedDone = s.waitingForApp === undefined && currentStep(s) !== undefined;
   return {
-    state: { ...s, phase: "observing", reobserved: false, notice: undefined, prompted: true },
+    state: { ...s, phase: "observing", reobserved: false, notice: undefined, prompted: true, claimedDone },
     effects: [CANCEL_TIMER, { type: "observe" }],
   };
+}
+
+/** Lesson phases a step can be skipped from (a question being answered isn't one). */
+const SKIPPABLE: HodeState["phase"][] = ["guiding", "reasoning", "observing"];
+
+/** "Skip": past a step Hodey couldn't see done. It isn't the learner's skill: nothing is learned, failed or relaxed. */
+export function onSkipStep(s: HodeState): Transition {
+  const step = currentStep(s);
+  const asking = s.spokenQuestion !== undefined || s.question !== undefined;
+  if (!step || s.open || asking || !SKIPPABLE.includes(s.phase)) return noop(s);
+  const moved: HodeState = { ...s, ack: undefined, pendingAck: undefined, reason: undefined, pendingReason: undefined, pendingNote: undefined };
+  const done: HodeEffect[] = [CANCEL_TIMER, { type: "clearOverlay" }];
+  const nextIndex = s.stepIndex + 1;
+  if (!s.pack || nextIndex >= s.pack.steps.length) {
+    return { state: { ...moved, phase: "success", action: undefined }, effects: [...done, { type: "say", text: spoken(s.language).hodeCompleteSpeech }] };
+  }
+  return withLeadingEffects(beginStep(moved, nextIndex), done);
 }
 
 export function onLetMeTry(s: HodeState): Transition {
