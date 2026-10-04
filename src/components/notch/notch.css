@@ -937,25 +937,19 @@
   margin-top: 12px;
 }
 
-/* Long eyebrows ("Step 1 of 5 · Teach") truncate rather than run into the progress dots. */
-.notch__grip {
-  overflow: hidden;
-}
-
+/* Long eyebrows ("Step 1 of 5 · Teach") truncate rather than run into the progress dots.
+   The text clips itself, not the grip, so Hodey's drawing room (chin, ears, headphones) never gets cut. */
 .notch__grip .notch__eyebrow {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Hovered idle pill: no label after the face, so close the face's spare drawing room entirely. */
+/* Hovered idle pill: no label after the face, so the grip hugs the face. It never shrinks, so while
+   the pill is still widening its buttons are clipped at the edge instead of sliding over Hodey. */
 .notch--idle.notch--hovered .notch__bar > .notch__grip,
 .notch--idle:focus-within .notch__bar > .notch__grip {
   min-width: 0;
-}
-
-.notch--idle.notch--hovered .notch__grip .hodey,
-.notch--idle:focus-within .notch__grip .hodey {
-  margin-right: -10px;
+  flex-shrink: 0;
 }
 
 /* iPhone mirror: the enlarged notch holds the live phone beside Hodey's guidance. */
