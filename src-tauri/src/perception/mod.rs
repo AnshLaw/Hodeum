@@ -3,6 +3,7 @@ pub mod foreground;
 pub mod input_hook;
 pub mod model;
 mod press;
+mod shell;
 mod uia;
 mod wanted;
 pub mod window_watch;
@@ -19,21 +20,23 @@ use crate::apps::identity::identify_window;
 use crate::dock::geometry::PxRect;
 use crate::surfaces;
 
-use model::{Observation, RectDto};
+use model::{ElementDto, Observation, RectDto};
 use press::{PressButton, PressRequest, Seen};
 use uia::UiaReader;
 
 /// Logged so slow trees (large workbooks) show up during rehearsal.
 const SLOW_SNAPSHOT_MS: u128 = 300;
+const READER_STOPPED: &str = "The screen reader stopped.";
 
 /// An observation plus the monitor the learner's app is on, so the overlay can follow it.
 type Observed = (Observation, Option<PxRect>);
 
-/// Work for the UI Automation thread: read the learner's app, or click a control in it.
+/// Work for the UI Automation thread: read the learner's app, click a control in it, or read the taskbar.
 enum Job {
     /// `want`: names of the controls the current lesson step needs, searched out if the walk misses them.
     Observe { region: Option<RectDto>, want: Vec<String>, reply: mpsc::Sender<Result<Observed, String>> },
     Press { request: PressRequest, reply: mpsc::Sender<Result<(), String>> },
+    Shell { reply: mpsc::Sender<Result<Vec<ElementDto>, String>> },
 }
 
 /// UI Automation needs a COM (MTA) thread of its own; all reads are serialized through it.
@@ -87,8 +90,20 @@ fn worker(jobs: mpsc::Receiver<Job>, last_external: Arc<AtomicIsize>) {
             Job::Press { request, reply } => {
                 let _ = reply.send(reader.and_then(|r| r.press(&request, now_ms())));
             }
+            Job::Shell { reply } => {
+                let _ = reply.send(reader.and_then(|r| shell::read(r.automation())));
+            }
         }
     }
+}
+
+/// Hands a job to the UI Automation thread and waits for its answer off the async runtime.
+async fn run<T: Send + 'static>(state: &Perception, job: impl FnOnce(mpsc::Sender<Result<T, String>>) -> Job) -> Result<T, String> {
+    let (reply, result) = mpsc::channel();
+    state.jobs.lock().map_err(|e| e.to_string())?.send(job(reply)).map_err(|_| READER_STOPPED.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || result.recv().map_err(|_| READER_STOPPED.to_string())?)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 fn now_ms() -> u64 {
@@ -116,16 +131,8 @@ fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<
 /// searched out when the time-boxed walk misses them, as it can in a dialog that has only just opened.
 #[tauri::command]
 pub async fn observe(app: AppHandle, region: Option<RectDto>, want: Option<Vec<String>>, state: State<'_, Perception>) -> Result<Observation, String> {
-    let (reply, result) = mpsc::channel();
-    state
-        .jobs
-        .lock()
-        .map_err(|e| e.to_string())?
-        .send(Job::Observe { region, want: want.unwrap_or_default(), reply })
-        .map_err(|_| "The screen reader stopped.".to_string())?;
-    let (observation, monitor) = tauri::async_runtime::spawn_blocking(move || result.recv().map_err(|_| "The screen reader stopped.".to_string())?)
-        .await
-        .map_err(|e| e.to_string())??;
+    let want = want.unwrap_or_default();
+    let (observation, monitor) = run(&state, |reply| Job::Observe { region, want, reply }).await?;
     if let Some(monitor) = monitor {
         // Guidance must be drawn on the screen the learner's app is on.
         if let Err(error) = surfaces::follow_monitor(&app, monitor) {
@@ -156,16 +163,15 @@ pub async fn perform_click(
         return Err("Only Hodey's notch can click for the learner.".into());
     }
     let request = PressRequest { element_id, name, observed_at, button };
-    let (reply, result) = mpsc::channel();
-    state
-        .jobs
-        .lock()
-        .map_err(|e| e.to_string())?
-        .send(Job::Press { request, reply })
-        .map_err(|_| "The screen reader stopped.".to_string())?;
-    tauri::async_runtime::spawn_blocking(move || result.recv().map_err(|_| "The screen reader stopped.".to_string())?)
-        .await
-        .map_err(|e| e.to_string())?
+    run(&state, |reply| Job::Press { request, reply }).await
+}
+
+/// The taskbar's Start button and search box, and an open Start menu's or Search's search box, in physical
+/// screen px, so Hodey can point at where to find an app although the taskbar is never the learner's window.
+/// Ids start with "shell:" (see `shell::target_id`). Empty when none is on screen; Err when UI Automation fails.
+#[tauri::command]
+pub async fn shell_targets(state: State<'_, Perception>) -> Result<Vec<ElementDto>, String> {
+    run(&state, |reply| Job::Shell { reply }).await
 }
 
 /// Mirrors `CapturedFrame` in `src/providers/vision/types.ts`.

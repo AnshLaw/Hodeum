@@ -213,6 +213,12 @@ fn process_aumid(pid: u32) -> Option<String> {
     }
 }
 
+/// A version-resource string up to its terminator, whatever length the resource claims.
+fn until_nul(text: &[u16]) -> String {
+    let end = text.iter().position(|&unit| unit == 0).unwrap_or(text.len());
+    String::from_utf16_lossy(&text[..end])
+}
+
 fn query_string(block: &[u8], query: &str) -> Option<String> {
     let mut pointer = std::ptr::null_mut();
     let mut len = 0u32;
@@ -221,8 +227,7 @@ fn query_string(block: &[u8], query: &str) -> Option<String> {
         if !VerQueryValueW(block.as_ptr().cast(), &HSTRING::from(query), &mut pointer, &mut len).as_bool() || len == 0 {
             return None;
         }
-        let text = std::slice::from_raw_parts(pointer as *const u16, len as usize);
-        Some(String::from_utf16_lossy(text).trim_end_matches('\0').to_string())
+        Some(until_nul(std::slice::from_raw_parts(pointer as *const u16, len as usize)))
     }
 }
 
@@ -394,5 +399,14 @@ mod tests {
         assert_eq!(name_for_exe("mspaint"), "Paint");
         assert_eq!(name_for_exe("ApplicationFrameHost"), "");
         assert_eq!(name_for_exe("blender"), "blender");
+    }
+
+    #[test]
+    fn a_version_string_ends_at_its_first_nul() {
+        let utf16 = |text: &str| text.encode_utf16().collect::<Vec<_>>();
+        // Measured: Spotify's FileDescription length runs past its terminator.
+        assert_eq!(until_nul(&utf16("Spotify\u{0}8\u{16}\u{1}FileV")), "Spotify");
+        assert_eq!(until_nul(&utf16("Visual Studio Code\u{0}")), "Visual Studio Code");
+        assert_eq!(until_nul(&utf16("Discord")), "Discord");
     }
 }

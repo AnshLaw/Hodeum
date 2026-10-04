@@ -6,6 +6,7 @@ import type { Settings, SettingsStore } from "../../data/settings";
 import type { HodeLog } from "../../data/types";
 import { appFromGoal, matchGoal } from "../../task-packs/match";
 import type { MemoryProvider } from "../../providers/interfaces";
+import { appNamedIn } from "../apps/resolve";
 import { HodeMemoryTracker } from "../memory/tracker";
 import { classify } from "../voice/intent";
 import { openAppEvent } from "./open-app";
@@ -48,29 +49,38 @@ export interface BridgeDeps {
   memory?: Pick<MemoryProvider, "storeLearningSummary">;
 }
 
-/** A typed goal as an event: its task pack, or (when vision can plan) the app it names. */
-export function goalEvent(goal: string, packs: TaskPack[], openAllowed: boolean, mode?: HodeMode, agentStyle?: AgentStyle, visionStarting?: boolean): HodeEvent {
-  const starting = !openAllowed && visionStarting === true ? { visionStarting: true } : {};
-  return { type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed, app: appFromGoal(goal), mode, agentStyle, ...starting };
-}
-
 export interface GoalOptions {
   packs: TaskPack[];
   openAllowed: boolean;
+  /** The installed apps (`list_apps`), for goals about an app Hodeum doesn't know by name ("…on Discord"). */
   apps?: InstalledApp[];
   mode?: HodeMode;
   agentStyle?: AgentStyle;
   visionStarting?: boolean;
 }
 
+const sameApp = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/**
+ * A typed goal as an event: its task pack, or (when vision can plan) the app it names, built in or installed.
+ * A pack for another app isn't this goal's lesson: "dark mode in Discord" isn't Windows' dark mode.
+ */
+export function goalEvent(goal: string, { packs, openAllowed, apps = [], mode, agentStyle, visionStarting }: GoalOptions): HodeEvent {
+  const app = appFromGoal(goal) ?? appNamedIn(goal, apps);
+  const matched = matchGoal(goal, packs);
+  const pack = matched && (app === undefined || sameApp(matched.app, app)) ? matched : undefined;
+  const starting = !openAllowed && visionStarting === true ? { visionStarting: true } : {};
+  return { type: "GOAL_SUBMITTED", goal, pack, openAllowed, app, mode, agentStyle, ...starting };
+}
+
 /**
  * A goal typed or said into the goal form, as events: an app to open ("open Excel"), the goal (a pack's, a task,
  * or a question to take as one), or a nudge to name a task when it's a greeting, noise or unclear.
  */
-export function goalEvents(text: string, { packs, openAllowed, apps = [], mode, agentStyle, visionStarting }: GoalOptions): HodeEvent[] {
-  const open = openAppEvent(text, apps);
-  if (open) return [{ ...open, ...(mode ? { mode } : {}) }];
-  const goal = goalEvent(text, packs, openAllowed, mode, agentStyle, visionStarting);
+export function goalEvents(text: string, options: GoalOptions): HodeEvent[] {
+  const open = openAppEvent(text, options.apps ?? []);
+  if (open) return [{ ...open, ...(options.mode ? { mode: options.mode } : {}) }];
+  const goal = goalEvent(text, options);
   if (goal.type === "GOAL_SUBMITTED" && goal.pack) return [goal];
   const intent = classify(text);
   if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];

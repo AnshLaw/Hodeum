@@ -107,6 +107,26 @@ describe("goalEvents", () => {
     expect(goalEvents("send a pdf on whatsapp", options)).toMatchObject([{ type: "GOAL_SUBMITTED", goal: "send a pdf on whatsapp", openAllowed: true }]);
   });
 
+  it("names the installed app a goal is about, as the app to wait for", () => {
+    expect(goalEvents("How do I send a message on Discord", options)).toMatchObject([{ type: "GOAL_SUBMITTED", goal: "How do I send a message on Discord", app: "Discord" }]);
+    expect(goalEvents("how do I make a playlist in spotify", options)).toMatchObject([{ type: "GOAL_SUBMITTED", app: "Spotify" }]);
+    expect(goalEvents("make a chart in excel", options)).toMatchObject([{ type: "GOAL_SUBMITTED", app: "Excel" }]);
+  });
+
+  it("names only the built-in apps without a catalog", () => {
+    const [event] = goalEvents("How do I send a message on Discord", { ...options, apps: [] });
+    expect(event).toMatchObject({ type: "GOAL_SUBMITTED" });
+    expect(event).not.toHaveProperty("app", expect.anything());
+  });
+
+  it("doesn't teach another app's lesson for a goal about an installed app", () => {
+    const [event] = goalEvents("how do I turn on dark mode in Discord", options);
+    expect(event).toMatchObject({ type: "GOAL_SUBMITTED", app: "Discord" });
+    expect(event).toHaveProperty("pack", undefined);
+    expect(goalEvents("how do I turn on dark mode in Settings", options)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "windows-dark-mode" }, app: "Settings" }]);
+    expect(goalEvents("how do I turn on dark mode", options)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "windows-dark-mode" } }]);
+  });
+
   it("replies instead of starting an open Hode for small talk, noise or something unclear", () => {
     expect(goalEvents("hello there", options)).toEqual([{ type: "CHITCHAT", kind: "greeting" }]);
     expect(goalEvents("hello hello hello", options)).toEqual([{ type: "CHITCHAT", kind: "unclear" }]);
@@ -120,6 +140,14 @@ describe("hode:start", () => {
     bus.emit("hode:start", { goal: "make a pivot table", mode: "agent", agentStyle: "execute" });
     await settle();
     expect(runtime.getState()).toMatchObject({ mode: "agent", agentStyle: "execute", goal: "make a pivot table" });
+  });
+
+  it("names the installed app the app window's goal is about", async () => {
+    const { bus, runtime } = setup(undefined, APPS);
+    const dispatch = vi.spyOn(runtime, "dispatch");
+    bus.emit("hode:start", { goal: "How do I send a message on Discord" });
+    await settle();
+    expect(dispatch.mock.calls.map(([event]) => event)).toContainEqual(expect.objectContaining({ type: "GOAL_SUBMITTED", app: "Discord" }));
   });
 
   it("opens an app instead of starting a Hode, leaving the running one alone", async () => {

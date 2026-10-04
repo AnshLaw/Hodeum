@@ -200,8 +200,8 @@ const TEACH_ME =
  * word ("what is a pivot table?") is answered instead. Anything else with a few real words in it ("explain this
  * screen") is asked about the screen.
  */
-function askOrStart(text: string, intent: Intent, packs: TaskPack[], openAllowed: boolean, visionStarting: boolean): HodeEvent[] {
-  const goal = goalEvent(text, packs, openAllowed, undefined, undefined, visionStarting);
+function askOrStart(text: string, intent: Intent, packs: TaskPack[], openAllowed: boolean, visionStarting: boolean, apps: InstalledApp[]): HodeEvent[] {
+  const goal = goalEvent(text, { packs, openAllowed, apps, visionStarting });
   if (goal.type === "GOAL_SUBMITTED" && goal.pack && !opensWithQuestion(text)) return [{ type: "START_HODE" }, goal];
   if (intent === "task" || TEACH_ME.test(text)) return [{ type: "START_HODE" }, goal];
   return intent === "question" || isSubstantive(text) ? [question(text)] : [];
@@ -218,7 +218,7 @@ function routeIdle(s: HodeState, text: string, packs: TaskPack[], openAllowed: b
   const intent = classify(text, { isCommand, isApp: () => false });
   if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];
   if (intent === "noise" || intent === "ack" || intent === "control" || tooShort(text)) return [];
-  return askOrStart(text, intent, packs, openAllowed, visionStarting);
+  return askOrStart(text, intent, packs, openAllowed, visionStarting, apps);
 }
 
 /**

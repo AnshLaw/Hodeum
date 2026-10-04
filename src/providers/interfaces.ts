@@ -125,7 +125,13 @@ export interface PerceptionAdapter {
   onAppSwitched?(handler: (window: AppSwitch) => void): () => void;
   /** Opens an installed app by its catalog id (`list_apps`) and brings it forward. False when it didn't appear in time. */
   openInstalledApp?(id: string): Promise<boolean>;
-  /** The taskbar's Start button and search box (and the Start menu's while it's open), with screen bounds. */
+  /**
+   * The taskbar's Start button and search box (and an open Start menu's or Search's search box), with screen
+   * bounds. Ids: "shell:start" and "shell:search" on the main taskbar ("shell:start:2", "shell:search:2" on another
+   * monitor's), "shell:start-menu-search" and "shell:search-box" while Start or Search is open; `container` says
+   * "taskbar", "Start menu" or "Search". Start alone when search is hidden in the taskbar's settings; empty when
+   * nothing is on screen (an auto-hidden taskbar).
+   */
   shellTargets?(): Promise<UiElement[]>;
   /** Agent · Do it for me: presses a control for the learner. Rejects when it's no longer where it was seen. */
   perform?(request: PerformRequest): Promise<void>;
