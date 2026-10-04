@@ -67,8 +67,12 @@ export function watchPhoneLive(isLive: () => boolean): void {
   phoneLiveNow = isLive;
 }
 
+/** Words that keep a goal on the PC even with the iPhone mirrored ("switch windows to light mode"). */
+const PC_WORDS = /\b(?:windows|pc|laptop|computer|desktop)\b/i;
+
 /** With the iPhone on screen, "turn on dark mode" means the iPhone's, not Windows'. */
 function phonePack(goal: string, packs: TaskPack[]): TaskPack | undefined {
+  if (PC_WORDS.test(goal)) return undefined;
   return matchGoal(`${goal} iphone`, packs.filter((pack) => pack.surface === "phone"));
 }
 

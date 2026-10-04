@@ -114,6 +114,9 @@ describe("goalEvents", () => {
     expect(goalEvents("turn off dark mode", live)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "iphone-light-mode" } }]);
     expect(goalEvents("make a chart in excel", live)).toMatchObject([{ type: "GOAL_SUBMITTED", app: "Excel" }]);
     expect(goalEvents("turn on dark mode", { ...options, phoneLive: false })).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "windows-dark-mode" } }]);
+    // Naming Windows or the PC keeps the goal on the PC, mirror or not.
+    expect(goalEvents("switch windows to light mode", live)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "windows-light-mode" } }]);
+    expect(goalEvents("turn on dark mode on my laptop", live)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "windows-dark-mode" } }]);
   });
 
   it("names the installed app a goal is about, as the app to wait for", () => {
