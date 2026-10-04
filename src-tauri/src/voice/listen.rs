@@ -16,10 +16,11 @@ use tauri::{AppHandle, Emitter};
 
 use super::models::{asr_files, voice_root, AsrFiles};
 use super::segment::{downmix, Recognizer, Segmenter, Session, SpeechEvent};
+use super::standby::{self, Outcome};
 use super::{set_listening, set_status_detail};
 
-const SAMPLE_RATE: i32 = 16_000;
-const VAD_WINDOW: usize = 512;
+pub(crate) const SAMPLE_RATE: i32 = 16_000;
+pub(crate) const VAD_WINDOW: usize = 512;
 const VAD_THRESHOLD: f32 = 0.5;
 /// Silence that ends an utterance: long enough for a natural mid-sentence pause (0.6 s cut people
 /// off in testing), short enough that replies still feel quick.
@@ -46,7 +47,7 @@ pub fn set_language(language: &str) -> Result<(), String> {
 fn language() -> &'static str {
     ASR_LANGUAGE.lock().map(|l| *l).unwrap_or(DEFAULT_LANGUAGE)
 }
-const AUDIO_POLL: Duration = Duration::from_millis(50);
+pub(crate) const AUDIO_POLL: Duration = Duration::from_millis(50);
 /// A microphone that delivers pure digital silence this long is muted or misconfigured.
 const SILENT_MIC_AFTER: Duration = Duration::from_secs(4);
 const SILENCE_LEVEL: f32 = 1e-7;
@@ -101,10 +102,12 @@ pub enum ListenCommand {
     Finish,
     /// Stop without sending anything.
     Stop,
+    /// A setting changed (hands-free on or off): re-check what the listener should be doing.
+    Refresh,
 }
 
 /// NVIDIA Nemotron streaming transducer, one utterance per stream.
-struct Nemotron {
+pub(crate) struct Nemotron {
     recognizer: OnlineRecognizer,
     stream: Option<OnlineStream>,
 }
@@ -139,8 +142,8 @@ impl Recognizer for Nemotron {
 }
 
 pub(crate) struct Engines {
-    vad: VoiceActivityDetector,
-    segmenter: Segmenter<Nemotron>,
+    pub(crate) vad: VoiceActivityDetector,
+    pub(crate) segmenter: Segmenter<Nemotron>,
 }
 
 fn path(p: &std::path::Path) -> Option<String> {
@@ -173,12 +176,12 @@ pub(crate) fn load_engines(files: &AsrFiles) -> Result<Engines, String> {
 }
 
 /// The default microphone, delivering mono f32 chunks at the device's own rate.
-struct Mic {
+pub(crate) struct Mic {
     _stream: cpal::Stream,
-    rate: u32,
+    pub(crate) rate: u32,
 }
 
-fn open_mic(tx: Sender<Vec<f32>>) -> Result<Mic, String> {
+pub(crate) fn open_mic(tx: Sender<Vec<f32>>) -> Result<Mic, String> {
     let device = cpal::default_host().default_input_device().ok_or("No microphone found. Plug one in or enable it in Windows sound settings.")?;
     let supported = device.default_input_config().map_err(|e| format!("Couldn't read the microphone's settings: {e}"))?;
     let channels = usize::from(supported.channels());
@@ -213,6 +216,16 @@ fn emit_events(app: &AppHandle, events: Vec<SpeechEvent>) {
     }
 }
 
+/// One VAD window in; whether it holds speech. The detector's own segment queue isn't used.
+pub(crate) fn vad_step(vad: &VoiceActivityDetector, window: &[f32]) -> bool {
+    vad.accept_waveform(window);
+    let speech = vad.detected();
+    while !vad.is_empty() {
+        vad.pop();
+    }
+    speech
+}
+
 /// Runs 16 kHz audio through VAD and recognition, returning the final transcripts.
 #[cfg(test)]
 pub(crate) fn transcribe(engines: &mut Engines, audio: &[f32]) -> Vec<String> {
@@ -222,11 +235,7 @@ pub(crate) fn transcribe(engines: &mut Engines, audio: &[f32]) -> Vec<String> {
         if window.len() < VAD_WINDOW {
             continue;
         }
-        engines.vad.accept_waveform(window);
-        let speech = engines.vad.detected();
-        while !engines.vad.is_empty() {
-            engines.vad.pop();
-        }
+        let speech = vad_step(&engines.vad, window);
         for event in engines.segmenter.push(window, speech) {
             if let SpeechEvent::Final(text) = event {
                 finals.push(text);
@@ -242,11 +251,7 @@ fn process(engines: &mut Engines, resampler: &LinearResampler, pending: &mut Vec
     pending.extend(resampler.resample(chunk, false));
     while pending.len() >= VAD_WINDOW {
         let window: Vec<f32> = pending.drain(..VAD_WINDOW).collect();
-        engines.vad.accept_waveform(&window);
-        let speech = engines.vad.detected();
-        while !engines.vad.is_empty() {
-            engines.vad.pop();
-        }
+        let speech = vad_step(&engines.vad, &window);
         events.extend(engines.segmenter.push(&window, speech));
     }
     events
@@ -272,7 +277,7 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
                 emit_events(app, session.finish(tail).into_iter().collect());
                 break;
             }
-            Ok(ListenCommand::Start { .. }) | Err(TryRecvError::Empty) => {}
+            Ok(ListenCommand::Start { .. } | ListenCommand::Refresh) | Err(TryRecvError::Empty) => {}
         }
         match audio.recv_timeout(AUDIO_POLL) {
             Ok(chunk) => {
@@ -332,7 +337,7 @@ fn load(app: &AppHandle) -> Option<Engines> {
 /// then runs a session per Start.
 pub fn worker(app: AppHandle, commands: Receiver<ListenCommand>, installed: bool) {
     let mut engines = if installed { load(&app) } else { None };
-    while let Ok(command) = commands.recv() {
+    while let Some(command) = next_command(&app, &mut engines, &commands) {
         let ListenCommand::Start { mode } = command else { continue };
         if engines.is_none() {
             engines = load(&app);
@@ -347,5 +352,22 @@ pub fn worker(app: AppHandle, commands: Receiver<ListenCommand>, installed: bool
         loaded.segmenter.reset();
         loaded.vad.reset();
         set_listening(&app, false);
+    }
+}
+
+/// Waits for the next command; with hands-free on, listens for "Hey Hodey" meanwhile. None: shutting down.
+fn next_command(app: &AppHandle, engines: &mut Option<Engines>, commands: &Receiver<ListenCommand>) -> Option<ListenCommand> {
+    loop {
+        let Some(loaded) = engines.as_mut().filter(|_| standby::enabled()) else { return commands.recv().ok() };
+        match standby::standby(app, loaded, commands) {
+            Ok(Outcome::Command(command)) => return Some(command),
+            Ok(Outcome::Off) => {}
+            Ok(Outcome::Closed) => return None,
+            Err(reason) => {
+                // Don't retry a broken mic in a loop: hands-free stays off until it's switched on again.
+                standby::pause();
+                emit_error(app, &format!("Hands-free listening stopped: {reason}"));
+            }
+        }
     }
 }

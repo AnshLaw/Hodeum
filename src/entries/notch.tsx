@@ -3,7 +3,7 @@ import { ActivityTracker, mirrorRemoteActivity, withScreenActivity } from "../li
 import { connectAppearance } from "../lib/appearance";
 import { hodeyKeySetting } from "../lib/keys";
 import { COPY } from "../lib/copy";
-import { createLocalVoice, showMicDot } from "../providers/speech/local-voice";
+import { createLocalVoice, showMicDot, showStandbyDot } from "../providers/speech/local-voice";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import { TauriShell } from "../lib/tauri-shell";
 import { Notch } from "../components/notch/Notch";
@@ -62,6 +62,7 @@ async function boot(): Promise<void> {
   let wakeWords: string[] = [];
   const voice = createLocalVoice({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
   showMicDot(voice.speech, activity);
+  showStandbyDot(voice.status, activity);
   const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts: voice.tts });
   runtime.subscribe(() => native.setWatching(WATCHING_PHASES.includes(runtime.getState().phase)));
   connectHodeBridge({
@@ -76,6 +77,7 @@ async function boot(): Promise<void> {
       conversation = settings.conversation;
       wakeWords = settings.wakeWords;
       invoke<void>("set_speech_language", { language: settings.language }).catch((error) => console.error("Couldn't set the speech language", error));
+      voice.speech.setHandsFree(settings.handsFree, settings.wakeWords).catch((error) => console.error("Couldn't switch hands-free listening", error));
     },
     applyHodeyKey: (key) => {
       hodeyKeySetting.set(key);

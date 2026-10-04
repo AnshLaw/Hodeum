@@ -16,8 +16,16 @@ class FakeSpeech implements SpeechInput {
   unavailableReason() {
     return undefined;
   }
-  async start() {}
+  start = vi.fn(async () => undefined);
   async stop() {}
+  wake = new Set<(text: string) => void>();
+  onWakeCandidate(handler: (text: string) => void) {
+    this.wake.add(handler);
+    return () => this.wake.delete(handler);
+  }
+  overheard(text: string) {
+    this.wake.forEach((h) => h(text));
+  }
   followUp = vi.fn(async () => undefined);
   setStatus(status: SpeechInputStatus) {
     this.current = status;
@@ -58,6 +66,7 @@ function setup(state: HodeState, saying?: string, conversation = true) {
       return () => doneSpeaking.delete(listener);
     },
     conversation: () => conversation,
+    wakeWords: () => ["Hey Hodes"],
   });
   const hodeyFinishes = () => doneSpeaking.forEach((l) => l());
   return { speech, dispatched, interrupt, off, hodeyFinishes };
@@ -172,5 +181,36 @@ describe("conversation", () => {
     turn(speech, "give me a hint");
     hodeyFinishes();
     expect(speech.followUp).not.toHaveBeenCalled();
+  });
+
+  describe("hands-free", () => {
+    const guiding: HodeState = { ...initialState, phase: "guiding", pack: PACK };
+
+    it("acts on what follows a wake word", () => {
+      const { speech, dispatched } = setup(guiding);
+      speech.overheard("Hey Hodey, give me a hint");
+      speech.overheard("Hey Hodes, give me a hint");
+      expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }, { type: "HINT_REQUESTED" }]);
+    });
+
+    it("listens for the request after a bare wake word", () => {
+      const { speech, dispatched } = setup(guiding);
+      speech.overheard("Hey Hodey.");
+      expect(speech.start).toHaveBeenCalledOnce();
+      expect(dispatched).toEqual([]);
+    });
+
+    it("ignores room speech, Hodey's own voice, and wake words during an active turn", () => {
+      const { speech, dispatched } = setup(guiding);
+      speech.overheard("I think it's lunch time");
+      expect(dispatched).toEqual([]);
+      const talking = setup(guiding, "Hey Hodey can help with that.");
+      talking.speech.overheard("Hey Hodey can help with that.");
+      expect(talking.dispatched).toEqual([]);
+      speech.current = "listening";
+      speech.overheard("Hey Hodey, give me a hint");
+      expect(dispatched).toEqual([]);
+      expect(speech.start).not.toHaveBeenCalled();
+    });
   });
 });

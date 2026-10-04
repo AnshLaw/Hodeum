@@ -27,16 +27,29 @@ const COMMANDS: [RegExp, HodeEvent][] = [
   [/^(?:show (?:me )?(?:all )?(?:the )?steps|show (?:me )?all (?:of )?the steps|show (?:me )?the whole (?:flow|thing)|what are the steps)$/, { type: "SHOW_ALL_STEPS" }],
 ];
 
+/** Hands-free is stricter: the room is always heard, so a mishearing ("body", "howdy") counts only
+ *  after a greeting, and Hodey's name alone only in its real spellings. Includes Hindi script ("हे होडी"). */
+const HANDS_FREE_WAKE = /^(?:(?:hey|hi|hello|ok|okay)[ ,]+(?:hode?y|hod[iy]e?|hoadie|howdy|body)|hode?y|hod[iy]e?|hoadie|(?:(?:हे|हाय|ओके)[ ,]*)?होडी)(?=[\s,!.?]|$)[,!.?]?\s*/i;
+
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const customWake = (word: string) => new RegExp(`^${escapeRegExp(word.trim()).replace(/\s+/g, "[\\s,]+")}(?=[\\s,!.?]|$)[,!.?]?\\s*`, "i");
 
 /** Drops a leading wake word: Hodey's own (and its common mishearings) or one the learner added. */
 function clean(text: string, wakeWords: string[]): string {
   let rest = text.trim().replace(WAKE, "").trim();
-  for (const word of wakeWords) {
-    const custom = new RegExp(`^${escapeRegExp(word.trim()).replace(/\s+/g, "[\\s,]+")}\\b[,!.]?\\s*`, "i");
-    rest = rest.replace(custom, "").trim();
-  }
+  for (const word of wakeWords) rest = rest.replace(customWake(word), "").trim();
   return rest;
+}
+
+/** Hands-free: what follows the wake word ("" for the wake word alone), or undefined if the speech wasn't for Hodey. */
+export function wakeRest(text: string, wakeWords: string[]): string | undefined {
+  const heard = text.trim();
+  for (const pattern of [HANDS_FREE_WAKE, ...wakeWords.map(customWake)]) {
+    const match = heard.match(pattern);
+    if (match) return heard.slice(match[0].length).trim();
+  }
+  return undefined;
 }
 
 function asCommand(text: string): HodeEvent | undefined {

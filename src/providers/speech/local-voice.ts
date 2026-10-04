@@ -40,6 +40,20 @@ export function createLocalVoice(bridge: VoiceBridge): LocalVoice {
   };
 }
 
+/** Hands-free keeps the mic on between conversations; the orange privacy dot says so the whole time. */
+export function showStandbyDot(status: NativeVoiceStatus, activity: ActivityTracker): () => void {
+  let end: (() => void) | undefined;
+  const sync = (standby: boolean) => {
+    if (standby && !end) end = activity.begin("mic");
+    if (!standby && end) {
+      end();
+      end = undefined;
+    }
+  };
+  sync(status.current()?.standby === true);
+  return status.subscribe((s) => sync(s.standby));
+}
+
 /** The orange privacy dot stays on exactly while the microphone is listening. */
 export function showMicDot(speech: SpeechInput, activity: ActivityTracker): () => void {
   let end: (() => void) | undefined = speech.status() === "listening" ? activity.begin("mic") : undefined;

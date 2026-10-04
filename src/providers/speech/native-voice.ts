@@ -6,6 +6,8 @@ export interface VoiceStatus {
   asr: "ready" | "missing";
   tts: "loading" | "ready" | "missing";
   listening: boolean;
+  /** Hands-free: the mic is on, waiting for "Hey Hodey". */
+  standby: boolean;
   detail: string | null;
   tts_detail: string | null;
   /** Hodey's natural voices on this PC (Kokoro first, then Supertonic). */
@@ -25,6 +27,7 @@ const STATUS_EVENT = "voice:status";
 const TRANSCRIPT_EVENT = "voice:transcript";
 const SPEECH_START_EVENT = "voice:speech-start";
 const ERROR_EVENT = "voice:error";
+const WAKE_EVENT = "voice:wake-candidate";
 const DONE_EVENT = "tts:done";
 const NOT_READY = "Hodey's voice is still starting.";
 
@@ -115,6 +118,15 @@ export class NativeSpeechInput implements SpeechInput {
 
   onError(handler: (message: string) => void): () => void {
     return this.bridge.listen<string>(ERROR_EVENT, handler);
+  }
+
+  onWakeCandidate(handler: (text: string) => void): () => void {
+    return this.bridge.listen<string>(WAKE_EVENT, handler);
+  }
+
+  /** Hands-free on or off, and the learner's own wake words for the Rust side's quick first-word check. */
+  setHandsFree(enabled: boolean, wakeWords: string[]): Promise<void> {
+    return this.bridge.invoke<void>("set_hands_free", { enabled, wakeWords });
   }
 }
 

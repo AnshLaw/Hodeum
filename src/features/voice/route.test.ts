@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { initialState, type HodeState } from "../hode/model";
 import { PACK } from "../hode/test-fixtures";
 import { TASK_PACKS } from "../../task-packs";
-import { routeUtterance } from "./route";
+import { routeUtterance, wakeRest } from "./route";
 
 const guiding: HodeState = { ...initialState, phase: "guiding", pack: PACK };
 const route = (s: HodeState, text: string, openAllowed = false) => routeUtterance(s, text, TASK_PACKS, openAllowed);
@@ -65,5 +65,27 @@ describe("routeUtterance", () => {
   it("ignores silence and noise", () => {
     expect(route(guiding, "  ")).toEqual([]);
     expect(route(guiding, "um")).toEqual([]);
+  });
+});
+
+describe("wakeRest (hands-free)", () => {
+  it("returns what follows Hodey's name", () => {
+    expect(wakeRest("Hey Hodey, give me a hint.", [])).toBe("give me a hint.");
+    expect(wakeRest("Hodey what's this button?", [])).toBe("what's this button?");
+    expect(wakeRest("Okay Hodi.", [])).toBe("");
+  });
+
+  it("accepts the learner's own wake words", () => {
+    expect(wakeRest("Hey Hodes, show me the steps", ["Hey Hodes"])).toBe("show me the steps");
+  });
+
+  it("ignores room speech that doesn't open with a wake word", () => {
+    expect(wakeRest("I told somebody about Hodey yesterday", [])).toBeUndefined();
+    expect(wakeRest("body temperature is normal", [])).toBeUndefined();
+    expect(wakeRest("hey, what's up", [])).toBeUndefined();
+  });
+
+  it("hears Hodey's name in Hindi script", () => {
+    expect(wakeRest("हे होडी, मदद करो", [])).toBe("मदद करो");
   });
 });

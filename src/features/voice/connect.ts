@@ -1,7 +1,7 @@
 import type { TaskPack } from "../../lib/types";
 import type { SpeechInput } from "../../providers/speech/speech-input";
 import type { HodeEvent, HodePhase, HodeState } from "../hode/model";
-import { routeUtterance } from "./route";
+import { routeUtterance, wakeRest } from "./route";
 
 const BUSY_PHASES: HodePhase[] = ["observing", "reasoning"];
 
@@ -79,6 +79,18 @@ export function connectVoice(deps: VoiceDeps): () => void {
       conversing = deps.conversation();
       routeUtterance(deps.getState(), text, deps.packs, deps.openAllowed(), deps.wakeWords?.() ?? []).forEach(deps.dispatch);
     }),
+    deps.speech.onWakeCandidate?.((text) => {
+      // Hodey's own voice through the speakers, or the learner is already mid-turn.
+      if (deps.hodeySaying() || deps.speech.status() !== "idle") return;
+      const rest = wakeRest(text, deps.wakeWords?.() ?? []);
+      if (rest === undefined) return;
+      conversing = deps.conversation();
+      if (rest) {
+        routeUtterance(deps.getState(), rest, deps.packs, deps.openAllowed()).forEach(deps.dispatch);
+        return;
+      }
+      deps.speech.start().catch((error: unknown) => console.error("Couldn't listen after the wake word", error));
+    }) ?? (() => undefined),
     deps.onHodeyDoneSpeaking(() => {
       // While Hodey is still looking or thinking, its "one sec" isn't the learner's turn yet.
       const thinking = BUSY_PHASES.includes(deps.getState().phase);

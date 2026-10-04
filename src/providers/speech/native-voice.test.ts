@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TTSProvider } from "../interfaces";
-import { NativeSpeechInput, NativeTTSProvider, RoutedTTS, voiceChoice, type VoiceBridge, type VoiceStatus } from "./native-voice";
+import { ActivityTracker } from "../../lib/activity";
+import { showStandbyDot } from "./local-voice";
+import { NativeSpeechInput, NativeTTSProvider, NativeVoiceStatus, RoutedTTS, voiceChoice, type VoiceBridge, type VoiceStatus } from "./native-voice";
 
-const READY: VoiceStatus = { asr: "ready", tts: "ready", listening: false, detail: null, tts_detail: null, voices: [{ id: "kokoro:3", label: "Heart", description: "American · female" }] };
+const READY: VoiceStatus = { asr: "ready", tts: "ready", listening: false, standby: false, detail: null, tts_detail: null, voices: [{ id: "kokoro:3", label: "Heart", description: "American · female" }] };
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -56,6 +58,27 @@ describe("NativeSpeechInput", () => {
     expect(statuses).toEqual(["listening"]);
     expect(starts).toHaveBeenCalledOnce();
     expect(texts).toEqual([["give me a", false], ["give me a hint", true]]);
+  });
+
+  it("switches hands-free and relays overheard sentences for the wake-word check", async () => {
+    const { bridge, fire, invoke } = fakeBridge();
+    const speech = new NativeSpeechInput(bridge);
+    const overheard: string[] = [];
+    speech.onWakeCandidate((text) => overheard.push(text));
+    await speech.setHandsFree(true, ["Hey Hodes"]);
+    expect(invoke).toHaveBeenCalledWith("set_hands_free", { enabled: true, wakeWords: ["Hey Hodes"] });
+    fire("voice:wake-candidate", "Hey Hodey, give me a hint");
+    expect(overheard).toEqual(["Hey Hodey, give me a hint"]);
+  });
+
+  it("keeps the privacy dot on while hands-free waits for a wake word", async () => {
+    const { bridge, fire } = fakeBridge();
+    const status = new NativeVoiceStatus(bridge);
+    await settle();
+    const activity = new ActivityTracker();
+    showStandbyDot(status, activity);
+    fire("voice:status", { ...READY, standby: true });
+    expect(activity.current().mic).toBe(true);
   });
 });
 

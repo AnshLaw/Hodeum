@@ -42,6 +42,8 @@ export const settingsSchema = z.object({
     name: z.string().max(MAX_VOICE_NAME).default(""),
     /** Talk back and forth: after Hodey answers, the mic reopens briefly for the learner's reply. */
     conversation: z.boolean().default(true),
+    /** Hands-free: the mic stays on, waiting for a wake word (opt-in; off by default). */
+    handsFree: z.boolean().default(false),
     /** What the learner speaks: Nemotron's language prompt (no en-IN exists; en-GB can suit Indian English). */
     language: z.enum(SPEECH_LANGUAGES).catch("en").default("en"),
     /** Extra names for Hodey ("Hey Hodes"), recognised like "Hey Hodey". */
@@ -62,7 +64,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type Appearance = Settings["appearance"];
 
 export const DEFAULT_SETTINGS: Settings = {
-  voice: { enabled: true, rate: 1.05, name: "", conversation: true, language: "en", wakeWords: [] },
+  voice: { enabled: true, rate: 1.05, name: "", conversation: true, handsFree: false, language: "en", wakeWords: [] },
   mode: "teach",
   stuckSeconds: 12,
   appearance: { ...DEFAULT_APPEARANCE },

@@ -18,6 +18,8 @@ export interface SpeechInput {
   onSpeechStart(handler: () => void): () => void;
   /** In a conversation, after Hodey speaks: listen briefly for a reply (ends quietly if none comes). */
   followUp?(): Promise<void>;
+  /** Hands-free: a sentence overheard while waiting for "Hey Hodey". Only for wake-word checks; never stored. */
+  onWakeCandidate?(handler: (text: string) => void): () => void;
   /** Problems worth telling the learner about, e.g. a muted microphone. */
   onError?(handler: (message: string) => void): () => void;
 }

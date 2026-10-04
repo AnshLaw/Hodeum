@@ -6,6 +6,7 @@ pub mod listen;
 pub mod models;
 pub mod segment;
 pub mod speak;
+pub mod standby;
 pub mod voices;
 
 use std::sync::mpsc::{self, Sender};
@@ -28,6 +29,8 @@ pub struct VoiceStatus {
     /// "loading", "ready" or "missing".
     pub tts: &'static str,
     pub listening: bool,
+    /// Hands-free: the mic is on, waiting for "Hey Hodey".
+    pub standby: bool,
     /// Why the mic can't be used, or what it's doing ("Loading…").
     pub detail: Option<String>,
     pub tts_detail: Option<String>,
@@ -60,6 +63,10 @@ pub(crate) fn set_listening(app: &AppHandle, listening: bool) {
     update(app, |s| s.listening = listening);
 }
 
+pub(crate) fn set_standby(app: &AppHandle, standby: bool) {
+    update(app, |s| s.standby = standby);
+}
+
 pub(crate) fn set_status_detail(app: &AppHandle, detail: Option<String>) {
     update(app, |s| s.detail = detail);
 }
@@ -88,7 +95,7 @@ pub fn start(app: &AppHandle) {
     let (listen_tx, listen_rx) = mpsc::channel();
     let (speak_tx, speak_rx) = mpsc::channel();
     let stop = Arc::new(StopSwitch::default());
-    let status = VoiceStatus { asr, tts: "loading", listening: false, detail, tts_detail: None, voices: Vec::new() };
+    let status = VoiceStatus { asr, tts: "loading", listening: false, standby: false, detail, tts_detail: None, voices: Vec::new() };
     app.manage(Voice { status: Mutex::new(status), listen: Mutex::new(listen_tx), speak: Mutex::new(speak_tx), stop: Arc::clone(&stop) });
     let listener = app.clone();
     let installed = asr == "ready";
@@ -140,6 +147,13 @@ pub fn voice_start(voice: State<'_, Voice>) -> Result<(), String> {
 #[tauri::command]
 pub fn set_speech_language(language: String) -> Result<(), String> {
     listen::set_language(&language)
+}
+
+/// Settings > Voice > Hands-free: listen for "Hey Hodey" (and the learner's wake words) without a key.
+#[tauri::command]
+pub fn set_hands_free(enabled: bool, wake_words: Vec<String>, voice: State<'_, Voice>) -> Result<(), String> {
+    standby::configure(enabled, &wake_words)?;
+    send_listen(&voice, ListenCommand::Refresh)
 }
 
 /// In a conversation, after Hodey speaks: listen briefly for the learner's reply.
@@ -234,6 +248,28 @@ mod tests {
         let heard = transcribe(&mut engines, &audio).join(" ").to_lowercase();
         println!("asr: {heard:?}");
         assert!(heard.contains("pivot table"), "heard {heard:?}");
+    }
+
+    /// Hands-free (needs the real models): Kokoro says a room sentence and a wake phrase; only the wake
+    /// phrase may come out, and the room sentence is abandoned early rather than transcribed in full.
+    #[test]
+    #[ignore]
+    fn hands_free_overhears_only_the_wake_phrase() {
+        let root = voice_root();
+        let tts = load_kokoro(&kokoro_files(&root).unwrap()).unwrap();
+        let config = GenerationConfig { sid: 3, ..GenerationConfig::default() };
+        let mut audio = vec![0.0; ASR_RATE as usize / 2];
+        for line in ["I think lunch is ready in the kitchen, let's go and eat now.", "Hey Hodey, give me a hint."] {
+            let spoken = tts.generate_with_config(line, &config, None::<fn(&[f32], f32) -> bool>).unwrap();
+            audio.extend(LinearResampler::create(spoken.sample_rate(), ASR_RATE).unwrap().resample(spoken.samples(), true));
+            audio.extend(vec![0.0; ASR_RATE as usize * 3 / 2]);
+        }
+        let mut engines = load_engines(&asr_files(&root).unwrap()).unwrap();
+        let started = std::time::Instant::now();
+        let heard = super::standby::Overheard::default().push(&mut engines, &audio);
+        println!("overheard {heard:?} in {:?} ({:.1}s of audio)", started.elapsed(), audio.len() as f32 / ASR_RATE as f32);
+        assert_eq!(heard.len(), 1, "heard {heard:?}");
+        assert!(heard[0].to_lowercase().starts_with("hey"), "heard {heard:?}");
     }
 
     /// Latency report (needs the real models): how soon Hodey can start speaking a typical line, and
