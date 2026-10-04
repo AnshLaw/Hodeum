@@ -10,7 +10,7 @@ import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
 import { ExcelScene } from "../../test-support/scenes/excel";
 import { TASK_PACKS, matchGoal } from "../../task-packs";
 import type { HodeMode } from "../../lib/types";
-import { STUCK_MS } from "./model";
+import { STUCK_MS, type HodeEvent } from "./model";
 import { HodeRuntime } from "./runtime";
 
 const GOAL = "Teach me how to make a pivot table in Excel";
@@ -308,6 +308,66 @@ describe("opening the pack's app", () => {
     expect(dispatch).toHaveBeenCalledWith({ type: "APP_SWITCHED" });
     // Whichever app came forward, the screen read decides whether it's the one (Brave will do for "a browser").
     expect(runtime.getState().phase).toBe("observing");
+  });
+});
+
+describe("stepping into another app during a Hode", () => {
+  function switching() {
+    let switched: (window: AppSwitch) => void = () => undefined;
+    const scene = new ExcelScene();
+    const perception = Object.assign(new MockPerception(() => scene), {
+      onAppSwitched: (handler: (window: AppSwitch) => void) => ((switched = handler), () => undefined),
+    });
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
+    const seen: HodeEvent[] = [];
+    runtime.onTransition((event) => seen.push(event));
+    const start = async () => {
+      runtime.dispatch({ type: "START_HODE" });
+      runtime.dispatch({ type: "GOAL_SUBMITTED", goal: GOAL, pack: matchGoal(GOAL, TASK_PACKS) });
+      await settle();
+    };
+    const switches = () => seen.filter((e) => e.type === "APP_SWITCHED");
+    return { runtime, perception, start, switches, seen, switchTo: (window: AppSwitch) => switched(window) };
+  }
+
+  it("says whether the front app is the one the Hode teaches", async () => {
+    const h = switching();
+    await h.start();
+    h.switchTo({ app: "VS Code", appId: "vs-code" });
+    expect(h.switches().at(-1)).toEqual({ type: "APP_SWITCHED", away: true });
+    expect(h.runtime.isAway()).toBe(true);
+    h.switchTo({ app: "Excel", appId: "excel" });
+    expect(h.switches().at(-1)).toEqual({ type: "APP_SWITCHED", away: false });
+    expect(h.runtime.isAway()).toBe(false);
+  });
+
+  it("ignores what the learner does in the other app", async () => {
+    const h = switching();
+    await h.start();
+    h.switchTo({ app: "VS Code" });
+    const before = h.seen.length;
+    h.perception.notifyLearnerAction([{ kind: "click", at: { x: 5, y: 5 }, button: "left" }]);
+    expect(h.seen.slice(before).map((e) => e.type)).not.toContain("LEARNER_ACTED");
+  });
+
+  it("adds no flag outside a Hode, or when the window's app is unknown", async () => {
+    const h = switching();
+    h.switchTo({ app: "VS Code" });
+    expect(h.switches().at(-1)).toEqual({ type: "APP_SWITCHED" });
+    await h.start();
+    h.switchTo({});
+    expect(h.switches().at(-1)).toEqual({ type: "APP_SWITCHED" });
+  });
+
+  it("forgets the app once the Hode ends", async () => {
+    const h = switching();
+    await h.start();
+    h.switchTo({ app: "VS Code" });
+    h.runtime.dispatch({ type: "END_HODE" });
+    expect(h.runtime.isAway()).toBe(false);
+    h.switchTo({ app: "Notepad" });
+    expect(h.switches().at(-1)).toEqual({ type: "APP_SWITCHED" });
   });
 });
 

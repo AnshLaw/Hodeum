@@ -1,8 +1,9 @@
 import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
-import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Rect, StepOutcome, TeachingContext } from "../../lib/types";
-import type { LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
+import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Rect, ScreenObservation, StepOutcome, TeachingContext } from "../../lib/types";
+import type { AppSwitch, LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
+import { sameApp } from "./flow";
 import { reasonWithFallback } from "../../providers/router";
 import { observeShellTargets } from "./shell";
 import { rememberedLevel } from "../memory/tracker";
@@ -78,14 +79,19 @@ export class HodeRuntime {
   private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
   /** The reasoning in flight, called off as soon as the Hode's request id moves past it. */
   private reasoning: { requestId: number; controller: AbortController } | undefined;
+  /** The app an open goal turned out to be about (a pack or a named app sets `state.app` instead). */
+  private hodeApp: string | undefined;
+  /** The learner is in another app while the Hode's app waits behind it. */
+  private away = false;
 
   constructor(private readonly deps: RuntimeDeps) {
     this.disposers = [
-      deps.perception.onLearnerAction((observation) => this.dispatch({ type: "LEARNER_ACTED", observation })),
+      // What the learner does in another app (while the Hode's app waits behind it) isn't part of the Hode.
+      deps.perception.onLearnerAction((observation) => (this.away ? undefined : this.dispatch({ type: "LEARNER_ACTED", observation }))),
       deps.bus.on("annotate:start", () => this.dispatch({ type: "ANNOTATE_START" })),
       deps.bus.on("annotate:cancel", () => this.dispatch({ type: "ANNOTATE_CANCEL" })),
       deps.bus.on("annotation:submitted", ({ annotation }) => this.dispatch({ type: "ANNOTATION_SUBMITTED", annotation })),
-      deps.perception.onAppSwitched?.(() => this.appSwitched()) ?? (() => undefined),
+      deps.perception.onAppSwitched?.((window) => this.appSwitched(window)) ?? (() => undefined),
     ];
   }
 
@@ -115,6 +121,7 @@ export class HodeRuntime {
     if (event.type === "GOAL_SUBMITTED" && prev.phase === "goal_entry" && state.pack) this.recall(state);
     if (state !== prev) {
       this.state = state;
+      if (state.phase === "idle") this.forgetHodeApp();
       this.abandonStaleReasoning();
       this.listeners.forEach((listener) => listener());
     }
@@ -210,9 +217,36 @@ export class HodeRuntime {
     }
   }
 
-  /** Another window came forward: the reducer decides what it means (the awaited app, progress in an open Hode). */
-  private appSwitched(): void {
-    this.dispatch({ type: "APP_SWITCHED" });
+  /** Whether the learner stepped into another app while the Hode's app waits behind it. */
+  isAway(): boolean {
+    return this.away;
+  }
+
+  /**
+   * Another window came forward: the reducer decides what it means. During a Hode it's told whether that's
+   * another app than the one being taught (`away`), so the Hode waits quietly instead of asking them back.
+   */
+  private appSwitched(window: AppSwitch = {}): void {
+    const away = this.awayFrom(window);
+    this.away = away === true;
+    this.dispatch(away === undefined ? { type: "APP_SWITCHED" } : { type: "APP_SWITCHED", away });
+  }
+
+  /** Another app than the Hode's (undefined outside a Hode, or when either app is unknown). */
+  private awayFrom(window: AppSwitch): boolean | undefined {
+    const app = this.state.app ?? this.hodeApp;
+    if (this.state.phase === "idle" || app === undefined || !window.app) return undefined;
+    return !sameApp(window.app, app);
+  }
+
+  private forgetHodeApp(): void {
+    this.hodeApp = undefined;
+    this.away = false;
+  }
+
+  /** An open goal may name no app: the first app read during the Hode is the one it teaches. */
+  private pin(observation: ScreenObservation): void {
+    if (this.state.phase !== "idle" && this.state.app === undefined && this.hodeApp === undefined && observation.app) this.hodeApp = observation.app;
   }
 
   /** The taskbar's Start button and search box, for a Hode waiting on an app; always answered, empty when unreadable. */
@@ -227,7 +261,7 @@ export class HodeRuntime {
     withTimeout(open, OPEN_APP_TIMEOUT_MS, `${app.name} didn't open in time`).then(
       (appeared) => {
         if (!appeared) return failed(`No ${app.name} window appeared`);
-        this.appSwitched();
+        this.appSwitched({ app: app.name });
       },
       (error) => {
         console.error(`Couldn't open ${app.name}`, error);
@@ -277,7 +311,10 @@ export class HodeRuntime {
 
   private observe(region?: Rect): void {
     this.focusing.then(() => this.deps.perception.observe(region)).then(
-      (observation) => this.dispatch({ type: "OBSERVED", observation }),
+      (observation) => {
+        this.pin(observation);
+        this.dispatch({ type: "OBSERVED", observation });
+      },
       (error) => this.fail("Couldn't read the screen", error),
     );
   }

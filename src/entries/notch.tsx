@@ -172,13 +172,15 @@ async function boot(): Promise<void> {
       voice.speech.setSpeechHints(lessonHints(state.pack)).catch((error) => console.error("Couldn't tell the GPU listener the lesson's words", error));
     }
     surfaces.setSurface(state.pack?.surface ?? "windows");
-    const watching = WATCHING_PHASES.includes(state.phase);
+    // In another app while the Hode's app waits behind it: its clicks and keys aren't read.
+    const watching = WATCHING_PHASES.includes(state.phase) && !runtime.isAway();
     surfaces.setWatching(watching);
     watchDot(watching);
     cloud.appChanged();
   });
   const apps = loadInstalledApps();
   const openGoalsAllowed = () => vision.current().state === "ready";
+  const visionStarting = () => vision.current().state === "starting";
   const cloudSetup: CloudSetup = { catalog: new TauriCloudCatalog(invoke), keys: () => cloud.keys.current(), settings, changed: () => bus.emit("settings:changed", {}) };
   const voiceSetup: VoiceSetup = { hardware: new TauriVoiceHardware(invoke), settings, changed: () => bus.emit("settings:changed", {}) };
   connectHodeBridge({
@@ -189,6 +191,7 @@ async function boot(): Promise<void> {
     memory,
     packs: TASK_PACKS,
     openGoalsAllowed,
+    visionStarting,
     apps,
     applyVoice: (settings) => {
       voice.apply(settings);
@@ -227,6 +230,7 @@ async function boot(): Promise<void> {
     onHodeEvent: (listener) => runtime.onTransition((event) => listener(event)),
     packs: TASK_PACKS,
     openAllowed: () => vision.current().state === "ready",
+    visionStarting,
     apps,
   });
   installDebug({ runtime, bus, packs: TASK_PACKS, apps, openGoalsAllowed });
