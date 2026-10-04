@@ -16,6 +16,29 @@ const ROLE_FAMILIES: string[][] = [
   ["list item", "tree item", "data item"],
 ];
 
+/** Around a control with no look-alikes, a hint's area reaches this many times its smaller side out... */
+const LONE_PAD_SCALE = 2;
+/** ...but at least this far, so even a small button gets an area clearly bigger than itself... */
+const MIN_LONE_PAD_PX = 40;
+/** ...and at most this far, so the area still says where to look. */
+const MAX_LONE_PAD_PX = 120;
+
+function clip(rect: Rect, frame: Rect): Rect {
+  const x = Math.max(rect.x, frame.x);
+  const y = Math.max(rect.y, frame.y);
+  return { x, y, width: Math.min(rect.x + rect.width, frame.x + frame.width) - x, height: Math.min(rect.y + rect.height, frame.y + frame.height) - y };
+}
+
+/**
+ * A hint's area for a control that stands alone (a message box, the only search field): a generous
+ * glow around it, inside the window, so the learner knows where to look and still finds the control.
+ */
+export function areaAround(bounds: Rect, frame?: Rect): Rect {
+  const pad = Math.min(MAX_LONE_PAD_PX, Math.max(MIN_LONE_PAD_PX, LONE_PAD_SCALE * Math.min(bounds.width, bounds.height)));
+  const area = padRect(bounds, pad);
+  return frame ? clip(area, frame) : area;
+}
+
 /** The family a role belongs to, or the role alone. */
 function familyOf(role: string): string[] {
   const normalized = role.toLowerCase();

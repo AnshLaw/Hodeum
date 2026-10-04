@@ -80,11 +80,15 @@ describe("ask first: a hint lights up the area that holds the answer, never the 
     expect(primitives).toEqual([{ kind: "highlight", bounds: padRect({ x: 0, y: 0, width: 140, height: 20 }, REGION_PADDING_PX), emphasis: "broad" }]);
   });
 
-  it("draws nothing when the target stands alone", () => {
+  it("lights up a generous area around a target that stands alone, never the control alone", () => {
     const t = begin("teach");
     const lone = play(t.state, { type: "OBSERVED", observation: obs([tab("Insert", 1)]) }, { type: "ACTION_READY", requestId: 1, action: hint(), failures: [] });
-    expect(overlays(lone)).toEqual([]);
-    expect(lone.effects.some((e) => e.type === "clearOverlay")).toBe(true);
+    const [primitives] = overlays(lone);
+    expect(primitives).toHaveLength(1);
+    expect(primitives[0]).toMatchObject({ kind: "highlight", emphasis: "broad" });
+    if (primitives[0].kind !== "highlight") throw new Error("expected a highlight");
+    expect(primitives[0].bounds.width).toBeGreaterThan(40);
+    expect(primitives[0].label).toBeUndefined();
   });
 
   it("points at the control itself once the learner needs more help", () => {

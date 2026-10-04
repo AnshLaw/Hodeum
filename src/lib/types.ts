@@ -86,7 +86,9 @@ export interface UiElement {
 export type LearnerInput =
   | { kind: "click"; at: Point; button: MouseButton }
   | { kind: "undo" }
-  | { kind: "back" };
+  | { kind: "back" }
+  /** Enter pressed in the learner's app (sending a message, confirming a box); never what was typed. */
+  | { kind: "submit" };
 
 export interface ScreenObservation {
   app: string;
@@ -245,6 +247,8 @@ export interface TeachingContext {
   doneSteps?: string[];
   /** The last few exchanges, oldest first, so a follow-up ("why?") is answered in context. Local reasoners only: the learner's words never leave the PC. */
   history?: DialogueTurn[];
+  /** Look up reference steps for this question (offline help, then the web if it's on). Set only when the learner asked to, or the screen couldn't answer. */
+  lookUp?: boolean;
   /** What to reply in; English when absent. */
   language?: ReplyLanguage;
   /** The learner's last few actions this step, oldest first: what they did and what it changed. */

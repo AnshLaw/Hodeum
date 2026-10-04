@@ -61,6 +61,7 @@ function resume(s: HodeState): Transition {
     resumeObservation: undefined,
     question: undefined,
     spokenQuestion: undefined,
+    lookUp: undefined,
     answerSaid: undefined,
   };
   if (phase === "guiding") return restoreGuidance(state, s);
@@ -120,7 +121,7 @@ export function onVoiceQuestion(s: HodeState, e: EventOf<"VOICE_QUESTION">): Tra
   const { acks } = spoken(s.language);
   const ack = acks[requestId % acks.length];
   return {
-    state: { ...s, ...from, phase: "observing", spokenQuestion: question, question: undefined, requestId, dialogue: withTurn(s.dialogue, { who: "learner", text: question }) },
+    state: { ...s, ...from, phase: "observing", spokenQuestion: question, lookUp: e.lookUp === true, question: undefined, requestId, dialogue: withTurn(s.dialogue, { who: "learner", text: question }) },
     effects: [{ type: "stopSpeech" }, { type: "cancelStuckTimer" }, { type: "say", text: ack }, { type: "observe" }],
   };
 }

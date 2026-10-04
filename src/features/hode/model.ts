@@ -66,6 +66,8 @@ export interface HodeState {
   focusRegion?: LearnerAnnotation;
   /** A spoken question being answered right now (about the whole screen). */
   spokenQuestion?: string;
+  /** Reference steps may be looked up for that question: the learner asked to, or the screen couldn't answer it. */
+  lookUp?: boolean;
   /** The Point & Ask question being answered right now. */
   question?: LearnerAnnotation;
   correction?: string;
@@ -214,10 +216,12 @@ export type HodeEvent =
   | { type: "EXPLAIN_REQUESTED" }
   /** Speak the current instruction or answer again. */
   | { type: "REPEAT" }
-  /** A spoken question about the screen (no marked area). */
-  | { type: "VOICE_QUESTION"; question: string }
+  /** A spoken question about the screen (no marked area). `lookUp`: the learner asked Hodey to look it up. */
+  | { type: "VOICE_QUESTION"; question: string; lookUp?: boolean }
   /** The learner asks Hodey to re-read the screen now (PRD §11 "look again"). */
   | { type: "LOOK_AGAIN" }
+  /** Another window came to the front (the learner opened or switched apps, with or without a click). */
+  | { type: "APP_SWITCHED" }
   | { type: "LET_ME_TRY" }
   /** Past a step Hodey can't see done; nothing is learned or failed for it. */
   | { type: "SKIP_STEP" }

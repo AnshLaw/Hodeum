@@ -184,7 +184,7 @@ function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
     lines.push("There is no fixed plan: decide the single next action toward the goal from what is on screen, and point at where to do it.");
     const done = context.doneSteps ?? [];
     if (done.length > 0) lines.push(`Steps the learner has already done: ${done.map((step, i) => `${i + 1}. ${ownWords(step)}`).join(" ")}`);
-    if (context.lastInstruction) lines.push(`You last told the learner: ${ownWords(context.lastInstruction)}. If the screen shows they did it, give the next step; if not, help them with this one.`);
+    if (context.lastInstruction) lines.push(`You last told the learner: ${ownWords(context.lastInstruction)}. If the screen shows they did it, open with a few words on why that step mattered (no praise: Hodey adds it), then give the next step; if not, help them with this one.`);
     // Orient first (docs/teach-loop.md): with no pack there's no written idea, so the model gives it, in the same reply.
     else if (done.length === 0) lines.push("This is the first step: start your speech with one short sentence on what reaching the goal involves, then give the step.");
     lines.push('If the screen shows the goal is achieved, reply kind "complete" with a short congratulation. Otherwise reply kind "guide".');
