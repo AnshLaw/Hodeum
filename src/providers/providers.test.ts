@@ -35,6 +35,17 @@ describe("TaskPackReasoningProvider", () => {
     expect(action).toMatchObject({ kind: "guide", speech: "Open Insert.", target: { label: "Insert", confidence: 0.95, bounds: INSERT_BOUNDS } });
   });
 
+  it("on Windows, a correction whose target UIA can't find stays clarify so the vision model can locate it", async () => {
+    const action = await reasoner.reason(ctx({ correction: "You opened Data.", observation: { ...HOME_SELECTED, elements: [] } }));
+    expect(action.kind).toBe("clarify");
+  });
+
+  it("on the phone, a correction is said even when its target is off screen", async () => {
+    const phonePack = { ...PACK, surface: "phone" as const };
+    const action = await reasoner.reason(ctx({ pack: phonePack, correction: "That's Wallpaper.", observation: { ...HOME_SELECTED, elements: [] } }));
+    expect(action).toMatchObject({ kind: "correct", speech: "That's Wallpaper." });
+  });
+
   it("returns a correction when the context carries one", async () => {
     const action = await reasoner.reason(ctx({ correction: "You opened Data." }));
     expect(action).toMatchObject({ kind: "correct", speech: "You opened Data." });
