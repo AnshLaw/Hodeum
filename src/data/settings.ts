@@ -40,7 +40,9 @@ export const MAX_SENSITIVE_APP = 60;
 export const DEFAULT_SENSITIVE_APPS = ["1Password", "Bitwarden", "KeePass", "LastPass", "Dashlane", "Bank", "NetBanking", "PayPal", "Paytm", "PhonePe", "Credential Manager", "Password", "Medical", "Health"];
 
 /** Must match DEFAULT_MODEL in src-tauri/src/cloud/gemini.rs. */
-export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+/** Flash-Lite: answers a teaching step in about a second, and stayed up when every larger Flash
+ * model answered 503 "high demand" (2026-10-04). */
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 /** Must match DEFAULT_MODEL in src-tauri/src/cloud/elevenlabs.rs. */
 export const DEFAULT_ELEVENLABS_MODEL = "eleven_flash_v2_5";
 /** "Sarah", a stock voice every account has. Must match DEFAULT_VOICE_ID in src-tauri/src/cloud/elevenlabs.rs. */

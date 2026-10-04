@@ -174,8 +174,8 @@ pub struct Utterance {
 
 fn build(utterance: &Utterance) -> Result<TtsRequest, String> {
     let dev = cfg!(debug_assertions);
-    let voice_id = pick_voice(utterance.voice_id.clone(), std::env::var(VOICE_ENV).ok(), dev)?;
-    let model = pick_model(utterance.model.clone(), std::env::var(MODEL_ENV).ok(), dev)?;
+    let voice_id = pick_voice(utterance.voice_id.clone(), super::dev_env::var(VOICE_ENV), dev)?;
+    let model = pick_model(utterance.model.clone(), super::dev_env::var(MODEL_ENV), dev)?;
     request(&voice_id, &model, &utterance.text, utterance.speed)
 }
 
@@ -278,5 +278,26 @@ mod tests {
         assert_eq!(decoder.push(&[0x00, 0x40, 0x00]), vec![0.5]);
         assert_eq!(decoder.push(&[0xc0]), vec![-0.5]);
         assert!(decoder.push(&[]).is_empty());
+    }
+
+    /// Streams one short sentence without playing it: proves the key, voice and model end to end.
+    #[test]
+    #[ignore = "live: spends about 10 ElevenLabs credits"]
+    fn live_elevenlabs_streams_hodeys_voice() {
+        const MIN_SECONDS: f32 = 0.5;
+        let utterance = Utterance { text: "Hi, I'm Hodey.".into(), speed: 1.0, model: None, voice_id: None };
+        let key = keys::read(PROVIDER).expect("an ElevenLabs key in Credential Manager or .env.local");
+        let samples = tauri::async_runtime::block_on(async {
+            let mut response = open_stream(build(&utterance)?, &key).await?;
+            let (mut decoder, mut count) = (Pcm16Decoder::default(), 0);
+            while let Some(bytes) = response.chunk().await.map_err(|e| e.to_string())? {
+                count += decoder.push(&bytes).len();
+            }
+            Ok::<usize, String>(count)
+        })
+        .expect("ElevenLabs streamed audio");
+        let seconds = samples as f32 / SAMPLE_RATE.get() as f32;
+        println!("ElevenLabs ({DEFAULT_MODEL}, voice {DEFAULT_VOICE_ID}): {seconds:.2}s of audio");
+        assert!(seconds > MIN_SECONDS, "only {seconds:.2}s of audio");
     }
 }

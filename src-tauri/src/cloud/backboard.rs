@@ -20,6 +20,9 @@ const ASSISTANT_NAME: &str = "Hodeum learner";
 const ASSISTANT_PROMPT: &str = "You keep learning notes for one Hodeum learner: skills practised, steps they needed help with, preferred language and how much help to start with. Messages are compact JSON summaries, never transcripts.";
 /// Backboard's add-message memory modes Hodeum uses ("off" would make the call pointless).
 const MEMORY_MODES: [&str; 2] = ["Auto", "Readonly"];
+/// Backboard's default is "true", which also runs a chat model (gpt-4o) to reply to every summary.
+/// Hodeum only stores memories, so that reply would spend credits and time for nothing.
+const SEND_TO_LLM: &str = "false";
 /// Backboard accepts 1 to 50 search results.
 const MAX_SEARCH_LIMIT: u32 = 50;
 /// A summary is a few hundred characters; this stops anything larger from leaving the PC.
@@ -27,6 +30,8 @@ const MAX_CONTENT_CHARS: usize = 2000;
 const MAX_QUERY_CHARS: usize = 300;
 /// Backboard ids are UUIDs; anything longer or with other characters is refused before a URL is built.
 const MAX_ID_CHARS: usize = 64;
+/// How much of an error body to keep in the log.
+const ERROR_BODY_CHARS: usize = 200;
 
 /// A POST to Backboard: path under `BASE_URL` and its JSON body. Built without I/O so it's testable.
 #[derive(Debug, PartialEq)]
@@ -67,7 +72,7 @@ pub fn add_message_request(thread_id: &str, content: &str, memory: &str) -> Resu
     if content.trim().is_empty() || content.chars().count() > MAX_CONTENT_CHARS {
         return Err("a learning summary must be non-empty and compact".into());
     }
-    Ok(Request { path: format!("/threads/{id}/messages"), body: json!({ "content": content, "memory": memory, "stream": false }) })
+    Ok(Request { path: format!("/threads/{id}/messages"), body: json!({ "content": content, "memory": memory, "stream": false, "send_to_llm": SEND_TO_LLM }) })
 }
 
 pub fn search_memories_request(assistant_id: &str, query: &str, limit: u32) -> Result<Request, String> {
@@ -111,7 +116,7 @@ async fn post(request: Request) -> Result<Value, String> {
     let status = response.status();
     let text = response.text().await.map_err(|e| format!("Backboard's reply was unreadable: {e}"))?;
     if !status.is_success() {
-        return Err(format!("Backboard answered {status}"));
+        return Err(format!("Backboard answered {status}: {}", text.chars().take(ERROR_BODY_CHARS).collect::<String>()));
     }
     serde_json::from_str(&text).map_err(|e| format!("Backboard's reply wasn't JSON: {e}"))
 }
@@ -154,7 +159,7 @@ mod tests {
     fn builds_an_add_message_request_with_the_memory_mode() {
         let request = add_message_request("thread-1", "{\"hode\":\"Make a PivotTable\"}", "Auto").unwrap();
         assert_eq!(request.path, "/threads/thread-1/messages");
-        assert_eq!(request.body, json!({ "content": "{\"hode\":\"Make a PivotTable\"}", "memory": "Auto", "stream": false }));
+        assert_eq!(request.body, json!({ "content": "{\"hode\":\"Make a PivotTable\"}", "memory": "Auto", "stream": false, "send_to_llm": "false" }));
         assert!(add_message_request("thread-1", "summary", "Readonly").is_ok());
         assert!(add_message_request("thread-1", "summary", "off").is_err());
         assert!(add_message_request("thread-1", " ", "Auto").is_err());
@@ -188,5 +193,46 @@ mod tests {
         let found = json!({ "memories": [{ "id": "m1", "content": "Needed help selecting the range", "score": 0.9 }, { "id": "m2", "content": "" }], "total_count": 2 });
         assert_eq!(parse_memories(&found), vec![MemoryItem { content: "Needed help selecting the range".into() }]);
         assert!(parse_memories(&json!({})).is_empty());
+    }
+
+    /// Backboard extracts memories after the add-message call returns, so recall is polled.
+    const RECALL_ATTEMPTS: usize = 8;
+    const RECALL_WAIT: Duration = Duration::from_secs(5);
+    const LIVE_SKILL: &str = "excel.pivot.create";
+
+    async fn store_and_recall(assistant: &str) -> Result<Vec<MemoryItem>, String> {
+        let thread = backboard_create_thread(assistant.to_string()).await?;
+        let summary = format!("Hodeum end-of-Hode learning summary: {{\"hode\":\"Make a PivotTable\",\"skills_practiced\":[\"{LIVE_SKILL}\"],\"needed_help\":[\"choosing the data range\"]}}");
+        backboard_add_message(thread, summary, "Auto".into()).await?;
+        for _ in 0..RECALL_ATTEMPTS {
+            let found = backboard_search_memories(assistant.to_string(), format!("{LIVE_SKILL} PivotTable"), 5).await?;
+            if !found.is_empty() {
+                return Ok(found);
+            }
+            tokio::time::sleep(RECALL_WAIT).await;
+        }
+        Err("Backboard stored the summary but no memory came back".into())
+    }
+
+    async fn delete_assistant(assistant: &str) {
+        let key = keys::read("backboard").expect("a Backboard key");
+        let sent = reqwest::Client::new().delete(format!("{BASE_URL}/assistants/{assistant}")).header(KEY_HEADER, key).send().await;
+        match sent {
+            Ok(response) if response.status().is_success() => {}
+            Ok(response) => eprintln!("couldn't delete test assistant {assistant}: {}", response.status()),
+            Err(e) => eprintln!("couldn't delete test assistant {assistant}: {e}"),
+        }
+    }
+
+    #[test]
+    #[ignore = "live: creates a throwaway Backboard assistant, stores one summary, then deletes it"]
+    fn live_backboard_stores_and_recalls_a_summary() {
+        tauri::async_runtime::block_on(async {
+            let assistant = backboard_create_assistant().await.expect("assistant created");
+            let recalled = store_and_recall(&assistant).await;
+            delete_assistant(&assistant).await;
+            let recalled = recalled.expect("summary stored and recalled");
+            println!("Backboard recalled: {recalled:?}");
+        });
     }
 }

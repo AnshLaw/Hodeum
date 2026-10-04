@@ -134,7 +134,7 @@ describe("GeminiReasoningProvider", () => {
   it("maps a valid reply to a teaching action grounded in the observation", async () => {
     const { invoke } = bridge(POINT_AT_INSERT);
     const action = await new GeminiReasoningProvider({ invoke }).reason(ctx());
-    expect(invoke).toHaveBeenCalledWith("gemini_reason", { request: expect.objectContaining({ system: expect.any(String), prompt: expect.any(String) }), model: "gemini-3.8-flash" });
+    expect(invoke).toHaveBeenCalledWith("gemini_reason", { request: expect.objectContaining({ system: expect.any(String), prompt: expect.any(String) }), model: "gemini-3.5-flash-lite" });
     expect(action).toEqual({
       kind: "guide",
       speech: "Open the Insert tab.",

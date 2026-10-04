@@ -10,7 +10,7 @@ const API_BASE: &str = "https://generativelanguage.googleapis.com/v1beta/models"
 /// Dev builds only: overrides the model chosen in Settings > Cloud.
 const MODEL_ENV: &str = "GEMINI_MODEL";
 /// Must match `DEFAULT_GEMINI_MODEL` in src/data/settings.ts.
-const DEFAULT_MODEL: &str = "gemini-3.8-flash";
+const DEFAULT_MODEL: &str = "gemini-3.5-flash-lite";
 /// Longer than any Gemini model id; the id goes into the request URL.
 const MAX_MODEL_CHARS: usize = 80;
 /// A slow cloud answer is worse than the local one; the policy then cools Gemini down.
@@ -111,6 +111,21 @@ fn truncate(text: &str) -> String {
     text.chars().take(MAX_ERROR_CHARS).collect()
 }
 
+/// reqwest's top-level message ("error sending request") hides why; the cause chain says it.
+fn describe(error: reqwest::Error) -> String {
+    if error.is_timeout() {
+        return format!("no answer within {}s", TIMEOUT.as_secs());
+    }
+    let error = error.without_url();
+    let mut message = error.to_string();
+    let mut cause = std::error::Error::source(&error);
+    while let Some(inner) = cause {
+        message = format!("{message}: {inner}");
+        cause = inner.source();
+    }
+    message
+}
+
 async fn post(key: &str, model: &str, body: &Value) -> Result<Value, String> {
     let client = reqwest::Client::builder().timeout(TIMEOUT).build().map_err(|e| e.to_string())?;
     let response = client
@@ -120,9 +135,9 @@ async fn post(key: &str, model: &str, body: &Value) -> Result<Value, String> {
         .body(body.to_string())
         .send()
         .await
-        .map_err(|e| format!("Couldn't reach Gemini: {}", e.without_url()))?;
+        .map_err(|e| format!("Couldn't reach Gemini: {}", describe(e)))?;
     let status = response.status();
-    let text = response.text().await.map_err(|e| format!("Gemini's answer was cut off: {}", e.without_url()))?;
+    let text = response.text().await.map_err(|e| format!("Gemini's answer was cut off: {}", describe(e)))?;
     if !status.is_success() {
         return Err(format!("Gemini answered {status}: {}", truncate(&text)));
     }
@@ -133,7 +148,7 @@ async fn post(key: &str, model: &str, body: &Value) -> Result<Value, String> {
 #[tauri::command]
 pub async fn gemini_reason(request: GeminiRequest, model: Option<String>) -> Result<Value, String> {
     validate(&request)?;
-    let model = model_id(model, std::env::var(MODEL_ENV).ok(), cfg!(debug_assertions))?;
+    let model = model_id(model, super::dev_env::var(MODEL_ENV), cfg!(debug_assertions))?;
     let key = super::keys::read("gemini").ok_or("No Gemini key is saved.")?;
     let response = post(&key, &model, &build_body(&request, &model)).await.inspect_err(|e| eprintln!("Gemini request failed: {e}"))?;
     extract_reply(&response).inspect_err(|e| eprintln!("Gemini reply unusable: {e}"))
@@ -209,5 +224,15 @@ mod tests {
         assert!(extract_reply(&empty).unwrap_err().contains("MAX_TOKENS"));
         let prose = json!({ "candidates": [{ "content": { "parts": [{ "text": "Sure! Click Insert." }] } }] });
         assert!(extract_reply(&prose).unwrap_err().contains("isn't JSON"));
+    }
+
+    /// `cargo test --lib live_ -- --ignored --nocapture` runs the live checks; this one is one tiny request.
+    #[test]
+    #[ignore = "live: spends a few Gemini tokens"]
+    fn live_gemini_returns_a_teaching_action() {
+        let reply = tauri::async_runtime::block_on(gemini_reason(request(), None)).expect("Gemini answered");
+        let model = model_id(None, super::super::dev_env::var(MODEL_ENV), true).expect("a valid model");
+        println!("Gemini ({model}): {reply}");
+        assert!(reply["kind"].as_str().is_some_and(|kind| KINDS.contains(&kind)), "{reply}");
     }
 }

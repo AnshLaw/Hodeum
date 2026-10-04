@@ -99,7 +99,7 @@ export const RECOMMENDED_SUFFIX = " (recommended)";
 
 /** Names for the defaults, shown before (or without) a list from the provider. */
 const KNOWN_LABELS: Record<string, string> = {
-  [DEFAULT_GEMINI_MODEL]: "Gemini 3.8 Flash",
+  [DEFAULT_GEMINI_MODEL]: "Gemini 3.5 Flash-Lite",
   [DEFAULT_ELEVENLABS_MODEL]: "Eleven Flash v2.5",
   [DEFAULT_ELEVENLABS_VOICE]: "Sarah",
 };
