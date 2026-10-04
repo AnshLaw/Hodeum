@@ -122,7 +122,7 @@ describe("cloud model and voice pickers", () => {
 
   it("keeps the current choice selectable when the list lacks it or failed", () => {
     expect(pickerOptions(listed, "gemini-2.5-pro", "gemini-3.8-flash")[0]).toEqual({ value: "gemini-2.5-pro", label: "gemini-2.5-pro" });
-    expect(pickerOptions([], "gemini-3.8-flash", "gemini-3.8-flash")).toEqual([{ value: "gemini-3.8-flash", label: `Gemini 3.8 Flash${RECOMMENDED_SUFFIX}` }]);
+    expect(pickerOptions([], "gemini-3.5-flash-lite", "gemini-3.5-flash-lite")).toEqual([{ value: "gemini-3.5-flash-lite", label: `Gemini 3.5 Flash-Lite${RECOMMENDED_SUFFIX}` }]);
     expect(pickerOptions([], "EXAVITQu4vr4xnSDxMaL", "EXAVITQu4vr4xnSDxMaL")[0].label).toBe(`Sarah${RECOMMENDED_SUFFIX}`);
   });
 

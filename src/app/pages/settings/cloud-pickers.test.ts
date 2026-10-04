@@ -15,7 +15,7 @@ describe("cloud pickers (first render, before any list loads)", () => {
   it("offers the current Gemini model, marked recommended, and asks for a key", () => {
     const html = render("gemini");
     expect(html).toContain('aria-label="Gemini model"');
-    expect(html).toContain('<option value="gemini-3.8-flash" selected="">Gemini 3.8 Flash (recommended)</option>');
+    expect(html).toContain('<option value="gemini-3.5-flash-lite" selected="">Gemini 3.5 Flash-Lite (recommended)</option>');
     expect(html).toContain("Save a key to choose from every model");
   });
 

@@ -33,7 +33,8 @@ const PRACTICE_LIST_DELAY_MS = 400;
 const NO_KEY: Record<"gemini" | "elevenlabs", string> = { gemini: "No Gemini key is saved.", elevenlabs: "No ElevenLabs key is saved." };
 
 export const PRACTICE_GEMINI_MODELS: GeminiModel[] = [
-  { id: "gemini-3.8-flash", displayName: "Gemini 3.8 Flash", description: "Practice stage stand-in." },
+  { id: "gemini-3.5-flash-lite", displayName: "Gemini 3.5 Flash-Lite", description: "Practice stage stand-in." },
+  { id: "gemini-3.8-flash", displayName: "Gemini 3.8 Flash" },
   { id: "gemini-3.7-flash", displayName: "Gemini 3.7 Flash" },
   { id: "gemini-3.8-pro", displayName: "Gemini 3.8 Pro" },
 ];

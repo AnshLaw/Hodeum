@@ -20,7 +20,7 @@ describe("parseSettings", () => {
   it("defaults the cloud models and voice for rows saved before they could be chosen", () => {
     const cloud = parseSettings({ cloud: { reasoning: true, voice: true, memory: "auto", sensitiveApps: [] } }).cloud;
     expect(cloud).toMatchObject({ reasoning: true, geminiModel: DEFAULT_GEMINI_MODEL, elevenlabsModel: DEFAULT_ELEVENLABS_MODEL, elevenlabsVoice: DEFAULT_ELEVENLABS_VOICE });
-    expect(DEFAULT_SETTINGS.cloud).toMatchObject({ geminiModel: "gemini-3.8-flash", elevenlabsModel: "eleven_flash_v2_5", elevenlabsVoice: "EXAVITQu4vr4xnSDxMaL" });
+    expect(DEFAULT_SETTINGS.cloud).toMatchObject({ geminiModel: "gemini-3.5-flash-lite", elevenlabsModel: "eleven_flash_v2_5", elevenlabsVoice: "EXAVITQu4vr4xnSDxMaL" });
   });
 
   it("keeps a chosen model and voice, including the previous Gemini default", () => {

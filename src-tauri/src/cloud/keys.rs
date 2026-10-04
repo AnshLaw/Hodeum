@@ -1,5 +1,5 @@
 //! Cloud API keys in Windows Credential Manager (`Hodeum/<provider>`). Dev builds also read
-//! `GEMINI_API_KEY` / `ELEVENLABS_API_KEY` / `BACKBOARD_API_KEY` from the environment.
+//! `GEMINI_API_KEY` / `ELEVENLABS_API_KEY` / `BACKBOARD_API_KEY` from the environment or `.env.local`.
 
 use serde::Serialize;
 
@@ -51,7 +51,7 @@ fn resolve(stored: Option<String>, env: Option<String>, dev: bool) -> Option<Str
 
 /// The key for `provider`, for the cloud adapters in this module only.
 pub fn read(provider: &str) -> Option<String> {
-    let env = env_name(provider).ok().and_then(|name| std::env::var(name).ok());
+    let env = env_name(provider).ok().and_then(super::dev_env::var);
     resolve(stored(provider), env, cfg!(debug_assertions))
 }
 
