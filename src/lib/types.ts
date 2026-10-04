@@ -182,6 +182,8 @@ export interface ActionTarget {
   bounds: Rect;
   confidence: number;
   label: string;
+  /** The words in the speech that name this control, so the overlay can move to it as they're spoken. */
+  mention?: string;
 }
 
 /** Agent · Do it for me: the control Hodey presses for the learner, as last seen on screen. */
@@ -202,6 +204,8 @@ export interface TeachingAction {
   kind: TeachingActionKind;
   speech: string;
   target?: ActionTarget;
+  /** Further controls the speech walks through, in flow order after `target` (lit together, numbered 2, 3, …). */
+  targets?: ActionTarget[];
   skill: string;
   assistanceLevel: AssistanceLevel;
   /** The answer is complete as it stands (a located control, the lesson's own explanation): no slower reasoner needs to improve it. */
@@ -311,8 +315,11 @@ export interface StepOutcome {
 
 export type OverlayPrimitive =
   | { kind: "spotlight"; bounds: Rect }
-  /** `keepClear`: nearby on-screen text (headings, neighbouring rows) the label shouldn't cover. */
-  | { kind: "highlight"; bounds: Rect; label?: string; emphasis: "precise" | "broad"; keepClear?: Rect[] }
+  /**
+   * `keepClear`: nearby on-screen text (headings, neighbouring rows) the label shouldn't cover.
+   * `order`: the control's place in the flow (1, 2, …) when several are lit at once; absent for one.
+   */
+  | { kind: "highlight"; bounds: Rect; label?: string; emphasis: "precise" | "broad"; keepClear?: Rect[]; order?: number }
   | { kind: "arrow"; to: Rect }
   /** `window`: the window the learner marked it on, when that differs from the guidance's. */
   | { kind: "pin"; bounds: Rect; window?: WindowRef };

@@ -1,6 +1,7 @@
 import { padRect } from "../../lib/coords";
 import {
   ASSISTANCE_LEVELS,
+  type ActionTarget,
   type AssistanceLevel,
   type HodeMode,
   type OverlayPrimitive,
@@ -127,13 +128,30 @@ export function overlayFor(action: TeachingAction, pin?: PinPrimitive, nearby: R
   const band = confidenceBand(target.confidence);
   if (band === "uncertain") return primitives;
   if (style === "area") return hintArea ? [...primitives, { kind: "highlight", bounds: hintArea, emphasis: "broad" }] : primitives;
-  const keepClear = nearby.length > 0 ? { keepClear: nearby } : {};
+  const later = action.targets ?? [];
+  // Several controls are numbered in flow order; a spotlight on the first would dim the rest.
+  const extras = { ...(nearby.length > 0 ? { keepClear: nearby } : {}), ...(later.length > 0 ? { order: 1 } : {}) };
   if (band === "broad") {
-    primitives.push({ kind: "highlight", bounds: padRect(target.bounds, BROAD_PADDING_PX), label: target.label, emphasis: "broad", ...keepClear });
-    return primitives;
+    primitives.push({ kind: "highlight", bounds: padRect(target.bounds, BROAD_PADDING_PX), label: target.label, emphasis: "broad", ...extras });
+  } else {
+    if (style === "full" && later.length === 0) primitives.push({ kind: "spotlight", bounds: target.bounds });
+    primitives.push({ kind: "highlight", bounds: target.bounds, label: target.label, emphasis: "precise", ...extras });
+    if (style === "full") primitives.push({ kind: "arrow", to: target.bounds });
   }
-  if (style === "full") primitives.push({ kind: "spotlight", bounds: target.bounds });
-  primitives.push({ kind: "highlight", bounds: target.bounds, label: target.label, emphasis: "precise", ...keepClear });
-  if (style === "full") primitives.push({ kind: "arrow", to: target.bounds });
+  later.forEach((t, i) => {
+    const highlight = laterHighlight(t, i + FIRST_LATER_ORDER);
+    if (highlight) primitives.push(highlight);
+  });
   return primitives;
+}
+
+/** Numbering of the controls after the first: the first is 1. */
+const FIRST_LATER_ORDER = 2;
+
+/** A later control in the flow: numbered, never pointed at, and left out (its number kept) when unsure of it. */
+function laterHighlight(target: ActionTarget, order: number): OverlayPrimitive | undefined {
+  const band = confidenceBand(target.confidence);
+  if (band === "uncertain") return undefined;
+  const broad = band === "broad";
+  return { kind: "highlight", bounds: broad ? padRect(target.bounds, BROAD_PADDING_PX) : target.bounds, label: target.label, emphasis: broad ? "broad" : "precise", order };
 }
