@@ -1,9 +1,10 @@
 import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
-import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, OverlayPrimitive, PerformRequest, Rect, StepOutcome, TeachingContext } from "../../lib/types";
-import type { LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
+import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Rect, StepOutcome, TeachingContext } from "../../lib/types";
+import type { AppSwitch, LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { reasonWithFallback } from "../../providers/router";
+import { isAwaitedApp, knownAppId } from "../apps/resolve";
 import { rememberedLevel } from "../memory/tracker";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState } from "./model";
 import { step } from "./reducer";
@@ -17,6 +18,8 @@ export interface RuntimeDeps {
   tts: TTSProvider;
   /** Learning memory recalled at the start of a pack Hode; nudges each skill's starting level. */
   memory?: Pick<MemoryProvider, "getRelevantMemory">;
+  /** Reference steps for a spoken question (offline help, then the web if the learner allows it), as a <web> block. */
+  reference?: (question: string, app: string | undefined, signal: AbortSignal) => Promise<string | undefined>;
 }
 
 async function* once(text: string): AsyncIterable<string> {
@@ -24,8 +27,15 @@ async function* once(text: string): AsyncIterable<string> {
 }
 
 /** Runs the pure reducer and executes its effects against the adapters. */
-/** Room echo and audio latency: Hodey's last words can reach the mic this long after playback ends. */
-const ECHO_WINDOW_MS = 1500;
+/**
+ * Room echo and audio latency: Hodey's last words can come back as a transcript this long after playback ends
+ * (the mic's 0.9 s end-of-speech silence plus the recogniser's decode).
+ */
+const ECHO_WINDOW_MS = 3500;
+/** Lines of Hodey's kept for echo checks: an answer and the acknowledgement before it can both come back. */
+const ECHO_LINES = 2;
+/** The native side waits up to ~45 s for a slow app (Excel cold-starts in ~21 s); this only catches a hung call. */
+const OPEN_APP_TIMEOUT_MS = 60_000;
 /** After Hodey presses a control, the app gets this long to respond (a menu or dialog opening) before it's read. */
 export const PRESS_SETTLE_MS = 450;
 const CANT_PRESS = "Hodey can't click in this app, so this step is yours.";
@@ -48,7 +58,8 @@ export class HodeRuntime {
   private speech: AbortController | undefined;
   /** Skill writes are chained so the next step's read sees the previous step's outcome. */
   private pendingWrite: Promise<void> = Promise.resolve();
-  private saying: { text: string; endedAt: number | undefined } | undefined;
+  /** Hodey's last few lines, newest last; `endedAt` unset while still being said. */
+  private recentLines: Array<{ text: string; endedAt: number | undefined }> = [];
   private readonly speechFinishedListeners = new Set<() => void>();
   private focusing: Promise<void> = Promise.resolve();
   private muted = false;
@@ -71,10 +82,7 @@ export class HodeRuntime {
       deps.bus.on("annotate:start", () => this.dispatch({ type: "ANNOTATE_START" })),
       deps.bus.on("annotate:cancel", () => this.dispatch({ type: "ANNOTATE_CANCEL" })),
       deps.bus.on("annotation:submitted", ({ annotation }) => this.dispatch({ type: "ANNOTATION_SUBMITTED", annotation })),
-      // Waiting for the learner to open or switch to the app: look again the moment another window comes forward.
-      deps.perception.onAppSwitched?.(() => {
-        if (this.state.phase === "guiding" && this.state.waitingForApp) this.dispatch({ type: "LOOK_AGAIN" });
-      }) ?? (() => undefined),
+      deps.perception.onAppSwitched?.((window) => this.appSwitched(window)) ?? (() => undefined),
     ];
   }
 
@@ -98,7 +106,7 @@ export class HodeRuntime {
   dispatch = (incoming: HodeEvent): void => {
     const said = learnerWords(incoming);
     if (said) this.noticeLanguage(said);
-    const event = incoming.type === "GOAL_SUBMITTED" ? { ...incoming, mode: incoming.mode ?? this.defaultMode, agentStyle: incoming.agentStyle ?? this.defaultAgentStyle } : incoming;
+    const event = withDefaults(incoming, this.defaultMode, this.defaultAgentStyle);
     const prev = this.state;
     const { state, effects } = step(prev, event);
     if (event.type === "GOAL_SUBMITTED" && prev.phase === "goal_entry" && state.pack) this.recall(state);
@@ -192,7 +200,31 @@ export class HodeRuntime {
         return this.clearStuckTimer();
       case "recordOutcome":
         return this.recordOutcome(effect.skillId, effect.outcome);
+      case "launchApp":
+        return this.openApp(effect.app);
     }
+  }
+
+  /** Waiting for the learner to open or switch to the app: look again once that app (not just any window) is in front. */
+  private appSwitched(window: AppSwitch = {}): void {
+    const s = this.state;
+    if (s.phase === "guiding" && s.waitingForApp && isAwaitedApp(window, s.waitingForApp, s.goal)) this.dispatch({ type: "LOOK_AGAIN" });
+  }
+
+  /** Opens an installed app the learner asked for; a Hode waiting for it carries on as soon as it's up. */
+  private openApp(app: InstalledApp): void {
+    const failed = (reason: string) => this.dispatch({ type: "APP_OPEN_FAILED", app, reason });
+    const open = this.deps.perception.openInstalledApp?.(app.id) ?? Promise.reject(new Error("Opening apps isn't available here"));
+    withTimeout(open, OPEN_APP_TIMEOUT_MS, `${app.name} didn't open in time`).then(
+      (appeared) => {
+        if (!appeared) return failed(`No ${app.name} window appeared`);
+        this.appSwitched({ app: app.name, appId: knownAppId(app.name) });
+      },
+      (error) => {
+        console.error(`Couldn't open ${app.name}`, error);
+        failed(errorMessage(error));
+      },
+    );
   }
 
   /** Desktop guidance belongs to the window it was placed on, the one last read; the overlay draws it only there. */
@@ -245,17 +277,35 @@ export class HodeRuntime {
     const controller = new AbortController();
     this.reasoning = { requestId, controller };
     const hooks = { onThinking: () => this.dispatch({ type: "THINKING", requestId }), signal: controller.signal };
-    reasonWithFallback(this.deps.reasoners, context, hooks)
+    this.withReference(context, controller.signal)
+      .then((referenced) => reasonWithFallback(this.deps.reasoners, referenced, hooks))
       .finally(() => {
         if (this.reasoning?.controller === controller) this.reasoning = undefined;
       })
       .then(
-        ({ action, failures }) => this.dispatch({ type: "ACTION_READY", requestId, action, failures }),
+        ({ action, failures }) => {
+          // Backstop: an answer to a request that was called off never reaches the Hode.
+          if (controller.signal.aborted) return;
+          this.dispatch({ type: "ACTION_READY", requestId, action, failures });
+        },
         (error) => {
           // Called off because the Hode moved on: nothing failed.
           if (!controller.signal.aborted) this.fail("Hodey couldn't work out the next step", error, requestId);
         },
       );
+  }
+
+  /** A spoken question (not Point & Ask) gets reference steps first; a failed lookup is answered without them. */
+  private async withReference(context: TeachingContext, signal: AbortSignal): Promise<TeachingContext> {
+    const question = context.utterance;
+    if (!this.deps.reference || !question || context.focusRegion?.intent === "ask") return context;
+    try {
+      const reference = await this.deps.reference(question, context.observation.app, signal);
+      return reference ? { ...context, reference } : context;
+    } catch (error) {
+      if (!signal.aborted) console.error("Looking up the question failed; Hodey answers from the screen", error);
+      return context;
+    }
   }
 
   /** A newer request, a pause or the end of the Hode: stop the reasoning (and the model) working on an old one. */
@@ -326,7 +376,7 @@ export class HodeRuntime {
     const controller = new AbortController();
     this.speech = controller;
     const saying = { text, endedAt: undefined as number | undefined };
-    this.saying = saying;
+    this.recentLines = [...this.recentLines, saying].slice(-ECHO_LINES);
     this.deps.tts
       .speak(once(text), controller.signal)
       .then(
@@ -354,11 +404,11 @@ export class HodeRuntime {
     };
   }
 
-  /** What Hodey is saying, or said moments ago (its voice can still be echoing back through the mic). */
+  /** What Hodey is saying, or said moments ago (its voice can still be echoing back through the mic): its last two lines. */
   hodeySaying(): string | undefined {
-    const saying = this.saying;
-    if (!saying) return undefined;
-    return saying.endedAt === undefined || Date.now() - saying.endedAt < ECHO_WINDOW_MS ? saying.text : undefined;
+    const now = Date.now();
+    const live = this.recentLines.filter(({ endedAt }) => endedAt === undefined || now - endedAt < ECHO_WINDOW_MS);
+    return live.length > 0 ? live.map(({ text }) => text).join(" ") : undefined;
   }
 
   private clearReadTimer(): void {
@@ -392,9 +442,26 @@ export class HodeRuntime {
   }
 }
 
+/** A goal, or an app opened from idle, takes the learner's default mode (and style) unless it names its own. */
+function withDefaults(event: HodeEvent, mode: HodeMode, agentStyle: AgentStyle): HodeEvent {
+  if (event.type === "GOAL_SUBMITTED") return { ...event, mode: event.mode ?? mode, agentStyle: event.agentStyle ?? agentStyle };
+  if (event.type === "OPEN_APP") return { ...event, mode: event.mode ?? mode };
+  return event;
+}
+
+/** Rejects with `message` if `work` hasn't settled in `ms`. */
+function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
 /** The learner's own words in an event, for detecting their language. */
 function learnerWords(event: HodeEvent): string | undefined {
   if (event.type === "GOAL_SUBMITTED") return event.goal;
+  if (event.type === "OPEN_APP") return event.said;
   if (event.type === "VOICE_QUESTION") return event.question;
   if (event.type === "ANNOTATION_SUBMITTED") return event.annotation.question;
   return undefined;

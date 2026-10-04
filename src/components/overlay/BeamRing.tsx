@@ -12,6 +12,8 @@ const GLIDE_EASING = "cubic-bezier(0.45, 0, 0.2, 1.18)";
 /** How far the lock-on ping grows on every side before fading. */
 const PING_SPREAD_PX = 12;
 const COMET_PARTS = ["tail", "body", "head"] as const;
+/** The comet circles this many times to catch the eye, then the ring holds still (no per-frame work). */
+const COMET_LAPS = 3;
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 
 /** How the ring arrives: drawn in, glided over from the last target, or (when unsure) faded in. */
@@ -78,6 +80,7 @@ function ringStyle(ring: Rect, layout: BeamLayout, arrival: Arrival): CSSPropert
     "--beam-lap": `${layout.lapMs}ms`,
     "--beam-arrive": `${ARRIVE_MS[arrival]}ms`,
     "--comet-start": `${COMET_START_MS[arrival]}ms`,
+    "--comet-laps": COMET_LAPS,
     "--ping-sx": ping.x,
     "--ping-sy": ping.y,
   } as CSSProperties;
@@ -94,7 +97,8 @@ export interface BeamRingProps {
 
 /**
  * Hodey's highlight: a ring that draws itself in (or glides over from the last target), pings once
- * when it locks on, then a comet of light keeps circling it, accent fading into its companion hue.
+ * when it locks on, then a comet of light circles it a few times, accent fading into its companion hue,
+ * and fades out, leaving the ring still. A new target mounts a new ring, so the comet runs again there.
  */
 export function BeamRing({ ring, radius, emphasis, channel }: BeamRingProps) {
   const group = useRef<SVGGElement>(null);

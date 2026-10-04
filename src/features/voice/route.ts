@@ -1,19 +1,20 @@
-import type { TaskPack } from "../../lib/types";
-import { goalEvent } from "../hode/bridge";
+import type { InstalledApp, TaskPack } from "../../lib/types";
+import { goalEvent, goalEvents } from "../hode/bridge";
 import type { HodeEvent, HodeState } from "../hode/model";
+import { idleOpenAppEvent, openAppEvent } from "../hode/open-app";
+import { classify, isAcknowledgement } from "./intent";
 
-/** Said before a command or question; dropped before matching. Includes how speech recognition
- *  tends to mishear "Hodey" ("body", "howdy", "hodie"). */
-const WAKE = /^(?:(?:hey|hi|hello|ok|okay)[ ,]+)?(?:hode?y|hod[iy]e?|hoadie|howdy|body)\b[,!.]?\s*/i;
+export { isAcknowledgement } from "./intent";
+
+/** Hodey's name as speech recognition writes it: "body", "howdy", "hodie", and (measured) "holdy", "hudi", "hodee". */
+const NAME = String.raw`(?:hode?y|hod(?:ee|[iy]e?)|hoadie|howdy|body|hold[iy]e?|hu?d[iy])`;
+/** Said before a command or question; dropped before matching. The greeting may run into the name ("heyhodi"). */
+const WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*)?${NAME}\b[,!.]?\s*`, "i");
 const POLITE = /\b(?:please|thanks|thank you|can you|could you)\b/gi;
 /** Utterances shorter than this (after cleanup) are noise: "um", "uh". */
 const MIN_CHARS = 3;
 /** A question or goal has at least this many words; a lone word that isn't a control is noise (keyboard clicks). */
 const MIN_WORDS = 2;
-/** Thanks and okays: they close an answer, and with nothing running they need no reply at all. */
-const ACK_WORDS = new Set(["ok", "okay", "great", "perfect", "nice", "cool", "awesome", "alright", "understood", "thanks", "thank", "got"]);
-const ACK_FILLER = new Set(["you", "it", "so", "much", "a", "lot", "all", "right", "that", "very"]);
-const QUESTION_START = /^(?:what|where|which|why|who|whose|when|is|are|does|did|was|were|can i see|what's|where's)\b/i;
 
 /** Spoken controls during a Hode. Matched against the whole cleaned utterance, so questions aren't misread. */
 const COMMANDS: [RegExp, HodeEvent][] = [
@@ -25,8 +26,9 @@ const COMMANDS: [RegExp, HodeEvent][] = [
   [/^(?:look again|check again|i did it|done|i'?m done|finished)$/, { type: "LOOK_AGAIN" }],
   [/^(?:let me try|i'?ll try|i will try|stop helping(?: me)?|i'?ve got (?:this|it)|i got this)$/, { type: "LET_ME_TRY" }],
   [/^(?:(?:just )?show me(?: how)?|show me how to do it|demonstrate(?: it)?)$/, { type: "SHOW_ME" }],
-  [/^(?:skip|skip (?:it|this|that|this step|the step)|next step|move on)$/, { type: "SKIP_STEP" }],
-  [/^(?:practi[cs]e(?: (?:again|it|alone|on my own))?|let me practi[cs]e(?: (?:again|it|alone|on my own))?|again on my own)$/, { type: "PRACTICE_AGAIN" }],
+  [/^(?:skip(?: (?:it|this|that|this step|the step|step))?|next step|move on)$/, { type: "SKIP_STEP" }],
+  // Also the card's own button label read aloud ("Practice on your own").
+  [/^(?:practi[cs]e(?: (?:again|it|alone|on (?:my|your) own))?|let me practi[cs]e(?: (?:again|it|alone|on (?:my|your) own))?|again on (?:my|your) own)$/, { type: "PRACTICE_AGAIN" }],
   [/^(?:pause|wait|hold on)$/, { type: "PAUSE" }],
   [/^(?:resume|continue|go on|keep going|carry on)$/, { type: "RESUME" }],
   [/^(?:stop|end|cancel|quit|end (?:the )?hode|stop (?:the )?hode)$/, { type: "END_HODE" }],
@@ -41,7 +43,7 @@ const COMMANDS: [RegExp, HodeEvent][] = [
 
 /** Hands-free is stricter: the room is always heard, so a mishearing ("body", "howdy") counts only
  *  after a greeting, and Hodey's name alone only in its real spellings. Includes Hindi script ("हे होडी"). */
-const HANDS_FREE_WAKE = /^(?:(?:hey|hi|hello|ok|okay)[ ,]+(?:hode?y|hod[iy]e?|hoadie|howdy|body)|hode?y|hod[iy]e?|hoadie|(?:(?:हे|हाय|ओके)[ ,]*)?होडी)(?=[\s,!.?]|$)[,!.?]?\s*/i;
+const HANDS_FREE_WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*${NAME}|hode?y|hod(?:ee|[iy]e?)|hoadie|(?:(?:हे|हाय|ओके)[ ,]*)?होडी)(?=[\s,!.?]|$)[,!.?]?\s*`, "i");
 
 /** The same controls in Hindi and Hinglish, as Hindi speech recognition writes them (in Devanagari). */
 const HINDI_COMMANDS: [string, HodeEvent][] = [
@@ -53,6 +55,7 @@ const HINDI_COMMANDS: [string, HodeEvent][] = [
   ["मुझे (?:करने|ट्राई करने) दो|मैं (?:खुद )?(?:करता|करती) ह(?:ूं|ूँ)", { type: "LET_ME_TRY" }],
   ["(?:करके )?(?:दिखाओ|दिखाइए|दिखाइये)|कर के दिखाओ", { type: "SHOW_ME" }],
   ["(?:ये |यह )?(?:स्टेप )?(?:छोड़ो|छोड़ दो|स्किप करो)|अगला स्टेप", { type: "SKIP_STEP" }],
+  ["(?:खुद )?प्रैक्टिस करो|फिर से करो", { type: "PRACTICE_AGAIN" }],
   ["रुको|रुकिए|एक मिनट|पॉज़?(?: करो)?", { type: "PAUSE" }],
   ["आगे बढ़ो|आगे बढ़िए|चलो आगे|जारी रखो|कंटिन्यू(?: करो)?", { type: "RESUME" }],
   ["बंद करो|बंद कीजिए|ख़त्म करो|स्टॉप|बस करो|होड बंद करो", { type: "END_HODE" }],
@@ -74,6 +77,7 @@ const ROMAN_HINGLISH: [RegExp, HodeEvent][] = [
   [/^(?:mujhe (?:karne|try karne) do|main (?:khud )?(?:karta|karti) hoon)$/, { type: "LET_ME_TRY" }],
   [/^(?:(?:karke |kar ke )?dikhao|dikhaiye|show karo)$/, { type: "SHOW_ME" }],
   [/^(?:(?:ye |yeh )?(?:step )?(?:skip karo|chhod do|chhodo)|agla step)$/, { type: "SKIP_STEP" }],
+  [/^(?:(?:khud )?practice karo|phir se karo|khud kar ?ke dekhta hoon|khud kar ?ke dekhti hoon)$/, { type: "PRACTICE_AGAIN" }],
   [/^(?:ruko|rukiye|ek minute|ek min)$/, { type: "PAUSE" }],
   [/^(?:aage badho|aage badhiye|chalo aage|continue karo)$/, { type: "RESUME" }],
   [/^(?:band karo|band kijiye|khatam karo|bas karo)$/, { type: "END_HODE" }],
@@ -121,37 +125,52 @@ const question = (text: string): HodeEvent => ({ type: "VOICE_QUESTION", questio
 
 const wordsIn = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}' ]/gu, " ").split(/\s+/).filter(Boolean);
 
-/** "Thanks", "okay great", "perfect, thank you": acknowledging Hodey, not asking anything. */
-export function isAcknowledgement(text: string): boolean {
-  const words = wordsIn(text);
-  return words.some((w) => ACK_WORDS.has(w)) && words.every((w) => ACK_WORDS.has(w) || ACK_FILLER.has(w));
-}
-
 /** Too little to be a question or a goal. */
 const tooShort = (text: string) => wordsIn(text).length < MIN_WORDS;
 
+const isCommand = (text: string) => asCommand(text) !== undefined;
+
+/** During a Hode: a control, an app to open, or else a question. Noise and greetings are dropped. */
+function routeInHode(s: HodeState, text: string, apps: InstalledApp[]): HodeEvent[] {
+  const acknowledged = isAcknowledgement(text);
+  if (acknowledged && s.phase === "answering") return [{ type: "DISMISS" }];
+  const command = asCommand(text);
+  if (command) return [command];
+  if (acknowledged || tooShort(text)) return [];
+  const intent = classify(text, { isCommand });
+  if (intent === "noise" || intent === "greeting") return [];
+  // "Open the insert tab" names no installed app, so it stays a question about the screen.
+  const open = intent === "open_app" ? openAppEvent(text, apps) : undefined;
+  return [open ?? question(text)];
+}
+
+/** Idle: only a real task (or a pack's own words) starts a Hode; a greeting gets a reply, noise nothing. */
+function routeIdle(text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[]): HodeEvent[] {
+  const open = idleOpenAppEvent(text, apps, openAllowed);
+  if (open) return [open];
+  // App requests are settled above: one that names no app is judged by its words ("open a new tab").
+  const intent = classify(text, { isCommand, isApp: () => false });
+  if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];
+  if (intent === "noise" || intent === "ack" || intent === "control" || tooShort(text)) return [];
+  if (intent === "question") return [question(text)];
+  const goal = goalEvent(text, packs, openAllowed);
+  if (goal.type === "GOAL_SUBMITTED" && goal.pack) return [{ type: "START_HODE" }, goal];
+  if (intent !== "task") return [];
+  return openAllowed ? [{ type: "START_HODE" }, goal] : [question(text)];
+}
+
 /**
- * What the learner said, as Hode events. Idle: a goal starts a Hode, a what/where question asks about
- * the screen. Goal entry: it's the goal. During a Hode: a control word, or else a question.
+ * What the learner said, as Hode events. Idle: a task starts a Hode, a what/where question asks about the
+ * screen, a greeting gets a reply, "open Excel" opens it. Goal entry: it's the goal. During a Hode: a control
+ * word, an app to open, or else a question. `apps`: the installed apps, for "open X" (none: no app requests).
  */
-export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], openAllowed: boolean, wakeWords: string[] = []): HodeEvent[] {
+export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], openAllowed: boolean, wakeWords: string[] = [], apps: InstalledApp[] = []): HodeEvent[] {
   const text = clean(raw, wakeWords);
   if (text.length < MIN_CHARS) return [];
-  if (s.phase === "goal_entry") return [goalEvent(text, packs, openAllowed)];
   if (s.phase === "annotating") return [];
-  const acknowledged = isAcknowledgement(text);
+  if (s.phase === "goal_entry") return classify(text) === "noise" ? [] : goalEvents(text, { packs, openAllowed, apps });
   // The closing question is open: anything said is an answer to it, even one word ("Insert").
   const answering = s.phase === "success" && s.review !== undefined && s.review.picked === undefined;
-  if (answering && !acknowledged) return [asCommand(text) ?? { type: "REVIEW_ANSWERED", said: text }];
-  if (s.phase !== "idle") {
-    if (acknowledged && s.phase === "answering") return [{ type: "DISMISS" }];
-    const command = asCommand(text);
-    if (command) return [command];
-    return acknowledged || tooShort(text) ? [] : [question(text)];
-  }
-  if (acknowledged || tooShort(text)) return [];
-  if (QUESTION_START.test(text)) return [question(text)];
-  const goal = goalEvent(text, packs, openAllowed);
-  const startable = goal.type === "GOAL_SUBMITTED" && (goal.pack !== undefined || openAllowed);
-  return startable ? [{ type: "START_HODE" }, goal] : [question(text)];
+  if (answering && !isAcknowledgement(text)) return [asCommand(text) ?? { type: "REVIEW_ANSWERED", said: text }];
+  return s.phase === "idle" ? routeIdle(text, packs, openAllowed, apps) : routeInHode(s, text, apps);
 }

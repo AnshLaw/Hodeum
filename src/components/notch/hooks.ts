@@ -13,6 +13,8 @@ import type { NotchControl } from "./notch-view";
 const SUCCESS_DISPLAY_MS = 5000;
 /** An answer stays this long after it's been said, then folds back to what the learner was doing. */
 export const ANSWER_LINGER_MS = 6000;
+/** The surface's slide transitions are well under this; the hit area stops following it every frame after it. */
+const SLIDE_FOLLOW_MAX_MS = 1000;
 
 /** Tells the overlay where the surface is (physical screen px), so arrows and labels keep out from under it. */
 function broadcastRect(element: HTMLElement, shell: NativeShell, bus: Bus): void {
@@ -50,17 +52,24 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
     observer.observe(element);
     // Sliding in and out of auto-hide is a transform, which ResizeObserver doesn't see: follow it every frame,
     // or the hit area lags behind the surface and a cursor over where it was keeps it out.
+    // Only the surface's own transitions: its children's (the orb, a card fading) bubble here too, and once kept this
+    // loop running every frame. Capped, in case a transitionend never comes (an interrupted or cancelled animation).
     let sliding = 0;
+    let slideUntil = 0;
     const follow = () => {
       report();
-      sliding = requestAnimationFrame(follow);
+      sliding = performance.now() < slideUntil ? requestAnimationFrame(follow) : 0;
     };
-    const startSliding = () => {
+    const startSliding = (event: TransitionEvent) => {
+      if (event.target !== element) return;
+      slideUntil = performance.now() + SLIDE_FOLLOW_MAX_MS;
       cancelAnimationFrame(sliding);
       sliding = requestAnimationFrame(follow);
     };
-    const stopSliding = () => {
+    const stopSliding = (event: TransitionEvent) => {
+      if (event.target !== element) return;
       cancelAnimationFrame(sliding);
+      sliding = 0;
       report();
     };
     element.addEventListener("transitionrun", startSliding);

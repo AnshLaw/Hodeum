@@ -71,6 +71,12 @@ export interface MemoryProvider {
   healthCheck(): Promise<boolean>;
 }
 
+/** The learner's new front window, by app when the native side can tell ("Excel" / "excel"). */
+export interface AppSwitch {
+  app?: string;
+  appId?: string;
+}
+
 /** UI Automation, the detector, and the practice stage's mock all sit behind this. */
 export interface PerceptionAdapter {
   observe(region?: Rect): Promise<ScreenObservation>;
@@ -79,8 +85,10 @@ export interface PerceptionAdapter {
   focusApp?(app: string): Promise<boolean>;
   /** Opens `app` (with the pack's practice file) and brings it to the front. False when it didn't appear in time. */
   launchApp?(app: string, launch: AppLaunch): Promise<boolean>;
-  /** Fires when the learner's front window becomes a different window. */
-  onAppSwitched?(handler: () => void): () => void;
+  /** Fires when the learner's front window becomes a different window (settled: not every Alt-Tab stop). */
+  onAppSwitched?(handler: (window: AppSwitch) => void): () => void;
+  /** Opens an installed app by its catalog id (`list_apps`) and brings it forward. False when it didn't appear in time. */
+  openInstalledApp?(id: string): Promise<boolean>;
   /** Agent · Do it for me: presses a control for the learner. Rejects when it's no longer where it was seen. */
   perform?(request: PerformRequest): Promise<void>;
 }

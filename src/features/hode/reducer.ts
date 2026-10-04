@@ -3,6 +3,8 @@ import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
 import { onPracticeAgain, onReviewAnswered } from "./closing";
 import { onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onShowMe, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
 import type { EventOf, HodeEvent, HodeState, Transition } from "./model";
+import { onAppOpenFailed, onOpenApp } from "./open-app";
+import { onChitchat } from "./chitchat";
 import {
   onAnnotateCancel,
   onAnnotateStart,
@@ -59,6 +61,9 @@ const handlers: Handlers = {
   END_HODE: onEndHode,
   RETRY: onRetry,
   PROVIDER_FAILED: onProviderFailed,
+  OPEN_APP: onOpenApp,
+  APP_OPEN_FAILED: onAppOpenFailed,
+  CHITCHAT: onChitchat,
 };
 
 /** Pure Hode state machine: no I/O, only a next state plus effects for the runtime to execute. */

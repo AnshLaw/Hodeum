@@ -1,10 +1,12 @@
 import type { AppLaunch, LearnerInput, PerformRequest, Rect, ScreenObservation } from "../lib/types";
-import type { PerceptionAdapter } from "./interfaces";
+import type { AppSwitch, PerceptionAdapter } from "./interfaces";
 
 /** Must match `LEARNER_ACTION_EVENT` in src-tauri/src/perception/input_hook.rs. */
 export const LEARNER_ACTION_EVENT = "perception:learner-action";
 /** Must match `LEARNER_WINDOW_EVENT` in src-tauri/src/perception/window_watch.rs. */
 export const LEARNER_WINDOW_EVENT = "perception:learner-window";
+/** Alt-Tab passes through windows on the way: a switch counts once the front window has stayed put this long. */
+export const APP_SWITCH_SETTLE_MS = 400;
 
 /** The slice of Tauri this adapter needs, injectable for tests. */
 export interface NativeBridge {
@@ -38,19 +40,31 @@ export class NativePerception implements PerceptionAdapter {
     return (await this.bridge.invoke<{ title: string } | null>("focus_app", { app })) !== null;
   }
 
-  async launchApp(app: string, { exe, sample }: AppLaunch): Promise<boolean> {
-    return (await this.bridge.invoke<{ title: string } | null>("launch_app", { app, exe, sample: sample ?? null })) !== null;
+  async launchApp(app: string, { exe, uri, sample }: AppLaunch): Promise<boolean> {
+    return (await this.bridge.invoke<{ title: string } | null>("launch_app", { app, exe: exe ?? null, uri: uri ?? null, sample: sample ?? null })) !== null;
   }
 
-  /** The window watcher also reports moves and resizes; only a different window counts as a switch. */
-  onAppSwitched(handler: () => void): () => void {
+  /** Opens the app through the Start menu's entry (the native side only accepts ids from its own catalog). */
+  async openInstalledApp(id: string): Promise<boolean> {
+    return (await this.bridge.invoke<{ title: string } | null>("open_installed_app", { id })) !== null;
+  }
+
+  /** The window watcher also reports moves and resizes; only a different window counts as a switch, once settled. */
+  onAppSwitched(handler: (window: AppSwitch) => void): () => void {
     let last: number | undefined;
-    return this.bridge.listen(LEARNER_WINDOW_EVENT, (payload) => {
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const stop = this.bridge.listen(LEARNER_WINDOW_EVENT, (payload) => {
       const id = (payload as { id?: number } | null)?.id;
       if (id === undefined || id === last) return;
       last = id;
-      handler();
+      const window = appOf(payload);
+      clearTimeout(settle);
+      settle = setTimeout(() => handler(window), APP_SWITCH_SETTLE_MS);
     });
+    return () => {
+      clearTimeout(settle);
+      stop();
+    };
   }
 
   /** Clicks the element from screen read `observedAt` through Windows; the native side re-checks it's still that control. */
@@ -101,6 +115,12 @@ export class NativePerception implements PerceptionAdapter {
         }
       });
   }
+}
+
+/** The window event's app and app id, when this native build sends them. */
+function appOf(payload: unknown): AppSwitch {
+  const { app, appId } = payload as { app?: unknown; appId?: unknown };
+  return { ...(typeof app === "string" && app !== "" ? { app } : {}), ...(typeof appId === "string" && appId !== "" ? { appId } : {}) };
 }
 
 const isPoint = (value: unknown): boolean =>

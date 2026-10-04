@@ -47,7 +47,12 @@ import { TaskPackReasoningProvider } from "../providers/task-pack-reasoner";
 import { QwenVisionProvider } from "../providers/vision/qwen-vision-provider";
 import { TauriVisionStatus } from "../providers/vision/tauri-vision-status";
 import { connectionOf, type CapturedFrame } from "../providers/vision/types";
+import { createHowToLookup } from "../providers/web/lookup";
+import { spokenReference } from "../providers/web/reference";
+import { TauriWebSearch } from "../app/tauri-services";
 import { TASK_PACKS } from "../task-packs";
+import type { InstalledApp, TaskPack } from "../lib/types";
+import type { DebugDeps } from "../features/debug/automation";
 import { mount } from "./mount";
 
 /** Learner input is only worth re-reading the screen for while guidance waits on the learner. */
@@ -84,8 +89,41 @@ function createPerception(activity: ActivityTracker) {
   );
   const phone = new PhonePerception(mirror, (png) => invoke<OcrSegment[]>("ocr_frame", { png }));
   const surfaces = new SurfacePerception({ windows: native, phone });
-  const capture = () => activity.track("screen", () => (surfaces.current() === "phone" ? mirror.grabFrame() : invoke<CapturedFrame>("capture_active_window")));
+  const capture = (windowId?: number) =>
+    activity.track("screen", () => (surfaces.current() === "phone" ? mirror.grabFrame() : invoke<CapturedFrame>("capture_active_window", { windowId: windowId ?? null })));
   return { mirror, surfaces, perception: withScreenActivity(surfaces, activity), capture };
+}
+
+/** The GPU listener's second pass spells these right; Whisper's prompt is short, so only the first few. */
+const MAX_SPEECH_HINTS = 24;
+
+/** Words the learner is likely to say during a lesson: its app and the controls its steps name. */
+function lessonHints(pack: TaskPack | undefined): string[] {
+  if (!pack) return [];
+  const names = pack.steps.flatMap((step) => step.target.names).filter((name) => !name.includes("*"));
+  return [...new Set([pack.app, ...names])].slice(0, MAX_SPEECH_HINTS);
+}
+
+/** The installed apps, listed once at startup for "open Excel"; until then (or if listing fails) app requests are ordinary goals. */
+function loadInstalledApps(): () => InstalledApp[] {
+  let apps: InstalledApp[] = [];
+  invoke<InstalledApp[]>("list_apps").then(
+    (listed) => {
+      apps = listed;
+    },
+    (error: unknown) => console.error(`Couldn't list the installed apps; "open <app>" won't open anything this session`, error),
+  );
+  return () => apps;
+}
+
+/** DEV builds only: `window.__hodeumDebug` for the test harness. The dynamic import keeps it out of release bundles. */
+function installDebug(deps: Omit<DebugDeps, "quit">): void {
+  if (import.meta.env.DEV) {
+    import("../features/debug/automation").then(
+      ({ installDebugHook }) => installDebugHook({ ...deps, quit: () => invoke<void>("debug_quit") }),
+      (error: unknown) => console.error("Couldn't install the debug hook", error),
+    );
+  }
 }
 
 async function boot(): Promise<void> {
@@ -119,17 +157,28 @@ async function boot(): Promise<void> {
   // SQLite always; Backboard only while the cloud policy allows it (and writes only in "auto").
   const memory = new RoutedMemory(localMemory, new BackboardMemoryProvider({ invoke, policy: cloud.policy, kv }), () => cloud.policy.reportFailure("backboard"));
   // A lesson step UI Automation grounds is answered locally at once; the cloud and the vision model only take the rest.
-  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory });
+  // A spoken question gets the offline help's steps, or one scrubbed web search when Settings allows it.
+  let webAllowed = false;
+  const howTo = createHowToLookup({ web: new TauriWebSearch(bus), webEnabled: () => webAllowed, onProgress: (progress) => bus.emit("web:search", progress) });
+  const reference = spokenReference(howTo, (stop) => bus.on("web:cancel", stop));
+  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   const watchDot = screenWatch(activity);
+  let hintedPack: string | undefined;
   runtime.subscribe(() => {
     const state = runtime.getState();
+    if (state.pack?.id !== hintedPack) {
+      hintedPack = state.pack?.id;
+      voice.speech.setSpeechHints(lessonHints(state.pack)).catch((error) => console.error("Couldn't tell the GPU listener the lesson's words", error));
+    }
     surfaces.setSurface(state.pack?.surface ?? "windows");
     const watching = WATCHING_PHASES.includes(state.phase);
     surfaces.setWatching(watching);
     watchDot(watching);
     cloud.appChanged();
   });
+  const apps = loadInstalledApps();
+  const openGoalsAllowed = () => vision.current().state === "ready";
   const cloudSetup: CloudSetup = { catalog: new TauriCloudCatalog(invoke), keys: () => cloud.keys.current(), settings, changed: () => bus.emit("settings:changed", {}) };
   const voiceSetup: VoiceSetup = { hardware: new TauriVoiceHardware(invoke), settings, changed: () => bus.emit("settings:changed", {}) };
   connectHodeBridge({
@@ -139,7 +188,8 @@ async function boot(): Promise<void> {
     settings,
     memory,
     packs: TASK_PACKS,
-    openGoalsAllowed: () => vision.current().state === "ready",
+    openGoalsAllowed,
+    apps,
     applyVoice: (settings) => {
       voice.apply(settings);
       elevenlabs.rate = settings.rate;
@@ -155,6 +205,9 @@ async function boot(): Promise<void> {
       geminiProvider.model = settings.geminiModel;
       elevenlabs.model = settings.elevenlabsModel;
       elevenlabs.voiceId = settings.elevenlabsVoice;
+    },
+    applyWebSearch: (enabled) => {
+      webAllowed = enabled;
     },
     applyHodeyKey: (key) => {
       hodeyKeySetting.set(key);
@@ -174,11 +227,13 @@ async function boot(): Promise<void> {
     onHodeEvent: (listener) => runtime.onTransition((event) => listener(event)),
     packs: TASK_PACKS,
     openAllowed: () => vision.current().state === "ready",
+    apps,
   });
+  installDebug({ runtime, bus, packs: TASK_PACKS, apps, openGoalsAllowed });
   connectAccount({ bus, settings, activity, invoke, listen: (event, handler) => subscribeTauri(event, handler) }).catch((error) => console.error("Accounts didn't start; Hodeum stays local", error));
   mount(
     <CloudContext.Provider value={cloud.policy}>
-      <Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} voiceStatus={voice.status} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} phone={mirror} skills={learning} voiceSetup={voiceSetup} cloudSetup={cloudSetup} />
+      <Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} voiceStatus={voice.status} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} phone={mirror} skills={learning} voiceSetup={voiceSetup} cloudSetup={cloudSetup} apps={apps} />
     </CloudContext.Provider>,
   );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ScreenObservation } from "../lib/types";
 import { HOME_SELECTED, INSERT_SELECTED } from "../features/hode/test-fixtures";
-import { LEARNER_ACTION_EVENT, NativePerception, type NativeBridge } from "./native-perception";
+import { APP_SWITCH_SETTLE_MS, LEARNER_ACTION_EVENT, LEARNER_WINDOW_EVENT, NativePerception, type NativeBridge } from "./native-perception";
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -21,7 +21,12 @@ function fakeBridge(observations: ScreenObservation[]) {
       return () => listeners.delete(event);
     },
   } as unknown as NativeBridge;
-  return { bridge, invoke, fire: (payload?: unknown) => listeners.get(LEARNER_ACTION_EVENT)?.(payload) };
+  return {
+    bridge,
+    invoke,
+    fire: (payload?: unknown) => listeners.get(LEARNER_ACTION_EVENT)?.(payload),
+    moveTo: (payload: unknown) => listeners.get(LEARNER_WINDOW_EVENT)?.(payload),
+  };
 }
 
 describe("NativePerception", () => {
@@ -111,5 +116,57 @@ describe("NativePerception.perform", () => {
     const target = { elementId: "uia:7", bounds: { x: 1, y: 2, width: 3, height: 4 }, confidence: 0.95, label: "Insert" };
     await perception.perform({ target, button: "right", name: "Insert", observedAt: 42 });
     expect(invoke).toHaveBeenLastCalledWith("perform_click", { elementId: "uia:7", name: "Insert", observedAt: 42, button: "right" });
+  });
+});
+
+describe("NativePerception.onAppSwitched", () => {
+  const frame = { x: 0, y: 0, width: 800, height: 600 };
+
+  it("reports the app once the learner settles on a different window, not each Alt-Tab stop or move", () => {
+    vi.useFakeTimers();
+    const { bridge, moveTo } = fakeBridge([]);
+    const handler = vi.fn();
+    new NativePerception(bridge).onAppSwitched(handler);
+    moveTo({ id: 1, bounds: frame, app: "Notepad", appId: "notepad" });
+    moveTo({ id: 2, bounds: frame, app: "Calculator", appId: "calculator" });
+    moveTo({ id: 3, bounds: frame, app: "Excel", appId: "excel" });
+    moveTo({ id: 3, bounds: { ...frame, width: 900 }, app: "Excel", appId: "excel" });
+    vi.advanceTimersByTime(APP_SWITCH_SETTLE_MS);
+    expect(handler.mock.calls).toEqual([[{ app: "Excel", appId: "excel" }]]);
+    vi.useRealTimers();
+  });
+
+  it("still reports a switch from an older native side that sends no app", () => {
+    vi.useFakeTimers();
+    const { bridge, moveTo } = fakeBridge([]);
+    const handler = vi.fn();
+    new NativePerception(bridge).onAppSwitched(handler);
+    moveTo({ id: 7, bounds: frame });
+    vi.advanceTimersByTime(APP_SWITCH_SETTLE_MS);
+    expect(handler).toHaveBeenCalledWith({});
+    vi.useRealTimers();
+  });
+
+  it("stops reporting once unsubscribed, even mid-settle", () => {
+    vi.useFakeTimers();
+    const { bridge, moveTo } = fakeBridge([]);
+    const handler = vi.fn();
+    const off = new NativePerception(bridge).onAppSwitched(handler);
+    moveTo({ id: 1, bounds: frame, app: "Excel" });
+    off();
+    vi.advanceTimersByTime(APP_SWITCH_SETTLE_MS);
+    expect(handler).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+});
+
+describe("NativePerception.openInstalledApp", () => {
+  it("opens an app by its catalog id and says whether its window appeared", async () => {
+    const invoke = vi.fn(async () => ({ id: "1", title: "Excel", app: "Excel" }));
+    const perception = new NativePerception({ invoke, listen: () => () => undefined } as unknown as NativeBridge);
+    await expect(perception.openInstalledApp("Microsoft.Office.EXCEL.EXE.15")).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("open_installed_app", { id: "Microsoft.Office.EXCEL.EXE.15" });
+    invoke.mockResolvedValueOnce(null as never);
+    await expect(perception.openInstalledApp("Brave")).resolves.toBe(false);
   });
 });

@@ -58,6 +58,20 @@ export interface SpokenCopy {
   overToYou: string;
   /** Hodey did the last step; the learner checks the result. */
   hodeyFinished: string;
+  /** A greeting back, with no Hode started ("hi", "can you hear me"). */
+  greeting: string;
+  /** Said (and shown) when what the learner said or typed isn't a task. */
+  notATask: string;
+  /** Opening an installed app the learner asked for. */
+  opening: (app: string) => string;
+  /** Teach mode: how to open an app yourself next time. */
+  openTip: string;
+  /** No installed app has that name. */
+  appNotFound: (name: string) => string;
+  /** More than one installed app fits the name. */
+  appWhich: (options: string[]) => string;
+  /** Windows couldn't open the app, or it didn't appear in time. */
+  openFailed: (app: string) => string;
 }
 
 const ENGLISH: SpokenCopy = {
@@ -95,6 +109,13 @@ const ENGLISH: SpokenCopy = {
   checkpoint: (objective) => `Done: ${objective}. Take a look. Say continue when it looks right, or "let me try" to take over.`,
   overToYou: "I can't safely click this one myself, so it's your turn.",
   hodeyFinished: "All done. Check the result and make sure it's what you wanted.",
+  greeting: "Hi! What would you like to learn?",
+  notATask: `Tell me what you'd like to do, like "make a pivot table in Excel".`,
+  opening: (app) => `Opening ${app}.`,
+  openTip: "Next time, press the Windows key and type its name.",
+  appNotFound: (name) => `I couldn't find an app called "${name}" on this PC.`,
+  appWhich: (options) => `Did you mean ${options.join(" or ")}?`,
+  openFailed: (app) => `Windows couldn't open ${app}. Try opening it from Start.`,
 };
 
 /** Gender-neutral on purpose: the learner picks a female or male Hindi voice. */
@@ -133,6 +154,13 @@ const HINDI: SpokenCopy = {
   checkpoint: (objective) => `हो गया: ${objective}। एक बार देख लीजिए। सही लगे तो "आगे बढ़ो" कहिए, या खुद करना हो तो "मुझे करने दो"।`,
   overToYou: "ये वाला मैं सुरक्षित तरीके से खुद क्लिक नहीं कर सकता, इसलिए अब आपकी बारी है।",
   hodeyFinished: "सब हो गया। नतीजा देख लीजिए कि यही आप चाहते थे।",
+  greeting: "नमस्ते! आज आप क्या सीखना चाहेंगे?",
+  notATask: "बताइए आप क्या करना चाहते हैं, जैसे “पिवट टेबल बनाओ”।",
+  opening: (app) => `${app} खुल रहा है।`,
+  openTip: "अगली बार विंडोज़ की दबाइए और उसका नाम लिखिए।",
+  appNotFound: (name) => `इस पीसी पर “${name}” नाम का कोई ऐप नहीं मिला।`,
+  appWhich: (options) => `आपका मतलब ${options.join(" या ")} है?`,
+  openFailed: (app) => `विंडोज़ ${app} नहीं खोल पाया। स्टार्ट मेन्यू से खोलकर देखिए।`,
 };
 
 /** Hindi words in Devanagari, English words in English; the voice gets Devanagari via `speakable`. */
@@ -171,6 +199,13 @@ const HINGLISH: SpokenCopy = {
   checkpoint: (objective) => `हो गया: ${objective}। एक बार check कर लीजिए। सही लगे तो "continue" कहिए, या खुद करना हो तो "मुझे करने दो"।`,
   overToYou: "ये वाला मैं safely खुद click नहीं कर सकता, इसलिए अब आपकी बारी है।",
   hodeyFinished: "सब हो गया। Result check कर लीजिए कि यही आप चाहते थे।",
+  greeting: "नमस्ते! आज आप क्या सीखना चाहेंगे?",
+  notATask: "बताइए आप क्या करना चाहते हैं, जैसे “PivotTable बनाओ”।",
+  opening: (app) => `${app} खुल रहा है।`,
+  openTip: "अगली बार Windows की दबाइए और उसका नाम type कीजिए।",
+  appNotFound: (name) => `इस computer पर “${name}” नाम का कोई app नहीं मिला।`,
+  appWhich: (options) => `आपका मतलब ${options.join(" या ")} है?`,
+  openFailed: (app) => `Windows ${app} नहीं खोल पाया। Start menu से खोलकर देखिए।`,
 };
 
 const BY_LANGUAGE: Record<ReplyLanguage, SpokenCopy> = { en: ENGLISH, hi: HINDI, hinglish: HINGLISH };

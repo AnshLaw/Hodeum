@@ -247,6 +247,8 @@ export interface TeachingContext {
   recentActions?: ActionSummary[];
   /** The control with keyboard focus, as "<role> <name>", when the screen read found one. */
   focusedControl?: string;
+  /** Reference steps found for a spoken question (offline help or the web), as one <web> block of data. */
+  reference?: string;
 }
 
 /** A control by what it is (never by a screen read's id, which changes between reads). */

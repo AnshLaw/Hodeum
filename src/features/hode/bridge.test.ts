@@ -8,7 +8,9 @@ import { MockPerception } from "../../providers/mock-perception";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
 import { ExcelScene } from "../../test-support/scenes/excel";
 import { TASK_PACKS } from "../../task-packs";
-import { connectHodeBridge, summaryOf } from "./bridge";
+import type { InstalledApp } from "../../lib/types";
+import catalog from "../apps/__fixtures__/start-apps.json";
+import { connectHodeBridge, goalEvents, summaryOf } from "./bridge";
 import { initialState } from "./model";
 import { HodeRuntime } from "./runtime";
 import { PACK, guideAction } from "./test-fixtures";
@@ -17,7 +19,9 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 100; i++) await Promise.resolve();
 }
 
-function setup(memory?: MemoryProvider) {
+const APPS = catalog as InstalledApp[];
+
+function setup(memory?: MemoryProvider, apps: InstalledApp[] = []) {
   const bus = new LocalBus();
   const store = new MemoryLearningStore();
   const settings = new MemorySettingsStore();
@@ -30,8 +34,9 @@ function setup(memory?: MemoryProvider) {
     tts: { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true },
   });
   const applyVoice = vi.fn();
-  connectHodeBridge({ runtime, bus, log: store, settings, packs: TASK_PACKS, openGoalsAllowed: () => false, applyVoice, memory });
-  return { bus, store, settings, runtime, applyVoice };
+  const applyWebSearch = vi.fn();
+  connectHodeBridge({ runtime, bus, log: store, settings, packs: TASK_PACKS, openGoalsAllowed: () => false, applyVoice, applyWebSearch, memory, apps: () => apps });
+  return { bus, store, settings, runtime, applyVoice, applyWebSearch };
 }
 
 describe("summaryOf", () => {
@@ -68,6 +73,16 @@ describe("connectHodeBridge", () => {
     expect(applyVoice).toHaveBeenLastCalledWith({ enabled: false, rate: 1.3, name: "zira", conversation: true, handsFree: false, language: "en", hindiScript: "devanagari", hindiVoice: "kokoro:31", wakeWords: [], inputDevice: "", outputDevice: "", asrModel: "" });
   });
 
+  it("tells the notch when the learner turns web search on", async () => {
+    const { bus, settings, applyWebSearch } = setup();
+    await settle();
+    expect(applyWebSearch).toHaveBeenLastCalledWith(false);
+    await settings.save({ ...DEFAULT_SETTINGS, webSearch: true });
+    bus.emit("settings:changed", {});
+    await settle();
+    expect(applyWebSearch).toHaveBeenLastCalledWith(true);
+  });
+
   it("stores a learning summary when a Hode ends", async () => {
     const memory = new LocalMemoryProvider();
     const { bus } = setup(memory);
@@ -77,5 +92,49 @@ describe("connectHodeBridge", () => {
     await settle();
     const recalled = await memory.getRelevantMemory({ goal: "Make a PivotTable", skillIds: [] });
     expect(recalled).toEqual([expect.objectContaining({ skillId: "excel.navigation.insert_tab" })]);
+  });
+});
+
+describe("goalEvents", () => {
+  const options = { packs: TASK_PACKS, openAllowed: true, apps: APPS };
+
+  it("opens an app the goal asks for", () => {
+    expect(goalEvents("open WhatsApp", { ...options, mode: "agent" })).toMatchObject([{ type: "OPEN_APP", app: { name: "WhatsApp" }, mode: "agent" }]);
+  });
+
+  it("takes a pack's words or a task as the goal, with the picked mode", () => {
+    expect(goalEvents("pivot table", { ...options, mode: "help" })).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "excel-pivot" }, mode: "help" }]);
+    expect(goalEvents("send a pdf on whatsapp", options)).toMatchObject([{ type: "GOAL_SUBMITTED", goal: "send a pdf on whatsapp", openAllowed: true }]);
+  });
+
+  it("replies instead of starting an open Hode for small talk, noise or something unclear", () => {
+    expect(goalEvents("hello there", options)).toEqual([{ type: "CHITCHAT", kind: "greeting" }]);
+    expect(goalEvents("hello hello hello", options)).toEqual([{ type: "CHITCHAT", kind: "unclear" }]);
+    expect(goalEvents("new tab", options)).toEqual([{ type: "CHITCHAT", kind: "unclear" }]);
+  });
+});
+
+describe("hode:start", () => {
+  it("takes the mode and agent style the sender picked", async () => {
+    const { bus, runtime } = setup();
+    bus.emit("hode:start", { goal: "make a pivot table", mode: "agent", agentStyle: "execute" });
+    await settle();
+    expect(runtime.getState()).toMatchObject({ mode: "agent", agentStyle: "execute", goal: "make a pivot table" });
+  });
+
+  it("opens an app instead of starting a Hode, leaving the running one alone", async () => {
+    const { bus, runtime } = setup(undefined, APPS);
+    bus.emit("hode:start", { goal: "make a pivot table" });
+    await settle();
+    const dispatch = vi.spyOn(runtime, "dispatch");
+    bus.emit("hode:start", { goal: "open excel" });
+    expect(dispatch.mock.calls.map(([event]) => event.type)).toEqual(["OPEN_APP"]);
+  });
+
+  it("greets back without starting an open Hode", async () => {
+    const { bus, runtime } = setup();
+    bus.emit("hode:start", { goal: "Hello body, can you listen to" });
+    await settle();
+    expect(runtime.getState()).toMatchObject({ phase: "idle", open: false });
   });
 });

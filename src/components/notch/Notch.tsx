@@ -5,9 +5,9 @@ import type { Bus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
 import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
-import type { TaskPack } from "../../lib/types";
+import type { InstalledApp, TaskPack } from "../../lib/types";
 import type { HodeRuntime } from "../../features/hode/runtime";
-import { goalEvent, startFromApp } from "../../features/hode/bridge";
+import { goalEvents, startFromApp } from "../../features/hode/bridge";
 import { useHodeState } from "../../features/hode/use-hode";
 import { holdsSpace } from "../../features/dock/dock";
 import { SurfaceMenu } from "./DockMenu";
@@ -64,6 +64,8 @@ export interface NotchProps {
   voiceSetup?: VoiceSetup;
   /** Local or cloud, and each cloud service's model, from the badge; absent where cloud isn't available. */
   cloudSetup?: CloudSetup;
+  /** The installed apps, so a typed "open Excel" opens it; empty until the catalog loads. */
+  apps?: () => InstalledApp[];
 }
 
 const TOAST_MS = 4000;
@@ -251,7 +253,7 @@ function useNaturalVoices(source?: Pick<NativeVoiceStatus, "current" | "subscrib
   return voices;
 }
 
-export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource, voiceSetup, cloudSetup }: NotchProps) {
+export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource, voiceSetup, cloudSetup, apps }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
   const notice = bootNotice ?? voiceNotice(useTtsState(voiceStatus));
@@ -343,7 +345,8 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
       setVoiceMenu(undefined);
       if (state.phase === "goal_entry") runtime.dispatch({ type: "DISMISS" });
     },
-    onSubmitGoal: (goal, mode, agentStyle) => runtime.dispatch(goalEvent(goal, packs, visionStatus?.state === "ready", mode, agentStyle)),
+    // Classified like a spoken goal: "open Excel" opens it, and a greeting or noise gets a nudge instead of an open Hode.
+    onSubmitGoal: (goal, mode, agentStyle) => goalEvents(goal, { packs, openAllowed: visionStatus?.state === "ready", apps: apps?.() ?? [], mode, agentStyle }).forEach(runtime.dispatch),
     hodeMode: state.mode,
     hodeAgentStyle: state.agentStyle,
     defaultMode: runtime.getDefaultMode(),

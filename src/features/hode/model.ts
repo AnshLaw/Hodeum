@@ -5,6 +5,7 @@ import type {
   AssistanceLevel,
   DialogueTurn,
   HodeMode,
+  InstalledApp,
   LearnerAnnotation,
   OverlayPrimitive,
   PerformRequest,
@@ -230,7 +231,13 @@ export type HodeEvent =
   | { type: "RESUME" }
   | { type: "END_HODE" }
   | { type: "RETRY" }
-  | { type: "PROVIDER_FAILED"; requestId?: number; message: string };
+  | { type: "PROVIDER_FAILED"; requestId?: number; message: string }
+  /** "Open Excel": open an installed app, from idle or as a side errand during a Hode. `mode`: the learner's default, when idle. */
+  | { type: "OPEN_APP"; app: InstalledApp; said: string; mode?: HodeMode }
+  /** Windows couldn't open it, or no installed app (`reason` "not_found") or more than one ("ambiguous", with `options`) fits the name. */
+  | { type: "APP_OPEN_FAILED"; app: InstalledApp; reason: string; options?: string[] }
+  /** Small talk, not a task: a greeting gets a friendly reply, anything unclear a nudge to name a task. No Hode starts. */
+  | { type: "CHITCHAT"; kind: "greeting" | "unclear" };
 
 export type EventOf<T extends HodeEvent["type"]> = Extract<HodeEvent, { type: T }>;
 
@@ -248,7 +255,9 @@ export type HodeEffect =
   | { type: "stopSpeech" }
   | { type: "startStuckTimer"; ms: number }
   | { type: "cancelStuckTimer" }
-  | { type: "recordOutcome"; skillId: string; outcome: StepOutcome };
+  | { type: "recordOutcome"; skillId: string; outcome: StepOutcome }
+  /** Open an installed app by its catalog id; APP_OPEN_FAILED comes back if it doesn't appear. */
+  | { type: "launchApp"; app: InstalledApp };
 
 export interface Transition {
   state: HodeState;

@@ -1,7 +1,7 @@
 import type { ActivityChannel } from "./activity";
 import type { AccountStatus } from "../features/account/types";
 import type { AppPresence, DockPrefs } from "../features/dock/dock";
-import type { LearnerAnnotation, OverlayPrimitive, Rect, Surface, WindowRef } from "./types";
+import type { AgentStyle, HodeMode, LearnerAnnotation, OverlayPrimitive, Rect, Surface, WindowRef } from "./types";
 import type { WebProgress } from "../providers/web/types";
 
 type Empty = Record<string, never>;
@@ -27,8 +27,8 @@ export interface BusEvents {
   "cloud:keys-changed": Empty;
   /** Live Hode status from the notch (where the runtime lives) for the app window. */
   "hode:summary": HodeSummary;
-  /** Ask the notch to start a Hode, e.g. from the app's chat or learning paths. */
-  "hode:start": { goal: string };
+  /** Ask the notch to start a Hode, e.g. from the app's chat or learning paths. Mode and style default to Settings. */
+  "hode:start": { goal: string; mode?: HodeMode; agentStyle?: AgentStyle };
   "hode:end": Empty;
   /** Ask the notch to broadcast a fresh summary (an app window just opened). */
   "hode:summary-request": Empty;

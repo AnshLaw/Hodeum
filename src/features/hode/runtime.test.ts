@@ -306,14 +306,125 @@ describe("opening the pack's app", () => {
   });
 });
 
+describe("looking it up for a spoken question", () => {
+  it("adds reference steps to a spoken question's request, and only to that", async () => {
+    const seen: (string | undefined)[] = [];
+    const recording: ReasoningProvider = { id: "local", reason: async (context) => (seen.push(context.reference), { kind: "answer", speech: "Here.", skill: "general", assistanceLevel: "guide" }), healthCheck: async () => true };
+    const scene = new ExcelScene();
+    const lookups: string[] = [];
+    const reference = async (question: string) => (lookups.push(question), "Reference for x:\n<web>\n[1] Steps\n</web>");
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception: new MockPerception(() => scene), reasoners: [recording], skills: new MemorySkillStore(), bus: new LocalBus(), tts, reference });
+    runtime.dispatch({ type: "VOICE_QUESTION", question: "how do I make a pivot table?" });
+    await settle();
+    expect(lookups).toEqual(["how do I make a pivot table?"]);
+    expect(seen.at(-1)).toContain("<web>");
+  });
+
+  it("answers without it when the lookup fails", async () => {
+    const seen: (string | undefined)[] = [];
+    const recording: ReasoningProvider = { id: "local", reason: async (context) => (seen.push(context.reference ?? "none"), { kind: "answer", speech: "Here.", skill: "general", assistanceLevel: "guide" }), healthCheck: async () => true };
+    const scene = new ExcelScene();
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception: new MockPerception(() => scene), reasoners: [recording], skills: new MemorySkillStore(), bus: new LocalBus(), tts, reference: async () => Promise.reject(new Error("offline")) });
+    runtime.dispatch({ type: "VOICE_QUESTION", question: "how do I make a pivot table?" });
+    await settle();
+    expect(seen).toEqual(["none"]);
+  });
+});
+
 describe("what Hodey is saying", () => {
   it("is known while speaking and for a moment after, then forgotten", async () => {
     vi.useFakeTimers();
     const { start, runtime } = setup();
     await start();
     expect(runtime.hodeySaying()).toBeTruthy();
-    await vi.advanceTimersByTimeAsync(2000);
+    // The echo of the last words arrives after the mic's end-of-speech silence and the recogniser's decode.
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(runtime.hodeySaying()).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(1500);
     expect(runtime.hodeySaying()).toBeUndefined();
+  });
+
+  it("remembers the last two lines, so an echo of either isn't obeyed", async () => {
+    const { runtime } = setup();
+    runtime.dispatch({ type: "CHITCHAT", kind: "greeting" });
+    runtime.dispatch({ type: "CHITCHAT", kind: "unclear" });
+    await settle();
+    const said = runtime.hodeySaying() ?? "";
+    expect(said).toContain(spokenCopy("en").greeting);
+    expect(said).toContain(spokenCopy("en").notATask);
+  });
+});
+
+describe("app switches while Hodey waits for an app", () => {
+  function waitingRuntime(waitingForApp: string, goal: string) {
+    const scene = new ExcelScene();
+    const perception = new MockPerception(() => scene);
+    let switched: (window: { app?: string; appId?: string }) => void = () => undefined;
+    Object.assign(perception, { onAppSwitched: (handler: typeof switched) => ((switched = handler), () => undefined) });
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
+    Object.assign(runtime, { state: { ...runtime.getState(), phase: "guiding", waitingForApp, goal } });
+    const dispatch = vi.spyOn(runtime, "dispatch").mockImplementation(() => undefined);
+    return { switch: (window: { app?: string; appId?: string }) => switched(window), dispatch };
+  }
+
+  it("stays quiet while the learner goes through other apps, and looks again when the awaited one comes forward", () => {
+    const h = waitingRuntime("Excel", GOAL);
+    for (let i = 0; i < 5; i++) h.switch({ app: "Notepad", appId: "notepad" });
+    expect(h.dispatch).not.toHaveBeenCalled();
+    h.switch({ app: "Excel", appId: "excel" });
+    expect(h.dispatch).toHaveBeenCalledWith({ type: "LOOK_AGAIN" });
+  });
+
+  it("takes Brave for Chrome when the goal only meant a browser", () => {
+    const h = waitingRuntime("Chrome", "search for cats in chrome");
+    h.switch({ app: "Brave", appId: "brave" });
+    expect(h.dispatch).toHaveBeenCalledWith({ type: "LOOK_AGAIN" });
+  });
+});
+
+describe("opening an installed app", () => {
+  const EXCEL = { id: "Microsoft.Office.EXCEL.EXE.15", name: "Excel", kind: "desktop" as const };
+
+  it("opens it by its catalog id, without the tip outside Teach mode", async () => {
+    const h = setup();
+    const openInstalledApp = vi.fn(async () => true);
+    Object.assign(h.perception, { openInstalledApp });
+    h.runtime.configure({ mode: "agent", stuckMs: STUCK_MS });
+    h.runtime.dispatch({ type: "OPEN_APP", app: EXCEL, said: "open excel" });
+    await settle();
+    expect(openInstalledApp).toHaveBeenCalledWith(EXCEL.id);
+    expect(h.spoken.at(-1)).toBe(spokenCopy("en").opening("Excel"));
+    expect(h.state().phase).toBe("idle");
+  });
+
+  it("says so when Windows couldn't open it", async () => {
+    const h = setup();
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    Object.assign(h.perception, { openInstalledApp: vi.fn(async () => Promise.reject(new Error("ShellExecute failed"))) });
+    h.runtime.dispatch({ type: "OPEN_APP", app: EXCEL, said: "open excel" });
+    await settle();
+    expect(error).toHaveBeenCalled();
+    expect(h.spoken.at(-1)).toBe(spokenCopy("en").openFailed("Excel"));
+    expect(h.state().notice).toBe(spokenCopy("en").openFailed("Excel"));
+  });
+
+  it("says so when the app never appears", async () => {
+    const h = setup();
+    Object.assign(h.perception, { openInstalledApp: vi.fn(async () => false) });
+    h.runtime.dispatch({ type: "OPEN_APP", app: EXCEL, said: "open excel" });
+    await settle();
+    expect(h.spoken.at(-1)).toBe(spokenCopy("en").openFailed("Excel"));
+  });
+
+  it("says so where apps can't be opened at all", async () => {
+    const h = setup();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    h.runtime.dispatch({ type: "OPEN_APP", app: EXCEL, said: "open excel" });
+    await settle();
+    expect(h.spoken.at(-1)).toBe(spokenCopy("en").openFailed("Excel"));
   });
 });
 

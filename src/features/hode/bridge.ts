@@ -1,12 +1,14 @@
 import { replyLanguage } from "../../lib/language";
 import type { Bus, HodeSummary } from "../../lib/bus";
-import type { AgentStyle, HodeMode, TaskPack } from "../../lib/types";
+import type { AgentStyle, HodeMode, InstalledApp, TaskPack } from "../../lib/types";
 import { HodeRecorder } from "../../data/recorder";
 import type { Settings, SettingsStore } from "../../data/settings";
 import type { HodeLog } from "../../data/types";
 import { appFromGoal, matchGoal } from "../../task-packs/match";
 import type { MemoryProvider } from "../../providers/interfaces";
 import { HodeMemoryTracker } from "../memory/tracker";
+import { classify } from "../voice/intent";
+import { openAppEvent } from "./open-app";
 import { currentStep, type HodeEvent, type HodeState } from "./model";
 import type { HodeRuntime } from "./runtime";
 
@@ -30,12 +32,16 @@ export interface BridgeDeps {
   packs: TaskPack[];
   /** Whether the local vision model can plan goals that have no task pack. */
   openGoalsAllowed: () => boolean;
+  /** The installed apps, for "open Excel" goals; empty until the catalog loads. */
+  apps?: () => InstalledApp[];
   /** Applies speech settings to the voice in use. */
   applyVoice: (voice: Settings["voice"]) => void;
   /** Tells the system-wide key handler which key is the Hodey key. */
   applyHodeyKey?: (key: Settings["hodeyKey"]) => void;
   /** Tells the cloud policy which cloud providers are turned on. */
   applyCloud?: (cloud: Settings["cloud"]) => void;
+  /** Whether a spoken question may be looked up on the web (the offline help is used either way). */
+  applyWebSearch?: (enabled: boolean) => void;
   /** Learning memory: a compact summary is stored when each Hode completes or is ended. */
   memory?: Pick<MemoryProvider, "storeLearningSummary">;
 }
@@ -45,11 +51,42 @@ export function goalEvent(goal: string, packs: TaskPack[], openAllowed: boolean,
   return { type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed, app: appFromGoal(goal), mode, agentStyle };
 }
 
-/** Starts a Hode the app asked for, ending whatever is running first. */
-export function startFromApp(runtime: HodeRuntime, goal: string, packs: TaskPack[], openAllowed: boolean): void {
+export interface GoalOptions {
+  packs: TaskPack[];
+  openAllowed: boolean;
+  apps?: InstalledApp[];
+  mode?: HodeMode;
+  agentStyle?: AgentStyle;
+}
+
+/**
+ * A goal typed or said into the goal form, as events: an app to open ("open Excel"), the goal (a pack's, a task,
+ * or a question to take as one), or a nudge to name a task when it's a greeting, noise or unclear.
+ */
+export function goalEvents(text: string, { packs, openAllowed, apps = [], mode, agentStyle }: GoalOptions): HodeEvent[] {
+  const open = openAppEvent(text, apps);
+  if (open) return [{ ...open, ...(mode ? { mode } : {}) }];
+  const goal = goalEvent(text, packs, openAllowed, mode, agentStyle);
+  if (goal.type === "GOAL_SUBMITTED" && goal.pack) return [goal];
+  const intent = classify(text);
+  if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];
+  if (intent === "noise" || intent === "ack" || intent === "unclear") return [{ type: "CHITCHAT", kind: "unclear" }];
+  return [goal];
+}
+
+/**
+ * Starts a Hode the app asked for (or the debug hook), ending whatever is running first. An app request opens
+ * the app instead, and small talk gets a reply, leaving a running Hode alone.
+ */
+export function startFromApp(runtime: HodeRuntime, goal: string, packs: TaskPack[], openAllowed: boolean, options: Omit<GoalOptions, "packs" | "openAllowed"> = {}): void {
+  const events = goalEvents(goal, { packs, openAllowed, ...options });
+  if (events[0]?.type !== "GOAL_SUBMITTED") {
+    events.forEach(runtime.dispatch);
+    return;
+  }
   if (runtime.getState().phase !== "idle") runtime.dispatch({ type: "END_HODE" });
   runtime.dispatch({ type: "START_HODE" });
-  runtime.dispatch(goalEvent(goal, packs, openAllowed));
+  events.forEach(runtime.dispatch);
 }
 
 function applySettings(deps: BridgeDeps, settings: Settings): void {
@@ -58,6 +95,7 @@ function applySettings(deps: BridgeDeps, settings: Settings): void {
   deps.applyVoice(settings.voice);
   deps.applyHodeyKey?.(settings.hodeyKey);
   deps.applyCloud?.(settings.cloud);
+  deps.applyWebSearch?.(settings.webSearch);
 }
 
 function loadSettings(deps: BridgeDeps): void {
@@ -88,7 +126,7 @@ export function connectHodeBridge(deps: BridgeDeps): () => void {
     ...(memory ? [runtime.onTransition(memory.observe)] : []),
     runtime.subscribe(broadcast),
     bus.on("hode:summary-request", () => bus.emit("hode:summary", summaryOf(runtime.getState()))),
-    bus.on("hode:start", ({ goal }) => startFromApp(runtime, goal, deps.packs, deps.openGoalsAllowed())),
+    bus.on("hode:start", ({ goal, mode, agentStyle }) => startFromApp(runtime, goal, deps.packs, deps.openGoalsAllowed(), { apps: deps.apps?.() ?? [], mode, agentStyle })),
     bus.on("hode:end", () => runtime.dispatch({ type: "END_HODE" })),
     bus.on("settings:changed", () => loadSettings(deps)),
   ];

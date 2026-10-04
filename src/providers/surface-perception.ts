@@ -1,5 +1,5 @@
 import type { AppLaunch, PerformRequest, Rect, ScreenObservation, Surface } from "../lib/types";
-import type { PerceptionAdapter } from "./interfaces";
+import type { AppSwitch, PerceptionAdapter } from "./interfaces";
 
 export interface WatchablePerception extends PerceptionAdapter {
   setWatching(watching: boolean): void;
@@ -40,8 +40,15 @@ export class SurfacePerception implements PerceptionAdapter {
   }
 
   /** Only the desktop has windows to switch between. */
-  onAppSwitched(handler: () => void): () => void {
-    return this.adapters.windows.onAppSwitched?.(() => this.active === "windows" && handler()) ?? (() => undefined);
+  onAppSwitched(handler: (window: AppSwitch) => void): () => void {
+    return this.adapters.windows.onAppSwitched?.((window) => this.active === "windows" && handler(window)) ?? (() => undefined);
+  }
+
+  /** Apps open on the desktop, whichever surface the Hode is on. */
+  async openInstalledApp(id: string): Promise<boolean> {
+    const open = this.adapters.windows.openInstalledApp;
+    if (!open) throw new Error("Opening apps isn't available here.");
+    return open.call(this.adapters.windows, id);
   }
 
   async perform(request: PerformRequest): Promise<void> {

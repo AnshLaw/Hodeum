@@ -74,6 +74,7 @@ export function withScreenActivity(perception: PerceptionAdapter, activity: Acti
     focusApp: perception.focusApp?.bind(perception),
     launchApp: perception.launchApp?.bind(perception),
     onAppSwitched: perception.onAppSwitched?.bind(perception),
+    openInstalledApp: perception.openInstalledApp?.bind(perception),
     perform: perception.perform?.bind(perception),
     onLearnerAction: (handler) => perception.onLearnerAction(handler),
   };

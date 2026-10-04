@@ -1,7 +1,8 @@
 /*
  * Hodey's highlight: a ring of light with a comet circling it, the accent fading into its companion
  * hue (--hd-beam) behind a white-hot head. The near-black outline keeps it legible on white apps.
- * Timing comes from BeamRing.tsx: --beam-arrive (ring in place), --comet-start, --beam-lap (one orbit).
+ * Timing comes from BeamRing.tsx: --beam-arrive (ring in place), --comet-start, --beam-lap (one orbit),
+ * --comet-laps (orbits before the comet fades and the ring holds still).
  */
 .beam-ring rect {
   fill: none;
@@ -15,12 +16,12 @@
   stop-color: var(--hd-beam);
 }
 
-/* A soft aura that breathes once the ring is in place. */
+/* A soft aura that breathes while the comet runs, then settles bright: a blurred layer is costly to animate forever. */
 .beam-ring__glow {
   stroke-width: 8;
   filter: blur(5px);
   opacity: 0;
-  animation: beam-breathe 2.8s ease-in-out var(--beam-arrive) infinite alternate;
+  animation: beam-breathe 2.8s ease-in-out var(--beam-arrive) 3 alternate forwards;
 }
 
 @keyframes beam-breathe {
@@ -103,13 +104,21 @@
 /* The comet: three strokes that end at the same point, so it brightens toward its head. */
 .beam-ring__comet {
   filter: drop-shadow(0 0 4px var(--hd-accent)) drop-shadow(0 0 12px var(--hd-beam));
-  animation: hd-fade-in 360ms ease var(--comet-start) both;
+  animation:
+    hd-fade-in 360ms ease var(--comet-start) both,
+    beam-comet-out 480ms ease calc(var(--comet-start) + var(--beam-lap) * var(--comet-laps) - 480ms) forwards;
 }
 
 .beam-ring__comet rect {
   stroke-linecap: round;
   stroke-dasharray: var(--comet-len) var(--comet-gap);
-  animation: beam-orbit var(--beam-lap) linear var(--comet-start) infinite;
+  animation: beam-orbit var(--beam-lap) linear var(--comet-start) var(--comet-laps);
+}
+
+@keyframes beam-comet-out {
+  to {
+    opacity: 0;
+  }
 }
 
 @keyframes beam-orbit {
