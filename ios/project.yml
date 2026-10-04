@@ -28,6 +28,7 @@ targets:
         CFBundleDisplayName: Hodeum
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
         UIBackgroundModes: [audio, screen-capture]
         NSScreenCaptureUsageDescription: Hodey watches your screen to show you where to tap. Nothing leaves your iPhone.
     settings:
