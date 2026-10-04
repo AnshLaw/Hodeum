@@ -169,6 +169,36 @@ pub fn downmix(interleaved: &[f32], channels: usize) -> Vec<f32> {
     interleaved.chunks(channels).map(|frame| frame.iter().sum::<f32>() / frame.len() as f32).collect()
 }
 
+/// Hindi's full stop.
+const DANDA: char = '।';
+
+pub fn is_devanagari(c: char) -> bool {
+    ('\u{0900}'..='\u{097F}').contains(&c)
+}
+
+/// A sentence split where it changes script, so Hindi is said with Hindi pronunciation and English
+/// words inside it (control names, app names) with English pronunciation. `true` marks Hindi runs.
+/// Spaces, digits and punctuation stay with the run they follow.
+pub fn script_runs(text: &str) -> Vec<(String, bool)> {
+    let mut runs: Vec<(String, bool)> = Vec::new();
+    for c in text.chars() {
+        let script = if is_devanagari(c) { Some(true) } else if c.is_alphabetic() { Some(false) } else { None };
+        let switches = match (runs.last(), script) {
+            (None, _) => true,
+            (Some((run, hindi)), Some(s)) => *hindi != s && run.chars().any(char::is_alphabetic),
+            (Some(_), None) => false,
+        };
+        if switches {
+            runs.push((c.to_string(), script.unwrap_or(false)));
+        } else if let Some((run, hindi)) = runs.last_mut() {
+            run.push(c);
+            // A run that so far held only spaces or punctuation takes the script of its first letter.
+            *hindi = script.unwrap_or(*hindi);
+        }
+    }
+    runs.into_iter().map(|(run, hindi)| (run.trim().to_string(), hindi)).filter(|(run, _)| !run.is_empty()).collect()
+}
+
 /// Splits text into sentences so speech can start after the first one is synthesized.
 /// Very short pieces are joined to the next so Hodey doesn't sound clipped.
 pub fn sentences(text: &str) -> Vec<String> {
@@ -180,7 +210,7 @@ pub fn sentences(text: &str) -> Vec<String> {
             current.push(' ');
         }
         current.push_str(word);
-        if word.ends_with(['.', '!', '?']) && current.chars().count() >= MIN_CHARS {
+        if word.ends_with(['.', '!', '?', DANDA]) && current.chars().count() >= MIN_CHARS {
             out.push(std::mem::take(&mut current));
         }
     }
@@ -291,6 +321,22 @@ mod tests {
         s.push(&[0.1; 1], true);
         assert_eq!(s.flush(), Some("hint".into()));
         assert_eq!(s.flush(), None);
+    }
+
+    #[test]
+    fn splits_mixed_hindi_and_english_by_script() {
+        assert_eq!(script_runs("Click Insert."), vec![("Click Insert.".into(), false)]);
+        assert_eq!(script_runs("अब पिवट टेबल पर क्लिक कीजिए।"), vec![("अब पिवट टेबल पर क्लिक कीजिए।".into(), true)]);
+        assert_eq!(
+            script_runs("ये Insert टैब है, 2 सेकंड।"),
+            vec![("ये".into(), true), ("Insert".into(), false), ("टैब है, 2 सेकंड।".into(), true)]
+        );
+    }
+
+    #[test]
+    fn hindi_sentences_end_at_the_danda() {
+        let text = "ऊपर इंसर्ट टैब पर क्लिक कीजिए। मैंने उसे हाइलाइट कर दिया है।";
+        assert_eq!(sentences(text).len(), 2);
     }
 
     #[test]

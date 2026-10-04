@@ -18,8 +18,9 @@ pub struct VoiceOption {
     pub description: String,
 }
 
-/// Kokoro v1.0 speaker ids (k2-fsa sherpa-onnx `kokoro-multi-lang-v1_0`), a curated English set.
-const KOKORO_VOICES: [(i32, &str, &str); 12] = [
+/// Kokoro v1.0 speaker ids (k2-fsa sherpa-onnx `kokoro-multi-lang-v1_0`): a curated English set, then
+/// the four Hindi voices (used for Hindi sentences; settings show them separately).
+const KOKORO_VOICES: [(i32, &str, &str); 16] = [
     (3, "Heart", "American · female · default"),
     (2, "Bella", "American · female"),
     (6, "Nicole", "American · female, soft"),
@@ -32,6 +33,10 @@ const KOKORO_VOICES: [(i32, &str, &str); 12] = [
     (23, "Lily", "British · female"),
     (26, "George", "British · male"),
     (25, "Fable", "British · male"),
+    (31, "Alpha", "Hindi · female"),
+    (32, "Beta", "Hindi · female"),
+    (33, "Omega", "Hindi · male"),
+    (34, "Psi", "Hindi · male"),
 ];
 /// Kokoro's warmest voice; Hodey's default.
 const KOKORO_DEFAULT: i32 = 3;

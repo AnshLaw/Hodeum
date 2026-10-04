@@ -20,7 +20,7 @@ use tauri::{AppHandle, Emitter};
 use super::models::{kokoro_files, tts_files, voice_root, KokoroFiles, TtsFiles};
 use super::voices::{catalog, pick, Engine};
 use super::cache::{key, PhraseCache};
-use super::segment::speech_chunks;
+use super::segment::{script_runs, speech_chunks};
 use super::set_tts_voices;
 
 /// Kokoro runs about 3x faster than real time with 4 threads on a 12th-gen i7 (2 threads: ~0.7x).
@@ -30,6 +30,11 @@ const DIFFUSION_STEPS: i32 = 8;
 const LANGUAGE: &str = "en";
 /// Kokoro's English pronunciation (American; British voices still sound British).
 const KOKORO_LANG: &str = "en-us";
+/// Kokoro's Hindi pronunciation, chosen per sentence for Hindi text (same model, no second load).
+const KOKORO_HINDI: &str = "hi";
+/// Mixed-script sentences: silence kept at each joined run's edges, and the level counted as silence.
+const RUN_EDGE_PAD_SECS: f32 = 0.06;
+const SILENCE_FLOOR: f32 = 0.01;
 /// Kokoro's speaking pace: 1.0 is its natural rate.
 const KOKORO_LENGTH_SCALE: f32 = 1.0;
 const WARM_UP_TEXT: &str = "Hi there.";
@@ -160,7 +165,7 @@ impl Engines {
 }
 
 /// Synthesizes one sentence, giving up as soon as a stop arrives.
-fn synthesize(voice: (&OfflineTts, Engine, i32), text: &str, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Option<(Vec<f32>, u32)> {
+fn synthesize(voice: (&OfflineTts, Engine, i32), text: &str, hindi: bool, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Option<(Vec<f32>, u32)> {
     let (tts, engine, sid) = voice;
     let config = match engine {
         Engine::Supertonic => {
@@ -168,7 +173,10 @@ fn synthesize(voice: (&OfflineTts, Engine, i32), text: &str, job: &SpeakJob, sto
             extra.insert("lang".to_string(), serde_json::json!(LANGUAGE));
             GenerationConfig { sid, speed: job.speed, num_steps: DIFFUSION_STEPS, extra: Some(extra), ..Default::default() }
         }
-        Engine::Kokoro => GenerationConfig { sid, speed: job.speed, ..Default::default() },
+        Engine::Kokoro => {
+            let extra = hindi.then(|| HashMap::from([("lang".to_string(), serde_json::json!(KOKORO_HINDI))]));
+            GenerationConfig { sid, speed: job.speed, extra, ..Default::default() }
+        }
     };
     let watch = Arc::clone(stop);
     let generation = job.generation;
@@ -183,13 +191,37 @@ fn cancelled(stop: &StopSwitch, job: &SpeakJob) -> bool {
 
 /// Speaks one job; returns whether it was interrupted.
 /// One chunk's audio: from the cache, or synthesized now (and cached). None if a stop arrived.
+/// Mixed Hindi and English is said a script run at a time, each with its own pronunciation.
 fn chunk_audio(engines: &Engines, cache: &mut PhraseCache, chunk: &str, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<Option<(Vec<f32>, u32)>, String> {
+    let runs = script_runs(chunk);
+    let mixed = runs.len() > 1;
+    let mut joined: Option<(Vec<f32>, u32)> = None;
+    for (run, hindi) in runs {
+        let Some((samples, rate)) = run_audio(engines, cache, &run, hindi, job, stop)? else { return Ok(None) };
+        let samples = if mixed { trim_silence(samples, rate) } else { samples };
+        match joined.as_mut() {
+            Some((all, _)) => all.extend(samples),
+            None => joined = Some((samples, rate)),
+        }
+    }
+    Ok(joined)
+}
+
+/// Each run comes with the voice's own lead-in and tail silence; joined, they'd sound like pauses.
+fn trim_silence(samples: Vec<f32>, rate: u32) -> Vec<f32> {
+    let pad = (rate as f32 * RUN_EDGE_PAD_SECS) as usize;
+    let loud = |s: &f32| s.abs() > SILENCE_FLOOR;
+    let (Some(first), Some(last)) = (samples.iter().position(loud), samples.iter().rposition(loud)) else { return samples };
+    samples[first.saturating_sub(pad)..(last + pad).min(samples.len())].to_vec()
+}
+
+fn run_audio(engines: &Engines, cache: &mut PhraseCache, run: &str, hindi: bool, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<Option<(Vec<f32>, u32)>, String> {
     let voice = engines.engine_for(&job.voice).ok_or("No natural voice is installed.")?;
-    let cache_key = key(voice.1, voice.2, job.speed, chunk);
+    let cache_key = key(voice.1, voice.2, job.speed, run);
     if let Some((samples, rate)) = cache.get(&cache_key) {
         return Ok(Some((samples.as_ref().clone(), rate)));
     }
-    let Some((samples, rate)) = synthesize(voice, chunk, job, stop) else {
+    let Some((samples, rate)) = synthesize(voice, run, hindi, job, stop) else {
         return if cancelled(stop, job) { Ok(None) } else { Err("The voice couldn't say that.".into()) };
     };
     cache.put(cache_key, (Arc::new(samples.clone()), rate));
@@ -276,5 +308,38 @@ pub fn worker(app: AppHandle, jobs: Receiver<SpeakJob>, stop: Arc<StopSwitch>) {
             Ok(interrupted) => report(&app, job.id, interrupted, None),
             Err(reason) => report(&app, job.id, false, Some(reason)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::voice::listen::{load_engines, set_language, transcribe};
+    use crate::voice::models::asr_files;
+    use sherpa_onnx::LinearResampler;
+
+    const ASR_RATE: i32 = 16_000;
+
+    /// Needs the real models: `cargo test --lib -- --ignored hindi_round_trip --nocapture`.
+    /// Hodey's Hindi voice says a pack line and a mixed Hindi/English line; Nemotron (Hindi) hears them.
+    #[test]
+    #[ignore]
+    fn hindi_round_trip() {
+        let root = voice_root();
+        let engines = Engines { kokoro: Some(load_kokoro(&kokoro_files(&root).unwrap()).unwrap()), supertonic: None };
+        let mut cache = PhraseCache::new(PHRASE_CACHE_SIZE);
+        let stop = Arc::new(StopSwitch::default());
+        let mut asr = load_engines(&asr_files(&root).unwrap()).unwrap();
+        set_language("hi").unwrap();
+        for line in ["अब पिवट टेबल पर क्लिक कीजिए।", "ये इंसर्ट टैब है। मैंने इसे हाइलाइट कर दिया है।", "ये Insert टैब है। मैंने इसे हाइलाइट कर दिया है।"] {
+            let job = SpeakJob { id: String::new(), text: line.into(), voice: "kokoro:31".into(), speed: 1.0, generation: 0, play: false };
+            let started = std::time::Instant::now();
+            let (samples, rate) = chunk_audio(&engines, &mut cache, line, &job, &stop).unwrap().unwrap();
+            let took = started.elapsed();
+            let mut audio = vec![0.0; ASR_RATE as usize / 2];
+            audio.extend(LinearResampler::create(rate as i32, ASR_RATE).unwrap().resample(&samples, true));
+            println!("said {line:?} ({:.1}s audio in {took:?}); heard {:?}", samples.len() as f32 / rate as f32, transcribe(&mut asr, &audio));
+        }
+        set_language("en").unwrap();
     }
 }
