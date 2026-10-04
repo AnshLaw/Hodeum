@@ -326,6 +326,25 @@ mod tests {
     }
 
     #[test]
+    fn a_reassert_keeps_the_notchs_own_popups_above_it() {
+        let overlay = TestWindow::new(patch(9, 0, 0, 1000, 600), None).show();
+        let notch = TestWindow::new(patch(9, 300, 0, 400, 200), None).show();
+        let dropdown = TestWindow::new(patch(9, 350, 100, 200, 300), Some(notch.0)).show();
+        let rival = TestWindow::new(patch(9, 100, 50, 600, 400), None).show();
+        zorder::raise(rival.0).expect("raise the rival");
+        let mut keeper = Keeper::new(surfaces_of(&overlay, &notch));
+
+        keeper.reassert();
+
+        assert!(zorder::windows_above(notch.0).contains(&dropdown.0), "the notch's dropdown stays above the notch");
+        assert!(zorder::windows_above(overlay.0).contains(&notch.0), "the notch stays above the overlay");
+        let above_rival = zorder::windows_above(rival.0);
+        for (label, window) in [("overlay", &overlay), ("notch", &notch), ("dropdown", &dropdown)] {
+            assert!(above_rival.contains(&window.0), "the {label} ends above the rival");
+        }
+    }
+
+    #[test]
     fn a_reassert_leaves_a_hidden_notch_hidden() {
         let overlay = TestWindow::new(patch(7, 0, 0, 1000, 600), None).show();
         let notch = TestWindow::new(patch(7, 300, 0, 400, 200), None);
