@@ -53,6 +53,12 @@ describe("applyCommand", () => {
     expect(applyCommand(hidden, "toggle-visibility").visibility).toBe("pinned");
   });
 
+  it("shows a hidden notch pinned and leaves a visible one as it is (tray icon click)", () => {
+    expect(applyCommand({ ...prefs, visibility: "hidden" }, "show").visibility).toBe("pinned");
+    expect(applyCommand(prefs, "show")).toEqual(prefs);
+    expect(applyCommand({ ...prefs, visibility: "pinned" }, "show").visibility).toBe("pinned");
+  });
+
   it("moves the dock and changes visibility mode", () => {
     expect(applyCommand(prefs, "dock-right").dock).toBe("right");
     expect(applyCommand(prefs, "pinned").visibility).toBe("pinned");

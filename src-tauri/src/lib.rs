@@ -23,6 +23,9 @@ use tauri::{AppHandle, Manager, RunEvent};
 
 /// Tells the overlay to start Point & Ask (Hodey key + P).
 pub(crate) const ANNOTATE_EVENT: &str = "annotate:start";
+/// The per-user Run registry value for "Start Hodeum when I sign in"; the uninstaller removes it
+/// (src-tauri/installer-hooks.nsh).
+const AUTOSTART_NAME: &str = "Hodeum";
 
 fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     surfaces::setup(app)?;
@@ -53,6 +56,7 @@ pub fn run() {
                 .add_migrations(db::DATABASE_URL, db::migrations())
                 .build(),
         )
+        .plugin(tauri_plugin_autostart::Builder::new().app_name(AUTOSTART_NAME).build())
         .on_permission_request(|webview, kind| notch_camera(&webview, kind))
         .manage(hit_test::NotchHitRect::default())
         .manage(perception::Perception::start())
