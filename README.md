@@ -98,7 +98,10 @@ Hodey swallows these letter presses, so the app underneath never sees them, and 
 **Cloud (optional, off by default):** each cloud provider is opt-in and needs its own key. Keys are stored in Windows Credential Manager, and the app only learns whether one is saved.
 - A provider runs only when it's turned on, its key is saved, and the app in front isn't on the sensitive list (password managers and banking by default). A provider that fails is skipped for a minute, and that same request is answered locally.
 - The notch shows **● Local** when no cloud provider can receive anything, and **☁ Enhanced** when one can.
-- Status of the providers themselves is tracked in [the pending-work plan](docs/superpowers/plans/2026-10-03-pending-work.md).
+- **Gemini (reasoning):** gets text only: the lesson step, the skill level and the app's interface labels. Content such as file names, list rows and typed text is hidden, and labels are scrubbed of emails, links, paths and numbers. No screenshots, no goal or question words. Learner questions and open-ended goals stay with the local model. Model: `GEMINI_MODEL` (default `gemini-3.7-flash`).
+- **ElevenLabs (voice):** speaks only lesson lines and Hodey's fixed phrases. Answers about your screen stay in the local voice. Talking over Hodey cuts it off as usual.
+- **Backboard (memory):** gets a compact end-of-Hode summary (lesson, skills, steps that needed help, next help level), never a transcript. *Read-only* recalls without writing. Local SQLite memory is always on and is updated first.
+- Set keys and switches in **Settings → Cloud**.
 
 Live checks of the validation gates are in [docs/validation-gates.md](docs/validation-gates.md).
 

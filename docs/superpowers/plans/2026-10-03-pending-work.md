@@ -1,6 +1,6 @@
 # Pending Work Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Close every gap left after consolidation (2026-10-03 audit): opt-in cloud providers (Gemini, ElevenLabs, Backboard) behind the existing interfaces, the `● Local` / `☁ Enhanced` badge, a sensitive-app cloud gate, local learning memory, richer stuck detection, a second ASR engine, then P1/P2.
 
@@ -32,6 +32,17 @@
 5. **Memory recall pushes the assistance level outside the ladder or past the learner's skill record:** recall only nudges the level by one step, and it never overrides a mastered skill record. Test: `memory.test.ts` "nudges the start level by at most one step". Owner: Task 3.2.
 
 ---
+
+## Status (2026-10-04)
+
+Wave 1 is done, merged on `integrate/wave1`, and verified with 574 vitest tests, 121 Rust tests and a build. These changes came after review or differ from the plan:
+- **Gemini** gets the lesson title, never the learner's goal. Content controls (list items, edits, text) are hidden unless they're the step's target, which is named by the lesson's own label. Interface labels are scrubbed of emails, links, paths and long numbers. Element ids aren't sent. Learner questions and open goals stay local.
+- **ElevenLabs** uses HTTP streaming instead of a WebSocket. It speaks only sentences that come from a task pack or Hodey's fixed phrases; answers and vision guidance stay on the local voice. It's stopped by the shared `tts_stop`.
+- **Backboard:** recall uses the memory-search endpoint. Summaries of open Hodes, which have no skills, are never sent.
+- **Stuck detection** adds a `SAID_STUCK` event. The input hook now reports click points, Ctrl+Z and back. Pointer wandering isn't covered, because the hook doesn't see mouse movement.
+- **Whisper** runs through sherpa-onnx (base int8) instead of faster-whisper, so no Python runtime is needed.
+- **Fix:** a click made while a step was still being prepared used to be dropped. It now counts (`onObservedStep`).
+- **Not verified live (no keys or hardware here):** Gemini model id and latency, ElevenLabs audio latency, real Backboard calls, Hindi through Whisper. The gates in `docs/validation-gates.md` need the demo laptop.
 
 ## Wave 1: P0 gaps
 
@@ -72,12 +83,12 @@ export class CloudPolicy {
 // Rust helper for later tasks: cloud::keys::read(provider: &str) -> Option<String>
 ```
 
-- [ ] Write `policy.test.ts`. Cases: all off gives `enhanced() === false`. A toggle on with no key is not allowed. Toggle and key both present is allowed. A sensitive app (case-insensitive substring of the process or app name) blocks every provider. `reportFailure` followed by time inside the cooldown is not allowed, and it is allowed again after the cooldown. `memory: "readonly"` counts as allowed for backboard.
-- [ ] Run vitest and confirm the tests fail.
-- [ ] Implement the settings block (zod with `.catch` defaults and `parseSettings` updated) and `CloudPolicy`.
-- [ ] Rust: write a `keys.rs` unit test for env fallback and provider-name validation (only the three names are accepted). Then implement it with `keyring::Entry::new("Hodeum", provider)` and register the commands.
-- [ ] Badge: `Notch` takes `cloud?: { enhanced(): boolean; subscribe(...) }` and renders `● Local` / `☁ Enhanced` beside the privacy dots whenever the notch is expanded. Add a test in `notch-view.test.ts`.
-- [ ] Run `npm run typecheck && npm test && npm run build` and `cargo test --lib`, then commit with `feat: cloud provider foundation — opt-in settings, Windows credential store, policy and Local/Enhanced badge`.
+- [x] Write `policy.test.ts`. Cases: all off gives `enhanced() === false`. A toggle on with no key is not allowed. Toggle and key both present is allowed. A sensitive app (case-insensitive substring of the process or app name) blocks every provider. `reportFailure` followed by time inside the cooldown is not allowed, and it is allowed again after the cooldown. `memory: "readonly"` counts as allowed for backboard.
+- [x] Run vitest and confirm the tests fail.
+- [x] Implement the settings block (zod with `.catch` defaults and `parseSettings` updated) and `CloudPolicy`.
+- [x] Rust: write a `keys.rs` unit test for env fallback and provider-name validation (only the three names are accepted). Then implement it with `keyring::Entry::new("Hodeum", provider)` and register the commands.
+- [x] Badge: `Notch` takes `cloud?: { enhanced(): boolean; subscribe(...) }` and renders `● Local` / `☁ Enhanced` beside the privacy dots whenever the notch is expanded. Add a test in `notch-view.test.ts`.
+- [x] Run `npm run typecheck && npm test && npm run build` and `cargo test --lib`, then commit with `feat: cloud provider foundation — opt-in settings, Windows credential store, policy and Local/Enhanced badge`.
 
 ### Workstream 1: Gemini reasoning (PRD §10.1)
 
@@ -91,42 +102,42 @@ export class GatedReasoner implements ReasoningProvider { constructor(inner: Rea
 export class GeminiReasoningProvider implements ReasoningProvider { readonly id = "gemini"; constructor(bridge: { invoke }) }
 // Rust: gemini_reason(request: GeminiRequest) -> serde_json::Value  (structured-output JSON, schema = teaching action)
 ```
-- [ ] Write tests first. The request built from a `TeachingContext` holds no image, no utterance and no question text. A valid response maps to a `TeachingAction`. Malformed JSON throws. A target whose element id or bounds aren't in the observation throws. `GatedReasoner` skips when the policy disallows it and reports the failure on a throw.
-- [ ] Rust: POST to `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` with `responseMimeType: application/json` and a `responseSchema`, a 6 s timeout, and the key from `cloud::keys::read("gemini")`. Unit-test the request body builder and the response extraction against fixture JSON.
-- [ ] Wiring: `reasoners: [new GatedReasoner(new GeminiReasoningProvider(...), "gemini", policy), local]`. Local stays last.
-- [ ] Run validation and commit with `feat: opt-in Gemini reasoning behind the cloud policy, text context only, local fallback`.
+- [x] Write tests first. The request built from a `TeachingContext` holds no image, no utterance and no question text. A valid response maps to a `TeachingAction`. Malformed JSON throws. A target whose element id or bounds aren't in the observation throws. `GatedReasoner` skips when the policy disallows it and reports the failure on a throw.
+- [x] Rust: POST to `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` with `responseMimeType: application/json` and a `responseSchema`, a 6 s timeout, and the key from `cloud::keys::read("gemini")`. Unit-test the request body builder and the response extraction against fixture JSON.
+- [x] Wiring: `reasoners: [new GatedReasoner(new GeminiReasoningProvider(...), "gemini", policy), local]`. Local stays last.
+- [x] Run validation and commit with `feat: opt-in Gemini reasoning behind the cloud policy, text context only, local fallback`.
 
 ### Workstream 2: ElevenLabs voice (PRD §14.1)
 
 **Files:** `src-tauri/src/cloud/elevenlabs.rs`, `src/providers/cloud/elevenlabs-tts.ts` (+ test), and the TTS routing in `src/providers/speech/native-voice.ts` / `local-voice.ts`.
 
-- [ ] Write tests first. The adapter sends the text chunks in order. `stop()` invokes `elevenlabs_stop`, and after the abort signal no further chunk is sent. A failure, or the policy disallowing the provider, falls through to the existing local `RoutedTTS` for the same utterance. The Devanagari path skips ElevenLabs unless the voice is multilingual; Flash v2.5 is, so Hindi is allowed.
-- [ ] Rust: a WebSocket `wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream-input?model_id=eleven_flash_v2_5&output_format=pcm_24000`. Decode the base64 PCM into a `rodio` sink on the same output path Hodey's local voice uses, so the existing barge-in `stop` cuts it. Add `tokio-tungstenite` with `rustls`. Unit-test the message framing builders.
-- [ ] Run validation and commit with `feat: opt-in ElevenLabs Flash voice streamed through Rust, cut by barge-in, local voice fallback`.
+- [x] Write tests first. The adapter sends the text chunks in order. `stop()` invokes `elevenlabs_stop`, and after the abort signal no further chunk is sent. A failure, or the policy disallowing the provider, falls through to the existing local `RoutedTTS` for the same utterance. The Devanagari path skips ElevenLabs unless the voice is multilingual; Flash v2.5 is, so Hindi is allowed.
+- [x] Rust: a WebSocket `wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream-input?model_id=eleven_flash_v2_5&output_format=pcm_24000`. Decode the base64 PCM into a `rodio` sink on the same output path Hodey's local voice uses, so the existing barge-in `stop` cuts it. Add `tokio-tungstenite` with `rustls`. Unit-test the message framing builders.
+- [x] Run validation and commit with `feat: opt-in ElevenLabs Flash voice streamed through Rust, cut by barge-in, local voice fallback`.
 
 ### Workstream 3: Learning memory (PRD §18.1)
 
 **Files:** `src/features/memory/summary.ts` (+ test), `src/providers/memory/sqlite-memory.ts` (+ test), `src/providers/memory/backboard-memory.ts` (+ test), `src-tauri/src/cloud/backboard.rs`, a SQLite migration in `src/data/sqlite-stores.ts`, and the wiring in `notch.tsx` / `runtime.ts`.
 
-- [ ] Write tests first. `summarize(events, prev, final)` builds a `HodeLearningSummary` from the Hode's state and log, with `needed_help_with` taken from the steps that had a hint, a stuck or a correction. `SqliteMemoryProvider` stores the summary and recalls by skill overlap. Start-of-Hode recall nudges the starting level by at most one step and never past a mastered skill record. Backboard runs only when `policy.allowed("backboard")`; in readonly mode it never writes. A Backboard failure never blocks completion, because the SQLite write happens first.
-- [ ] Rust: Backboard REST, with one assistant per Hodian (id saved in the settings store) and one thread per Hode. Unit-test the request builders.
-- [ ] Run validation and commit with `feat: local learning memory with end-of-Hode summaries; opt-in Backboard sync`.
+- [x] Write tests first. `summarize(events, prev, final)` builds a `HodeLearningSummary` from the Hode's state and log, with `needed_help_with` taken from the steps that had a hint, a stuck or a correction. `SqliteMemoryProvider` stores the summary and recalls by skill overlap. Start-of-Hode recall nudges the starting level by at most one step and never past a mastered skill record. Backboard runs only when `policy.allowed("backboard")`; in readonly mode it never writes. A Backboard failure never blocks completion, because the SQLite write happens first.
+- [x] Rust: Backboard REST, with one assistant per Hodian (id saved in the settings store) and one thread per Hode. Unit-test the request builders.
+- [x] Run validation and commit with `feat: local learning memory with end-of-Hode summaries; opt-in Backboard sync`.
 
 ### Workstream 4: Stuck detection signals (PRD §7)
 
 **Files:** `src/features/hode/stuck.ts` (+ `stuck.test.ts`), `src/features/hode/learner.ts`, `src/features/voice/route.ts` (+ tests), and `src/lib/spoken.ts`.
 
-- [ ] Write tests first. A third click on the same wrong control escalates. Open, close, open of the same wrong menu escalates. Two undo/back actions in a row escalate. An unexpected dialog (UIA `Dialog`/`Window` role not named in the step) gets a recovery line. "where?", "I don't see it", "कहाँ है", "dikh nahi raha" become `STUCK_TIMEOUT`-equivalent escalation, not PAUSE. "wait" stays PAUSE. The escalation follows the PRD ladder.
-- [ ] Implement it as a pure `detectStuck(history, observation, step)` that returns a signal or `undefined`, called from `learner.ts`.
-- [ ] Run validation and commit with `feat: richer stuck detection — repeated wrong clicks, menu loops, undo loops, surprise dialogs and 'I don't see it'`.
+- [x] Write tests first. A third click on the same wrong control escalates. Open, close, open of the same wrong menu escalates. Two undo/back actions in a row escalate. An unexpected dialog (UIA `Dialog`/`Window` role not named in the step) gets a recovery line. "where?", "I don't see it", "कहाँ है", "dikh nahi raha" become `STUCK_TIMEOUT`-equivalent escalation, not PAUSE. "wait" stays PAUSE. The escalation follows the PRD ladder.
+- [x] Implement it as a pure `detectStuck(history, observation, step)` that returns a signal or `undefined`, called from `learner.ts`.
+- [x] Run validation and commit with `feat: richer stuck detection — repeated wrong clicks, menu loops, undo loops, surprise dialogs and 'I don't see it'`.
 
 ### Workstream 5: Cloud settings UI
 
 **Files:** `src/app/pages/settings/CloudSettings.tsx`, `src/app/pages/SettingsPage.tsx`, `src/app/tauri-services.ts`, `src/app/services.ts`.
 
-- [ ] Build a "Cloud (optional)" section. It has three toggles, disabled until a key is saved. Each key gets a password input with Save and Clear; the value is sent to `cloud_key_set` and never shown back. A per-provider health line comes from `healthCheck()`. It also has the sensitive-apps list editor, a Backboard memory-mode select, and the copy "Local is always on. Cloud only receives the current step, never your screen or voice."
-- [ ] Add tests for the view-model (`cloud-settings.test.ts`).
-- [ ] Run validation and commit with `feat: Cloud settings — keys in Windows Credential Manager, per-provider toggles, sensitive apps`.
+- [x] Build a "Cloud (optional)" section. It has three toggles, disabled until a key is saved. Each key gets a password input with Save and Clear; the value is sent to `cloud_key_set` and never shown back. A per-provider health line comes from `healthCheck()`. It also has the sensitive-apps list editor, a Backboard memory-mode select, and the copy "Local is always on. Cloud only receives the current step, never your screen or voice."
+- [x] Add tests for the view-model (`cloud-settings.test.ts`).
+- [x] Run validation and commit with `feat: Cloud settings — keys in Windows Credential Manager, per-provider toggles, sensitive apps`.
 
 ### Workstream 6: Second ASR engine (PRD §13 ASR fallback)
 
@@ -139,7 +150,7 @@ Done in `src-tauri/src/voice/asr.rs`. Deviation from PRD §13: the PRD names fas
 
 ### Workstream 7: Docs
 
-- [ ] Fix the README's stale "Next:" line. Add a provider table (local default, cloud opt-in). Add a `docs/validation-gates.md` checklist with a manual procedure for each gate and space for measured results (Gates 1–5, 10, and 6 on real Excel).
+- [x] Fix the README's stale "Next:" line. Add a provider table (local default, cloud opt-in). Add a `docs/validation-gates.md` checklist with a manual procedure for each gate and space for measured results (Gates 1–5, 10, and 6 on real Excel).
 
 ## Wave 2: P1 (after Wave 1 merges green)
 
