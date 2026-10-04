@@ -24,3 +24,6 @@ src-tauri/icons/ios/
 # Local AI runtime and weights (downloaded by scripts/setup-local-ai.ps1)
 models/
 runtime/
+
+# Supabase CLI cache
+supabase/.temp/
