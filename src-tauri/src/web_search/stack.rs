@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use super::body::{read_capped, MAX_ANSWER_BYTES};
 use super::source::{with_params, SourceError, SourceId};
 use super::text::{clip, fragment_text, plain, squash};
 use super::WebResult;
@@ -28,7 +29,7 @@ pub struct Question {
 pub fn rest_asked(json: &Value) -> Option<Duration> {
     if let Some(quota) = json.get("quota_remaining").and_then(Value::as_u64) {
         if quota < LOW_QUOTA {
-            eprintln!("Stack Exchange quota is low: {quota} calls left today");
+            log::warn!("Stack Exchange quota is low: {quota} calls left today");
         }
         if quota == 0 {
             return Some(SourceId::StackExchange.cooldown());
@@ -63,12 +64,12 @@ pub fn parse_answers(json: &Value, questions: &[Question]) -> Vec<WebResult> {
 }
 
 async fn get(client: &reqwest::Client, url: &str, params: &[(&str, &str)]) -> Result<Value, SourceError> {
-    let response = client.get(with_params(url, params)?).header("Accept", "application/json").send().await.map_err(|e| SourceError::from_reqwest(&e))?;
+    let response = client.get(with_params(url, params)?).header("Accept", "application/json").send().await.map_err(SourceError::from_reqwest)?;
     let status = response.status().as_u16();
-    let text = response.text().await.map_err(|e| SourceError::from_reqwest(&e))?;
     if !(200..300).contains(&status) {
         return Err(SourceError::from_status(SourceId::StackExchange, status));
     }
+    let text = read_capped(response, MAX_ANSWER_BYTES).await?;
     serde_json::from_str(&text).map_err(|e| SourceError::Parse(e.to_string()))
 }
 

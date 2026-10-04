@@ -54,6 +54,10 @@ const LEFTOVER_ARCHIVES: [&str; 3] = [".zip", ".7z", ".tar"];
 /// The only links Hodey opens: a Settings page or Calculator.
 const SETTINGS_SCHEME: &str = "ms-settings:";
 const CALCULATOR_URI: &str = "calculator:";
+/// The only programs Hodey starts: the ones the task packs launch (`launch.exe` in src/task-packs/*.json).
+/// A pack that needs another adds it here; `every_task_pack_launch_is_allowed` checks the packs against it.
+const LESSON_PROGRAMS: [&str; 3] = ["excel.exe", "calc.exe", "notepad.exe"];
+const NAMES_AND_LINKS_ONLY: &str = "Hodey only opens apps and practice files by name, and only Settings or Calculator links.";
 
 /// Payload of `LAUNCH_PROGRESS_EVENT`.
 #[derive(Debug, Clone, Serialize)]
@@ -62,9 +66,14 @@ pub struct LaunchProgress {
     pub seconds: u64,
 }
 
-/// A bare file name ("excel.exe", "hodeum-sales.csv"): no paths or arguments, so the notch can't run arbitrary files.
+/// A bare file name ("hodeum-sales.csv", "hodeum-trip"): no paths or arguments, so a practice file can't name another file.
 pub fn is_bare_name(name: &str) -> bool {
     !name.is_empty() && !name.starts_with('.') && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
+/// One of the programs the lessons use. Anything else (cmd.exe, mshta.exe) is never started, whoever asks.
+pub fn is_lesson_program(exe: &str) -> bool {
+    LESSON_PROGRAMS.iter().any(|program| program.eq_ignore_ascii_case(exe))
 }
 
 /// A link Hodey may open: `ms-settings:<page>` (lowercase letters, digits, dashes) or `calculator:`.
@@ -88,14 +97,24 @@ pub enum LaunchTarget {
 }
 
 impl LaunchTarget {
-    /// Exactly one of `exe`/`uri`; names must be bare and links on the allowlist.
+    /// Exactly one of `exe`/`uri`: a lesson program (with a practice file by bare name), or an allowed link.
     pub fn parse(exe: Option<String>, uri: Option<String>, sample: Option<String>) -> Result<Self, String> {
         match (exe, uri) {
-            (Some(exe), None) if is_bare_name(&exe) && sample.as_deref().is_none_or(is_bare_name) => Ok(Self::Exe { exe, sample }),
+            (Some(exe), None) => Self::program(exe, sample),
             (None, Some(uri)) if is_launch_uri(&uri) && sample.is_none() => Ok(Self::Uri(uri)),
+            (None, Some(_)) => Err(NAMES_AND_LINKS_ONLY.into()),
             (Some(_), Some(_)) | (None, None) => Err("Hodey opens an app either by name or by link, not both.".into()),
-            _ => Err("Hodey only opens apps and practice files by name, and only Settings or Calculator links.".into()),
         }
+    }
+
+    fn program(exe: String, sample: Option<String>) -> Result<Self, String> {
+        if !is_bare_name(&exe) || !sample.as_deref().is_none_or(is_bare_name) {
+            return Err(NAMES_AND_LINKS_ONLY.into());
+        }
+        if !is_lesson_program(&exe) {
+            return Err(format!("Hodey only opens the programs its lessons use ({}), not {exe}.", LESSON_PROGRAMS.join(", ")));
+        }
+        Ok(Self::Exe { exe, sample })
     }
 
     /// What the app's title will show once the practice file is open ("hodeum-sales", "hodeum-trip").
@@ -286,9 +305,9 @@ pub(crate) async fn wait_until_ready(
     .map_err(|e| e.to_string())?
 }
 
-/// Opens the pack's app: `exe` (with the practice file or folder `sample` as its argument) or an allowed
-/// `uri`, then makes it the window Hodey reads. `None` when it didn't appear in time; the notch then asks
-/// the learner to open it.
+/// Opens the pack's app: `exe`, one of the lesson programs (with the practice file or folder `sample` as its
+/// argument), or an allowed `uri`, then makes it the window Hodey reads. Any other program is refused. `None`
+/// when it didn't appear in time; the notch then asks the learner to open it.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // Tauri passes each command argument separately.
 pub async fn launch_app(
@@ -362,6 +381,44 @@ mod tests {
         assert!(LaunchTarget::parse(None, some("ms-settings:colors"), some("x.txt")).is_err());
         assert!(LaunchTarget::parse(some("cmd.exe /c x"), None, None).is_err());
         assert!(LaunchTarget::parse(some("explorer.exe"), None, some("..\\x")).is_err());
+    }
+
+    #[test]
+    fn opens_only_the_programs_the_lessons_use() {
+        for exe in ["excel.exe", "calc.exe", "notepad.exe", "EXCEL.EXE"] {
+            assert!(LaunchTarget::parse(Some(exe.into()), None, None).is_ok(), "{exe} should open");
+        }
+        for exe in ["cmd.exe", "powershell.exe", "pwsh.exe", "mshta.exe", "regedit.exe", "wscript.exe", "rundll32.exe", "explorer.exe", "excel"] {
+            let refused = LaunchTarget::parse(Some(exe.into()), None, None).expect_err(exe);
+            assert!(refused.contains("only opens the programs its lessons use"), "{exe}: {refused}");
+        }
+    }
+
+    #[test]
+    fn a_practice_file_only_goes_to_a_lesson_program() {
+        let some = |s: &str| Some(s.to_string());
+        assert!(LaunchTarget::parse(some("mshta.exe"), None, some("hodeum-sales.csv")).is_err());
+        assert!(LaunchTarget::parse(some("excel.exe"), None, some("hodeum-sales.csv")).is_ok());
+    }
+
+    /// A pack whose program isn't allowed here would fail to open its app: add the program to `LESSON_PROGRAMS`.
+    #[test]
+    fn every_task_pack_launch_is_allowed() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/task-packs");
+        let mut launches = 0;
+        for entry in fs::read_dir(&dir).expect("the task packs folder is readable") {
+            let path = entry.expect("a task pack entry").path();
+            if path.extension().is_none_or(|ext| ext != "json") {
+                continue;
+            }
+            let pack: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).expect("a readable pack")).expect("a JSON pack");
+            let Some(launch) = pack.get("launch") else { continue };
+            let field = |name: &str| launch.get(name).and_then(serde_json::Value::as_str).map(String::from);
+            let parsed = LaunchTarget::parse(field("exe"), field("uri"), field("sample"));
+            assert!(parsed.is_ok(), "{} launches something launch_app refuses: {parsed:?}", path.display());
+            launches += 1;
+        }
+        assert!(launches > 0, "no task pack launches found in {}", dir.display());
     }
 
     #[test]

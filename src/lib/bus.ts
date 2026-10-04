@@ -27,8 +27,11 @@ export interface BusEvents {
   "cloud:keys-changed": Empty;
   /** Live Hode status from the notch (where the runtime lives) for the app window. */
   "hode:summary": HodeSummary;
-  /** Ask the notch to start a Hode, e.g. from the app's chat or learning paths. Mode and style default to Settings. */
-  "hode:start": { goal: string; mode?: HodeMode; agentStyle?: AgentStyle };
+  /**
+   * Ask the notch to start a Hode, e.g. from the app's chat or learning paths. Mode and style default to Settings.
+   * `source: "web"`: sent from the web dashboard (DeviceLink); it may start a Hode but never opens an app on this PC.
+   */
+  "hode:start": { goal: string; mode?: HodeMode; agentStyle?: AgentStyle; source?: "web" };
   "hode:end": Empty;
   /** Ask the notch to broadcast a fresh summary (an app window just opened). */
   "hode:summary-request": Empty;

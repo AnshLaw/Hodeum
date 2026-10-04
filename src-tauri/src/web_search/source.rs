@@ -75,8 +75,13 @@ pub enum SourceError {
     NothingRelevant,
     /// Still running when the search's time was up.
     TimedOut,
+    /// The answer passed this many bytes, more than any search answer or help page needs.
+    TooLarge(usize),
+    /// A page read directly answered with something other than HTML.
+    NotHtml,
 }
 
+const BYTES_PER_KB: usize = 1_000;
 const HTTP_TOO_MANY: u16 = 429;
 const HTTP_UNAUTHORIZED: u16 = 401;
 const HTTP_FORBIDDEN: u16 = 403;
@@ -92,13 +97,13 @@ impl SourceError {
         }
     }
 
-    pub fn from_reqwest(error: &reqwest::Error) -> SourceError {
+    pub fn from_reqwest(error: reqwest::Error) -> SourceError {
         if error.is_timeout() {
             SourceError::Network("timed out".into())
         } else if error.is_connect() {
             SourceError::Network("couldn't connect".into())
         } else {
-            SourceError::Network(error.to_string())
+            SourceError::Network(describe(error))
         }
     }
 
@@ -123,8 +128,23 @@ impl SourceError {
             SourceError::Parse(why) => format!("sent something unexpected ({why})"),
             SourceError::NothingRelevant => "nothing relevant".into(),
             SourceError::TimedOut => "no answer in time".into(),
+            SourceError::TooLarge(cap) => format!("sent more than {} KB", cap.div_ceil(BYTES_PER_KB)),
+            SourceError::NotHtml => "sent something other than a web page".into(),
         }
     }
+}
+
+/// A request's error with its causes ("error sending request: …") but never its URL, whose `?q=`
+/// carries the learner's query into the reasons the learner sees and the log keeps.
+fn describe(error: reqwest::Error) -> String {
+    let error = error.without_url();
+    let mut message = error.to_string();
+    let mut cause = std::error::Error::source(&error);
+    while let Some(inner) = cause {
+        message = format!("{message}: {inner}");
+        cause = inner.source();
+    }
+    message
 }
 
 /// One line per source that didn't answer, e.g. "DuckDuckGo: blocked automated searches".
@@ -142,5 +162,19 @@ mod tests {
         assert_eq!(SourceError::from_status(SourceId::Tavily, 401), SourceError::KeyRejected(401));
         assert_eq!(failure(SourceId::Exa, &SourceError::RateLimited(EXA_COOLDOWN)), "Exa (free): rate-limited, resting 15 min");
         assert_eq!(failure(SourceId::DuckDuckGo, &SourceError::CoolingDown(Duration::from_secs(20))), "DuckDuckGo: resting (1 min left)");
+        assert_eq!(failure(SourceId::Jina, &SourceError::TooLarge(3_000_000)), "Jina Reader: sent more than 3000 KB");
+        assert_eq!(SourceError::NotHtml.reason(), "sent something other than a web page");
+    }
+
+    /// reqwest names the request's URL in its errors, and a search URL carries the query (`?q=…`).
+    #[test]
+    fn a_failed_request_never_names_its_query() {
+        let client = reqwest::Client::builder().https_only(true).build().expect("a test client");
+        let url = with_params("http://html.duckduckgo.com/html/", &[("q", "jane doe salary")]).expect("a test URL");
+        let error = tauri::async_runtime::block_on(client.get(url).send()).expect_err("plain http is refused");
+        assert!(error.to_string().contains("salary"), "the raw error names the URL: {error}");
+        let reason = failure(SourceId::DuckDuckGo, &SourceError::from_reqwest(error));
+        assert!(!reason.contains("salary") && !reason.contains("q="), "{reason}");
+        assert!(reason.starts_with("DuckDuckGo: unreachable ("), "{reason}");
     }
 }
