@@ -1,7 +1,9 @@
 import type { TaskPack } from "../lib/types";
 
-/** A pack must own at least this share of the goal's words (beyond filler and app names). */
-const MIN_COVERAGE = 0.5;
+/** Matched by a one-word phrase only ("zip"), a pack must own at least this share of the goal's words (beyond filler and app names). */
+const MIN_COVERAGE = 0.4;
+/** A phrase of this many words, all in the goal ("pivot table"), names the task on its own. */
+const STRONG_PHRASE_WORDS = 2;
 /** Shorter English words keep a final "s" ("bus", "ms"); longer ones lose a plural one. */
 const MIN_PLURAL_LENGTH = 4;
 
@@ -15,8 +17,6 @@ const FILLER = new Set([
   ..."मुझे मुझको ये यह को का की के कैसे बनाना बनाओ बनाइए सिखाओ सिखाइए करो करना कीजिए में है हैं और एक मेरे मेरी मेरा इन इस".split(" "),
 ]);
 
-/** App and device names: they say where a task happens, so they never count against a pack. */
-const APP_WORDS = new Set("excel spreadsheet explorer windows iphone phone powerpoint word outlook notepad chrome edge laptop pc computer app microsoft एक्सेल एक्सप्लोरर आईफोन फोन विंडोज".split(" "));
 
 function tokens(text: string): string[] {
   return text
@@ -34,8 +34,11 @@ function stem(word: string): string {
   return word.replace(/(?:ें|ों)$/u, "");
 }
 
-/** The words of a goal or phrase that say what the task is. */
-const taskWords = (text: string): string[] => tokens(text).filter((word) => !FILLER.has(word)).map(stem);
+/** App and device names: they say where a task happens, so they never count against a pack. Stemmed like goal words. */
+const APP_WORDS = new Set("excel spreadsheet explorer windows iphone phone powerpoint word outlook notepad chrome edge laptop pc computer app microsoft एक्सेल एक्सप्लोरर आईफोन फोन विंडोज".split(" ").map((word) => stem(word)));
+
+/** The words of a goal or phrase that say what the task is (numbers, like a phone's model, say nothing). */
+const taskWords = (text: string): string[] => tokens(text).filter((word) => !FILLER.has(word) && !/^\d+$/.test(word)).map(stem);
 
 interface Fit {
   pack: TaskPack;
@@ -57,7 +60,8 @@ function fit(words: string[], app: string | undefined, pack: TaskPack): Fit | un
   const vocabulary = new Set(phrases.flat());
   const counted = words.filter((word) => vocabulary.has(word) || !APP_WORDS.has(word));
   const coverage = counted.filter((word) => vocabulary.has(word)).length / counted.length;
-  return coverage >= MIN_COVERAGE ? { pack, coverage, phrase: Math.max(...contained.map((phrase) => phrase.length)) } : undefined;
+  const phrase = Math.max(...contained.map((p) => p.length));
+  return phrase >= STRONG_PHRASE_WORDS || coverage >= MIN_COVERAGE ? { pack, coverage, phrase } : undefined;
 }
 
 /** The pack a goal asks for, or undefined: a goal that only shares a word or two with a pack isn't its lesson. */

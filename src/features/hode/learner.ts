@@ -279,7 +279,7 @@ export function onSkipStep(s: HodeState): Transition {
   const asking = s.spokenQuestion !== undefined || s.question !== undefined;
   if (!step || s.open || asking || !SKIPPABLE.includes(s.phase)) return noop(s);
   const moved: HodeState = { ...s, ack: undefined, pendingAck: undefined, reason: undefined, pendingReason: undefined, pendingNote: undefined };
-  const done: HodeEffect[] = [CANCEL_TIMER, { type: "clearOverlay" }];
+  const done: HodeEffect[] = [{ type: "stopSpeech" }, CANCEL_TIMER, { type: "clearOverlay" }];
   const nextIndex = s.stepIndex + 1;
   if (!s.pack || nextIndex >= s.pack.steps.length) return withLeadingEffects(finishHode(moved), done);
   return withLeadingEffects(beginStep(moved, nextIndex), done);

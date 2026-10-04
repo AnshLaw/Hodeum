@@ -2,7 +2,7 @@
   "id": "windows-zip",
   "title": "Zip files",
   "app": "File Explorer",
-  "goalPhrases": ["zip files", "zip", "compress", "make a zip", "ज़िप", "कंप्रेस", "ज़िप फ़ाइल"],
+  "goalPhrases": ["zip files", "zip", "compress", "make a zip", "zip folder", "zip up", "ज़िप", "कंप्रेस", "ज़िप फ़ाइल"],
   "notFor": ["open", "extract", "unzip", "unpack", "khol", "खोलो", "खोलना"],
   "prerequisites": ["Open File Explorer and select the files you want to zip."],
   "concept": "A ZIP file packs several files into one smaller file that's easy to email or share.",

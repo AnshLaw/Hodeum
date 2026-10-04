@@ -120,6 +120,8 @@ export interface HodeState {
   reason?: string;
   /** The current step's why has been said (in a demonstration, a correction, or Explain). */
   whySaid?: boolean;
+  /** Paused, then a question: where the pause itself resumes to, kept while the question is answered. */
+  pausedResume?: Pick<HodeState, "resumePhase" | "resumeAction" | "resumeObservation">;
   /** A short line said once, ahead of the next guidance ("I can't see that done yet."). */
   pendingNote?: string;
   /** The learner said they did the step ("I did it", look again): the next screen read may finish it. */
@@ -276,6 +278,14 @@ export function rechecking(s: HodeState): boolean {
   // Asked for (a hint, look again) and a slow reasoner is on it: show Hodey working instead.
   const shownWorking = s.thinking === true && s.prompted === true;
   return s.phase === "reasoning" && !shownWorking && !asking && s.action !== undefined && s.action.kind !== "answer";
+}
+
+/**
+ * A blank Hode that keeps what outlives one: the reply language, and the request counter, so a slow
+ * reply to the last Hode can never pass for a request of this one.
+ */
+export function nextHode(s: HodeState): HodeState {
+  return { ...initialState, language: s.language, requestId: s.requestId };
 }
 
 /** The conversation with one more turn, keeping only the last few. */

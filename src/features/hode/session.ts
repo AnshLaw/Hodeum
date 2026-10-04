@@ -7,6 +7,7 @@ import { spoken } from "../../lib/spoken";
 import {
   QUESTION_PADDING_PX,
   initialState,
+  nextHode,
   noop,
   pinOverlay,
   type EventOf,
@@ -31,10 +32,13 @@ function resumeTarget(s: HodeState): HodePhase {
   return s.phase === "goal_entry" ? "goal_entry" : "idle";
 }
 
-/** Where a question leaves from: the phase to return to, and the guidance to bring back with it. */
-function leaving(s: HodeState): Pick<HodeState, "resumePhase" | "resumeAction" | "resumeObservation"> {
+/** Where a question or a pause leaves from: the phase to return to, and the guidance to bring back with it. */
+function leaving(s: HodeState): Pick<HodeState, "resumePhase" | "resumeAction" | "resumeObservation" | "pausedResume"> {
   const resumePhase = resumeTarget(s);
-  return resumePhase === "guiding" ? { resumePhase, resumeAction: s.action, resumeObservation: s.observation } : { resumePhase, resumeAction: undefined, resumeObservation: undefined };
+  // Paused: the question returns to the pause, which keeps its own way back.
+  const pausedResume = s.phase === "paused" ? { resumePhase: s.resumePhase, resumeAction: s.resumeAction, resumeObservation: s.resumeObservation } : s.pausedResume;
+  const guidance = resumePhase === "guiding" ? { resumeAction: s.action, resumeObservation: s.observation } : { resumeAction: undefined, resumeObservation: undefined };
+  return { resumePhase, ...guidance, pausedResume };
 }
 
 /** The interrupted step, exactly as it was: its card and highlight, with nothing said again. */
@@ -61,6 +65,8 @@ function resume(s: HodeState): Transition {
   };
   if (phase === "guiding") return restoreGuidance(state, s);
   if (phase === "observing") return { state, effects: [{ type: "observe" }] };
+  // Back to a pause after a question: the pause gets its own way back again.
+  if (phase === "paused") return { state: { ...state, ...s.pausedResume, pausedResume: undefined }, effects: [{ type: "clearOverlay" }] };
   // A mark just set is shown; after an answer, nothing lingers on screen.
   return { state, effects: [s.phase === "annotating" ? pinOverlay(state.focusRegion) : { type: "clearOverlay" }] };
 }
@@ -149,9 +155,9 @@ export function onDismiss(s: HodeState): Transition {
     case "answering":
       return resume(s);
     case "success":
-      return { state: { ...initialState, language: s.language }, effects: [{ type: "clearOverlay" }] };
+      return { state: nextHode(s), effects: [{ type: "clearOverlay" }] };
     case "goal_entry":
-      return { state: { ...initialState, focusRegion: s.focusRegion, language: s.language }, effects: [] };
+      return { state: { ...nextHode(s), focusRegion: s.focusRegion }, effects: [] };
     default:
       return noop(s);
   }
@@ -164,8 +170,8 @@ export function onSpeechFinished(s: HodeState): Transition {
 
 export function onPause(s: HodeState): Transition {
   if (!PAUSABLE.includes(s.phase)) return noop(s);
-  // Bumping requestId drops any reasoning still in flight.
-  return { state: { ...s, phase: "paused", resumePhase: resumeTarget(s), requestId: s.requestId + 1 }, effects: STOP_EVERYTHING };
+  // Bumping requestId drops any reasoning still in flight; guidance on show comes back as it was.
+  return { state: { ...s, ...leaving(s), phase: "paused", requestId: s.requestId + 1 }, effects: STOP_EVERYTHING };
 }
 
 /** "Continue": out of a pause, or past a checkpoint once the learner has checked Hodey's work. */
@@ -176,7 +182,7 @@ export function onResume(s: HodeState): Transition {
 
 export function onEndHode(s: HodeState): Transition {
   if (s.phase === "idle") return noop(s);
-  return { state: { ...initialState, language: s.language }, effects: STOP_EVERYTHING };
+  return { state: nextHode(s), effects: STOP_EVERYTHING };
 }
 
 export function onSetLanguage(s: HodeState, e: EventOf<"SET_LANGUAGE">): Transition {

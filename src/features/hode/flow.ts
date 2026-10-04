@@ -7,6 +7,7 @@ import {
   QUESTION_PADDING_PX,
   STUCK_MS,
   currentStep,
+  nextHode,
   standingBy,
   withTurn,
   initialState,
@@ -28,7 +29,7 @@ const OPEN_START: Record<HodeMode, AssistanceLevel> = { teach: "hint", help: "ob
 
 export function onStartHode(s: HodeState): Transition {
   if (s.phase !== "idle") return noop(s);
-  return { state: { ...initialState, phase: "goal_entry", focusRegion: s.focusRegion, language: s.language }, effects: [] };
+  return { state: { ...nextHode(s), phase: "goal_entry", focusRegion: s.focusRegion }, effects: [] };
 }
 
 export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Transition {
@@ -98,6 +99,7 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       handedBack: false,
       hodeyTries: 0,
       instructionSaid: undefined,
+      pendingNote: undefined,
       whySaid: false,
       claimedDone: false,
       offerSkip: false,
@@ -196,20 +198,32 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
 
 /** Two instructions that share at least this share of their words are one step said two ways. */
 const SAME_STEP_OVERLAP = 0.6;
-/** Words this short ("ok", "to") don't tell instructions apart. */
-const MIN_INSTRUCTION_WORD = 3;
+/** Words this short don't tell instructions apart; two letters still do ("OK" vs "Save"). */
+const MIN_INSTRUCTION_WORD = 2;
+/** Words every instruction shares, which say nothing about which step it is. */
+const INSTRUCTION_FILLER = new Set(["the", "a", "an", "to", "at", "on", "in", "of", "and", "then", "now", "your", "you", "it", "this", "that", "please"]);
+/** Devanagari's nukta (ज़ vs ज): written inconsistently, so it's ignored. */
+const NUKTA = /\u093C/g;
+
+const normalizeInstruction = (text: string): string =>
+  text
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(NUKTA, "")
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const instructionWords = (text: string): Set<string> =>
   new Set(
-    text
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, " ")
-      .split(/\s+/)
-      .filter((word) => word.length >= MIN_INSTRUCTION_WORD),
+    normalizeInstruction(text)
+      .split(" ")
+      .filter((word) => word.length >= MIN_INSTRUCTION_WORD && !INSTRUCTION_FILLER.has(word)),
   );
 
 /** The model gave a new instruction, not the last one reworded. */
 function movedOn(previous: string, next: string): boolean {
+  if (normalizeInstruction(previous) === normalizeInstruction(next)) return false;
   const a = instructionWords(previous);
   const b = instructionWords(next);
   const shared = [...a].filter((word) => b.has(word)).length;

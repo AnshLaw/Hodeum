@@ -3,6 +3,7 @@ import { ASSISTANCE_LEVELS, type AssistanceLevel } from "../../lib/types";
 import type { HodeLearningSummary } from "../../providers/interfaces";
 import { currentStep, type HodeEvent, type HodeState } from "../hode/model";
 import { relax } from "../hode/policy";
+import { learnerFinishedStep } from "../../data/recorder";
 
 /** One step of a Hode as memory sees it: the pack's own words and ids, never the learner's. */
 export interface StepTrace {
@@ -23,11 +24,9 @@ function trace(state: HodeState, done: boolean): StepTrace | undefined {
   return step && { skill: step.skill, objective: step.objective, level: state.level, helped: state.escalated, done };
 }
 
-/** The step a learner action just completed, if this transition completed one. */
+/** The step the learner just completed, if this transition completed one (by a click, "I did it", or a fresh read). */
 export function finishedStep(event: HodeEvent, prev: HodeState, next: HodeState): StepTrace | undefined {
-  if (event.type !== "LEARNER_ACTED" || !prev.pack) return undefined;
-  const advanced = next.stepIndex > prev.stepIndex || (next.phase === "success" && prev.phase !== "success");
-  return advanced ? trace(prev, true) : undefined;
+  return learnerFinishedStep(event, prev, next) ? trace(prev, true) : undefined;
 }
 
 const independent = (step: StepTrace) => !step.helped && ASSISTANCE_LEVELS.indexOf(step.level) >= UNAIDED_FROM;
