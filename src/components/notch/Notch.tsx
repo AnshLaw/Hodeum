@@ -319,7 +319,8 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   const [revealed, reveal] = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true || web !== undefined, engagement);
   const handleControl = useControlHandler(runtime, bus);
   const onControl = (control: NotchControl) => (web && control === "dismiss" ? closeWeb() : handleControl(control));
-  useHitRect(surfaceRef, shell, bus, `${layoutKey}:${revealed}`);
+  const marking = state.phase === "annotating";
+  useHitRect(surfaceRef, shell, bus, `${layoutKey}:${revealed}:${marking}`, marking);
   // The success card stays while the learner reads it (hovering) or hasn't answered its question yet, then makes way.
   useAutoDismiss(view.mode === "success" && !hovered && !awaitingAnswer(view), runtime);
   const [cardBottom, setCardBottom] = useState<number>();

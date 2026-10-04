@@ -33,7 +33,7 @@ function broadcastRect(element: HTMLElement, shell: NativeShell, bus: Bus): void
  * as it animates, so only it captures clicks. `layoutKey` changes when the surface element is swapped
  * (top notch <-> sidebar).
  */
-export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShell, bus: Bus, layoutKey: string): void {
+export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShell, bus: Bus, layoutKey: string, marking = false): void {
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -41,8 +41,11 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
     const report = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        // Marking for Point & Ask, only the card beside the iPhone mirror takes clicks: a stroke over the mirror
+        // goes through to the overlay, which reads it as a question about the phone.
+        const side = marking ? element.querySelector<HTMLElement>(".phone-panel__side") : null;
         // Includes transforms, so a tucked-away (auto-hidden) surface reports just the orb, where it shows.
-        const { x, y, width, height } = element.getBoundingClientRect();
+        const { x, y, width, height } = (side ?? element).getBoundingClientRect();
         const hit = withinWindow({ x, y, width, height }, { width: window.innerWidth, height: window.innerHeight });
         shell.setNotchHitRect(hit).catch(reportError("Couldn't update the notch hit area"));
         broadcastRect(element, shell, bus);
@@ -89,7 +92,7 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
       offRequest();
       cancelAnimationFrame(frame);
     };
-  }, [ref, shell, bus, layoutKey]);
+  }, [ref, shell, bus, layoutKey, marking]);
 }
 
 /**
