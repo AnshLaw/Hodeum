@@ -5,7 +5,7 @@ import type { NativeShell } from "../../lib/shell";
 import type { HodeRuntime } from "../../features/hode/runtime";
 import type { OverlayPrimitive } from "../../lib/types";
 import type { Dock } from "../../features/dock/dock";
-import { coversTarget, guidanceFootprint, notchScreenRect } from "./footprint";
+import { coversTarget, guidanceFootprint, notchScreenRect, withinWindow } from "./footprint";
 import { createHoverGate, hoverGraceMs } from "./hover-gate";
 import type { NotchControl } from "./notch-view";
 
@@ -41,17 +41,18 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
     const report = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        // Includes transforms, so a tucked-away (auto-hidden) surface reports just its visible sliver.
+        // Includes transforms, so a tucked-away (auto-hidden) surface reports just the orb, where it shows.
         const { x, y, width, height } = element.getBoundingClientRect();
-        shell.setNotchHitRect({ x, y, width, height }).catch(reportError("Couldn't update the notch hit area"));
+        const hit = withinWindow({ x, y, width, height }, { width: window.innerWidth, height: window.innerHeight });
+        shell.setNotchHitRect(hit).catch(reportError("Couldn't update the notch hit area"));
         broadcastRect(element, shell, bus);
       });
     };
     const offRequest = bus.on("notch:rect-request", report);
     const observer = new ResizeObserver(report);
     observer.observe(element);
-    // Sliding in and out of auto-hide is a transform, which ResizeObserver doesn't see: follow it every frame,
-    // or the hit area lags behind the surface and a cursor over where it was keeps it out.
+    // Folding into the orb sinks the surface into the screen edge (a move, which ResizeObserver doesn't see): follow it
+    // every frame, or the hit area lags behind the surface and a cursor over where it was keeps it out.
     // Only the surface's own transitions: its children's (the orb, a card fading) bubble here too, and once kept this
     // loop running every frame. Capped, in case a transitionend never comes (an interrupted or cancelled animation).
     let sliding = 0;
@@ -158,6 +159,34 @@ export function useSettled(value: boolean, ms: number): boolean {
     return () => clearTimeout(timer);
   }, [value, ms]);
   return value && settled;
+}
+
+/**
+ * Long enough for the click that reached for the tucked orb to land (the notch opens on hover, a moment before it);
+ * spent before the opened notch's buttons have finished appearing and the learner could aim at one.
+ */
+const WAKE_MS = 500;
+
+/**
+ * True for a moment after the notch comes out of the tucked orb. Hovering opens it, so a click aimed at the orb lands
+ * on whatever opened in its place (Start a Hode, End Hode): the opened notch's controls ignore it meanwhile.
+ */
+export function useWaking(revealed: boolean): boolean {
+  return revealed && !useSettled(revealed, WAKE_MS);
+}
+
+/** True for `ms` after the latest `trigger()`, then false again. */
+export function usePulse(ms: number): [boolean, () => void] {
+  const [triggers, setTriggers] = useState(0);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (triggers === 0) return;
+    setOn(true);
+    const timer = setTimeout(() => setOn(false), ms);
+    return () => clearTimeout(timer);
+  }, [triggers, ms]);
+  const trigger = useCallback(() => setTriggers((count) => count + 1), []);
+  return [on, trigger];
 }
 
 export function useAutoDismiss(active: boolean, runtime: HodeRuntime, ms = SUCCESS_DISPLAY_MS): void {

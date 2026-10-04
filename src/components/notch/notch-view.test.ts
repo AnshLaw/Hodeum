@@ -132,6 +132,22 @@ describe("islandSize", () => {
     expect(islandSize(notchView(guiding()), { ...quiet, peek: true })).toBe("compact");
     expect(islandSize(notchView(guiding()), quiet)).toBe("guidance");
   });
+
+  it("rests as the tucked orb, whatever it was showing, until it's revealed again", () => {
+    const paused = notchView({ ...initialState, phase: "paused" });
+    for (const view of [notchView(initialState), paused, looking, notchView(guiding())]) {
+      expect(islandSize(view, { ...quiet, tucked: true })).toBe("tucked");
+    }
+    expect(islandSize(notchView(initialState), { ...quiet, phone: true, peek: true, tucked: true })).toBe("tucked");
+    expect(islandSize(notchView(initialState), { ...quiet, tucked: false })).toBe("idle");
+    expect(islandSize(paused, { ...quiet, tucked: false })).toBe("compact");
+  });
+
+  it("keeps the tucked orb a small circle Hodey sits in", () => {
+    expect(NOTCH_WIDTHS.tucked).toBeGreaterThanOrEqual(40);
+    expect(NOTCH_WIDTHS.tucked).toBeLessThanOrEqual(48);
+    expect(isExpanded({ ...notchView(initialState), size: "tucked" })).toBe(false);
+  });
 });
 
 describe("skillLabel", () => {

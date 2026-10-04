@@ -60,6 +60,8 @@ function setup(state: HodeState, saying?: string, conversation = true) {
   const interrupt = vi.fn();
   const doneSpeaking = new Set<() => void>();
   const hodeEvents = new Set<(event: HodeEvent) => void>();
+  /** Each change to whether a conversation is open, as the notch hears it. */
+  const conversationOpen: boolean[] = [];
   const off = connectVoice({
     speech,
     getState: () => state,
@@ -78,10 +80,11 @@ function setup(state: HodeState, saying?: string, conversation = true) {
       hodeEvents.add(listener);
       return () => hodeEvents.delete(listener);
     },
+    onConversation: (open) => conversationOpen.push(open),
   });
   const hodeyFinishes = () => doneSpeaking.forEach((l) => l());
   const hode = (event: HodeEvent) => hodeEvents.forEach((l) => l(event));
-  return { speech, dispatched, interrupt, off, hodeyFinishes, hode };
+  return { speech, dispatched, interrupt, off, hodeyFinishes, hode, conversationOpen };
 }
 
 describe("connectVoice", () => {
@@ -252,6 +255,67 @@ describe("conversation", () => {
     const { speech } = setup(guiding, undefined, false);
     tap(speech, "give me a hint");
     expect(speech.converse).not.toHaveBeenCalled();
+  });
+
+  describe("telling the notch it's open", () => {
+    it("is open from the learner's first words, across the mic reopening, until they go quiet", () => {
+      vi.useFakeTimers();
+      const { speech, hodeyFinishes, conversationOpen } = setup(guiding);
+      speech.setStatus("listening");
+      expect(conversationOpen).toEqual([]);
+      speech.say("give me a hint");
+      expect(conversationOpen).toEqual([true]);
+      // The tap's mic closes and the conversation's opens: no gap in between.
+      speech.setStatus("idle");
+      speech.setStatus("listening");
+      hodeyFinishes();
+      expect(conversationOpen).toEqual([true]);
+      vi.advanceTimersByTime(CONVERSATION_PATIENCE_MS + 1);
+      expect(conversationOpen).toEqual([true, false]);
+      vi.useRealTimers();
+    });
+
+    it("closes with the answer or the Hode, and when the conversation's mic closes", () => {
+      const dismissed = setup(guiding);
+      tap(dismissed.speech, "what is this");
+      dismissed.speech.setStatus("listening");
+      dismissed.hode({ type: "DISMISS" });
+      expect(dismissed.conversationOpen).toEqual([true, false]);
+      const micClosed = setup(guiding);
+      tap(micClosed.speech, "give me a hint");
+      micClosed.speech.setStatus("listening");
+      micClosed.speech.setStatus("idle");
+      expect(micClosed.conversationOpen).toEqual([true, false]);
+    });
+
+    it("closes when the conversation's mic can't open", async () => {
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const { speech, conversationOpen } = setup(guiding);
+      speech.converse.mockRejectedValueOnce(new Error("microphone busy"));
+      tap(speech, "give me a hint");
+      await vi.waitFor(() => expect(conversationOpen).toEqual([true, false]));
+      expect(errorLog).toHaveBeenCalledWith("Couldn't keep listening for the conversation", expect.any(Error));
+      errorLog.mockRestore();
+    });
+
+    it("opens after a wake word, and never with conversations off or for a thank-you", () => {
+      const woken = setup(guiding);
+      woken.speech.overheard("Hey Hodey, give me a hint");
+      expect(woken.conversationOpen).toEqual([true]);
+      const off = setup(guiding, undefined, false);
+      tap(off.speech, "give me a hint");
+      expect(off.conversationOpen).toEqual([]);
+      const thanks = setup(guiding);
+      tap(thanks.speech, "thanks");
+      expect(thanks.conversationOpen).toEqual([]);
+    });
+
+    it("isn't open where the mic can't hold a conversation", () => {
+      const { speech, conversationOpen } = setup(guiding);
+      Object.assign(speech, { converse: undefined });
+      tap(speech, "give me a hint");
+      expect(conversationOpen).toEqual([]);
+    });
   });
 
   describe("barge-in", () => {

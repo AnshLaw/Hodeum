@@ -216,12 +216,17 @@ const PRIVACY_LABELS: Record<ActivityChannel, string> = {
   cloud: COPY.privacyCloud,
 };
 
+/** What each lit privacy dot means, in the dots' order. */
+export function privacyLabels(activity: ActivityState): string[] {
+  return activeChannels(activity).map((channel) => PRIVACY_LABELS[channel]);
+}
+
 /** Green = reading the screen, orange = mic on, blue = cloud. Only shown while active, like iOS. */
 export function PrivacyDots({ activity, className = "" }: { activity: ActivityState; className?: string }) {
   const channels = activeChannels(activity);
   if (channels.length === 0) return null;
   return (
-    <span className={`privacy-dots ${className}`} role="status" aria-label={channels.map((c) => PRIVACY_LABELS[c]).join(", ")}>
+    <span className={`privacy-dots ${className}`} role="status" aria-label={privacyLabels(activity).join(", ")}>
       {channels.map((channel) => (
         <i key={channel} data-channel={channel} title={PRIVACY_LABELS[channel]} />
       ))}
