@@ -158,6 +158,26 @@ describe("GeminiReasoningProvider", () => {
     expect(action.kind).toBe("correct");
   });
 
+  it("settles the target by the name Gemini gave it, not an index that slipped", async () => {
+    const slipped = { ...POINT_AT_INSERT, target_index: 2, target_label: "Insert" };
+    const action = await new GeminiReasoningProvider(bridge(slipped)).reason(ctx());
+    expect(action.target).toMatchObject({ elementId: "tab item:Insert", bounds: INSERT_BOUNDS, label: "Insert" });
+    expect(action.target?.confidence).toBeLessThan(0.9);
+    const quoted = await new GeminiReasoningProvider(bridge({ ...POINT_AT_INSERT, target_index: 2, speech: "Click 'Insert'." })).reason(ctx());
+    expect(quoted.target?.elementId).toBe("tab item:Insert");
+  });
+
+  it("keeps the index when the name it gave is one we hid", async () => {
+    const action = await new GeminiReasoningProvider(bridge({ ...POINT_AT_INSERT, target_label: CONTENT_PLACEHOLDER })).reason(ctx());
+    expect(action.target).toEqual({ elementId: "tab item:Insert", bounds: INSERT_BOUNDS, confidence: 0.9, label: "Insert" });
+  });
+
+  it("doesn't trust an index its own name contradicts", async () => {
+    const action = await new GeminiReasoningProvider(bridge({ ...POINT_AT_INSERT, target_label: "Formulas" })).reason(ctx());
+    expect(action.target?.elementId).toBe("tab item:Insert");
+    expect(action.target?.confidence).toBeLessThan(0.65);
+  });
+
   it("gives no target when the model points at nothing", async () => {
     const action = await new GeminiReasoningProvider(bridge({ ...POINT_AT_INSERT, target_index: -1 })).reason(ctx());
     expect(action.target).toBeUndefined();

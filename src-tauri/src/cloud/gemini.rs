@@ -58,11 +58,13 @@ fn response_schema() -> Value {
         "properties": {
             "kind": { "type": "STRING", "enum": KINDS },
             "speech": { "type": "STRING" },
+            "target_label": { "type": "STRING" },
             "target_index": { "type": "INTEGER" },
             "confidence": { "type": "NUMBER" }
         },
-        "required": ["kind", "speech", "target_index", "confidence"],
-        "propertyOrdering": ["kind", "speech", "target_index", "confidence"]
+        // Keys come out in this order, so the model names the control before it numbers it.
+        "required": ["kind", "speech", "target_label", "target_index", "confidence"],
+        "propertyOrdering": ["kind", "speech", "target_label", "target_index", "confidence"]
     })
 }
 
@@ -160,6 +162,15 @@ mod tests {
 
     fn request() -> GeminiRequest {
         GeminiRequest { system: "You are Hodey.".into(), prompt: "Current step: Open the Insert tab.".into() }
+    }
+
+    #[test]
+    fn asks_for_the_controls_name_before_its_number() {
+        let schema = response_schema();
+        let order = schema["propertyOrdering"].as_array().expect("an ordering");
+        let at = |key: &str| order.iter().position(|k| k == key).expect(key);
+        assert!(at("target_label") < at("target_index"), "names the control, then numbers it");
+        assert!(schema["required"].as_array().expect("required keys").contains(&json!("target_label")));
     }
 
     #[test]
