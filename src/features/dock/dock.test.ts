@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_PREFS, applyCommand, loadPrefs, notchWindow, reservesSpace, savePrefs, seedPrefs, shouldReveal } from "./dock";
+import { DEFAULT_PREFS, applyCommand, holdsSpace, loadPrefs, notchWindow, reservesSpace, savePrefs, seedPrefs, shouldReveal } from "./dock";
 
 const storage = (value: string | null) => ({ getItem: () => value });
 
@@ -80,15 +80,46 @@ describe("visibility rules", () => {
 
   it("a copilot sidebar reserves space while pinned, or under auto-hide while a Hode runs", () => {
     const copilot = { dock: "left", visibility: "auto", sidebar: "copilot" } as const;
-    expect(reservesSpace(copilot, "guiding")).toBe(true);
-    expect(reservesSpace(copilot, "idle")).toBe(false);
-    expect(reservesSpace({ ...copilot, visibility: "pinned" }, "idle")).toBe(true);
-    expect(reservesSpace({ ...copilot, visibility: "hidden" }, "guiding")).toBe(false);
-    expect(reservesSpace({ ...copilot, dock: "top" }, "guiding")).toBe(false);
+    expect(reservesSpace(copilot, true)).toBe(true);
+    expect(reservesSpace(copilot, false)).toBe(false);
+    expect(reservesSpace({ ...copilot, visibility: "pinned" }, false)).toBe(true);
+    expect(reservesSpace({ ...copilot, visibility: "hidden" }, true)).toBe(false);
+    expect(reservesSpace({ ...copilot, dock: "top" }, true)).toBe(false);
   });
 
   it("a floating sidebar never reserves space", () => {
-    expect(reservesSpace({ dock: "right", visibility: "pinned", sidebar: "floating" }, "guiding")).toBe(false);
+    expect(reservesSpace({ dock: "right", visibility: "pinned", sidebar: "floating" }, true)).toBe(false);
+  });
+});
+
+describe("holdsSpace", () => {
+  const pack = { id: "excel-pivot" };
+
+  it("holds the strip for a Hode, from the goal form to the success card", () => {
+    expect(holdsSpace({ phase: "goal_entry", open: false })).toBe(true);
+    expect(holdsSpace({ phase: "observing", pack, open: false })).toBe(true);
+    expect(holdsSpace({ phase: "guiding", open: true })).toBe(true);
+    expect(holdsSpace({ phase: "success", pack, open: false })).toBe(true);
+  });
+
+  it("keeps holding while the learner asks a question mid-Hode", () => {
+    for (const phase of ["annotating", "observing", "reasoning", "answering"] as const) {
+      expect(holdsSpace({ phase, pack, open: false, resumePhase: "observing" })).toBe(true);
+    }
+  });
+
+  it("never reflows windows for a one-off Point & Ask or spoken question from idle", () => {
+    for (const phase of ["annotating", "observing", "reasoning", "answering"] as const) {
+      expect(holdsSpace({ phase, open: false, resumePhase: "idle" })).toBe(false);
+    }
+  });
+
+  it("keeps a goal being typed when the learner points at something first", () => {
+    expect(holdsSpace({ phase: "annotating", open: false, resumePhase: "goal_entry" })).toBe(true);
+  });
+
+  it("releases once idle", () => {
+    expect(holdsSpace({ phase: "idle", pack, open: false })).toBe(false);
   });
 });
 
@@ -96,17 +127,17 @@ describe("notchWindow while the Hodeum app is open", () => {
   const copilot = { dock: "left", visibility: "pinned", sidebar: "copilot" } as const;
 
   it("hides the notch and gives back its screen space while the app is open", () => {
-    expect(notchWindow(copilot, "guiding", "open")).toEqual({ visible: false, reserve: false });
+    expect(notchWindow(copilot, true, "open")).toEqual({ visible: false, reserve: false });
   });
 
   it("shows the notch as the app folds back, but reserves space only once it's gone", () => {
-    expect(notchWindow(copilot, "guiding", "closing")).toEqual({ visible: true, reserve: false });
-    expect(notchWindow(copilot, "guiding", "closed")).toEqual({ visible: true, reserve: true });
+    expect(notchWindow(copilot, true, "closing")).toEqual({ visible: true, reserve: false });
+    expect(notchWindow(copilot, true, "closed")).toEqual({ visible: true, reserve: true });
   });
 
   it("restores the learner's own choice afterwards, including a hidden notch", () => {
-    expect(notchWindow({ ...copilot, visibility: "hidden" }, "idle", "closed")).toEqual({ visible: false, reserve: false });
-    expect(notchWindow({ ...copilot, visibility: "hidden" }, "idle", "closing")).toEqual({ visible: false, reserve: false });
-    expect(notchWindow({ ...copilot, dock: "top" }, "idle", "closed")).toEqual({ visible: true, reserve: false });
+    expect(notchWindow({ ...copilot, visibility: "hidden" }, false, "closed")).toEqual({ visible: false, reserve: false });
+    expect(notchWindow({ ...copilot, visibility: "hidden" }, false, "closing")).toEqual({ visible: false, reserve: false });
+    expect(notchWindow({ ...copilot, dock: "top" }, false, "closed")).toEqual({ visible: true, reserve: false });
   });
 });
