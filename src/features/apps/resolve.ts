@@ -1,4 +1,5 @@
 import type { InstalledApp } from "../../lib/types";
+import { COMMON_WORDS } from "./common-words";
 
 /** A spoken app name against the Start menu's apps: one app, a few equally good ones, or none. */
 export type AppMatch = { kind: "match"; app: InstalledApp } | { kind: "ambiguous"; options: InstalledApp[] } | { kind: "none" };
@@ -24,6 +25,8 @@ const JARO_WINKLER_SCALE = 0.1;
 
 interface KnownApp {
   id: string;
+  /** What its windows report as their app (`KNOWN` in src-tauri/src/apps/identity.rs). */
+  name: string;
   /** Matches the catalog entry's id (its AUMID or shortcut path). */
   catalogId: RegExp;
   aliases: string[];
@@ -31,19 +34,19 @@ interface KnownApp {
 
 /** The apps learners ask for most, with what they call them (Hindi spellings too). */
 const KNOWN: KnownApp[] = [
-  { id: "excel", catalogId: /^Microsoft\.Office\.EXCEL\.EXE/i, aliases: ["excel", "spreadsheet", "एक्सेल"] },
-  { id: "word", catalogId: /^Microsoft\.Office\.WINWORD\.EXE/i, aliases: ["word", "ms word", "वर्ड"] },
-  { id: "powerpoint", catalogId: /^Microsoft\.Office\.POWERPNT\.EXE/i, aliases: ["powerpoint", "power point", "ppt", "पावरपॉइंट", "पावर पॉइंट"] },
-  { id: "file-explorer", catalogId: /^Microsoft\.Windows\.Explorer$/i, aliases: ["file explorer", "explorer", "files", "my files", "this pc", "my computer", "फ़ाइल एक्सप्लोरर", "फाइल एक्सप्लोरर"] },
-  { id: "settings", catalogId: /^windows\.immersivecontrolpanel_/i, aliases: ["settings", "windows settings", "setting", "सेटिंग्स", "सेटिंग"] },
-  { id: "calculator", catalogId: /^Microsoft\.WindowsCalculator_/i, aliases: ["calculator", "calc", "कैलकुलेटर"] },
-  { id: "notepad", catalogId: /^Microsoft\.WindowsNotepad_|notepad\.exe$/i, aliases: ["notepad", "note pad", "नोटपैड"] },
-  { id: "paint", catalogId: /^Microsoft\.Paint_|mspaint\.exe$/i, aliases: ["paint", "ms paint", "पेंट"] },
-  { id: "whatsapp", catalogId: /WhatsAppDesktop/i, aliases: ["whatsapp", "whats app", "watsapp", "whatsapp desktop", "व्हाट्सएप", "व्हाट्सऐप", "वॉट्सऐप", "वॉट्सएप"] },
-  { id: "brave", catalogId: /^Brave$/i, aliases: ["brave", "ब्रेव"] },
-  { id: "chrome", catalogId: /^Chrome$/i, aliases: ["chrome", "क्रोम"] },
-  { id: "edge", catalogId: /^MSEdge$/i, aliases: ["edge", "ms edge", "एज"] },
-  { id: "vs-code", catalogId: /VisualStudioCode/i, aliases: ["vs code", "vscode", "visual studio code", "code"] },
+  { id: "excel", name: "Excel", catalogId: /^Microsoft\.Office\.EXCEL\.EXE/i, aliases: ["excel", "spreadsheet", "एक्सेल"] },
+  { id: "word", name: "Word", catalogId: /^Microsoft\.Office\.WINWORD\.EXE/i, aliases: ["word", "ms word", "वर्ड"] },
+  { id: "powerpoint", name: "PowerPoint", catalogId: /^Microsoft\.Office\.POWERPNT\.EXE/i, aliases: ["powerpoint", "power point", "ppt", "पावरपॉइंट", "पावर पॉइंट"] },
+  { id: "file-explorer", name: "File Explorer", catalogId: /^Microsoft\.Windows\.Explorer$/i, aliases: ["file explorer", "explorer", "files", "my files", "this pc", "my computer", "फ़ाइल एक्सप्लोरर", "फाइल एक्सप्लोरर"] },
+  { id: "settings", name: "Settings", catalogId: /^windows\.immersivecontrolpanel_/i, aliases: ["settings", "windows settings", "setting", "सेटिंग्स", "सेटिंग"] },
+  { id: "calculator", name: "Calculator", catalogId: /^Microsoft\.WindowsCalculator_/i, aliases: ["calculator", "calc", "कैलकुलेटर"] },
+  { id: "notepad", name: "Notepad", catalogId: /^Microsoft\.WindowsNotepad_|notepad\.exe$/i, aliases: ["notepad", "note pad", "नोटपैड"] },
+  { id: "paint", name: "Paint", catalogId: /^Microsoft\.Paint_|mspaint\.exe$/i, aliases: ["paint", "ms paint", "पेंट"] },
+  { id: "whatsapp", name: "WhatsApp", catalogId: /WhatsAppDesktop/i, aliases: ["whatsapp", "whats app", "watsapp", "whatsapp desktop", "व्हाट्सएप", "व्हाट्सऐप", "वॉट्सऐप", "वॉट्सएप"] },
+  { id: "brave", name: "Brave", catalogId: /^Brave$/i, aliases: ["brave", "ब्रेव"] },
+  { id: "chrome", name: "Chrome", catalogId: /^Chrome$/i, aliases: ["chrome", "क्रोम"] },
+  { id: "edge", name: "Edge", catalogId: /^MSEdge$/i, aliases: ["edge", "ms edge", "एज"] },
+  { id: "vs-code", name: "VS Code", catalogId: /VisualStudioCode/i, aliases: ["vs code", "vscode", "visual studio code", "code"] },
 ];
 
 const LEADING = /^(?:the |my |microsoft |ms |google )+/;
@@ -217,5 +220,132 @@ export function pickOption(reply: string, options: string[]): number | undefined
   if (words.length === 0) return undefined;
   const place = words.length === 1 ? placeOf(words[0], options.length) : undefined;
   return place ?? namedOption(words, options);
+}
+
+/** Hodeum lists itself in the Start menu; a goal about Hodeum is never about an app to go and open. */
+const OWN_NAME = "hodeum";
+/** Shorter names ("X") are too easily a letter or a word in a goal. */
+const MIN_NAME_CHARS = 3;
+/** A name of up to this many everyday words ("Photos", "Phone Link") must be used like an app; longer ones are names. */
+const MAX_EVERYDAY_NAME_WORDS = 2;
+/** Said right before an app's name: "in Paint", "on Discord", "using Notepad", "open Photos". */
+const BEFORE_APP = new Set("in on using use with open launch start run from into inside".split(" "));
+/** May come between that word and the name: "in the Photos app", "on my Phone Link". */
+const DETERMINERS = new Set("the my your this".split(" "));
+/** Said right after an app's name: "the Photos app", and Hinglish and Hindi postpositions ("Paint mein", "Discord pe"). */
+const AFTER_APP = new Set("app application program browser window mein me pe par se में पर पे से".split(" "));
+/** "(64bit)", "(classic)", "(work or school)": not what people call the app. */
+const QUALIFIER = /\s*\([^)]*\)/g;
+const WORD = /[\p{L}\p{M}\p{N}]+/gu;
+const CAPITALISED = /^\p{Lu}/u;
+/** A name needs a letter: "365" of "Microsoft 365" is a number in a goal. */
+const LETTER = /\p{L}/u;
+
+/** One way to name an app, as words. */
+interface Phrase {
+  words: string[];
+  /** Its whole Start-menu name, not a shortening ("ChatGPT", not "ChatGPT Classic" without "Classic"). */
+  whole: boolean;
+}
+
+/** Where a goal names an app, in words. */
+interface Mention {
+  /** What the app's windows report as their app. */
+  app: string;
+  start: number;
+  /** One past the last word. */
+  end: number;
+  whole: boolean;
+}
+
+/** A text's words, case kept, so a capitalised name ("Paint") can say it's the app. */
+function textWords(text: string): string[] {
+  return text.normalize("NFC").replace(NUKTA, "").match(WORD) ?? [];
+}
+
+const knownEntry = (app: InstalledApp) => KNOWN.find((known) => known.catalogId.test(app.id));
+
+/**
+ * What the app's windows report as their app (apps/identity.rs): a known app's own name ("VS Code"), a packaged
+ * app's Start-menu name, and a desktop app's without "(64bit)" and the like, since its windows go by its program's
+ * description.
+ */
+function windowName(app: InstalledApp): string {
+  const known = knownEntry(app);
+  if (known) return known.name;
+  return app.kind === "packaged" ? app.name : app.name.replace(QUALIFIER, "").trim();
+}
+
+/** How a goal can name the app: its whole name, the name without "Microsoft" and the like, and a known app's aliases. */
+function phrasesOf(app: InstalledApp): Phrase[] {
+  const name = app.name.replace(QUALIFIER, " ");
+  const whole = textWords(name.toLowerCase());
+  const shortened = [normalizeName(name), ...(knownEntry(app)?.aliases ?? []).map(normalizeName)].map(textWords);
+  const phrases = new Map<string, Phrase>();
+  for (const words of [whole, ...shortened]) {
+    const text = words.join(" ");
+    if (!phrases.has(text) && text.length >= MIN_NAME_CHARS && LETTER.test(text)) phrases.set(text, { words, whole: words === whole });
+  }
+  return [...phrases.values()];
+}
+
+/** Only everyday words: then the goal has to use it like an app. */
+function isEveryday(phrase: string[]): boolean {
+  return phrase.length <= MAX_EVERYDAY_NAME_WORDS && phrase.every((word) => COMMON_WORDS.has(word));
+}
+
+/** Capitalised where a plain word wouldn't be: not the first word, and not in text written all in capitals. */
+function capitalisedMidSentence(words: string[], start: number, end: number): boolean {
+  const shouting = words.every((word) => word === word.toUpperCase());
+  return start > 0 && !shouting && words.slice(start, end).every((word) => CAPITALISED.test(word));
+}
+
+/** "in Paint", "in the Photos app", "Paint mein", or "Paint" capitalised mid-sentence. */
+function usedAsApp(words: string[], lower: string[], start: number, end: number): boolean {
+  const before = lower[start - 1] ?? "";
+  const cued = BEFORE_APP.has(before) || (DETERMINERS.has(before) && BEFORE_APP.has(lower[start - 2] ?? ""));
+  return cued || AFTER_APP.has(lower[end] ?? "") || capitalisedMidSentence(words, start, end);
+}
+
+/** Where `phrase` occurs in `lower` as whole words. */
+function startsOf(lower: string[], phrase: string[]): number[] {
+  const starts: number[] = [];
+  for (let start = 0; start + phrase.length <= lower.length; start++) {
+    if (phrase.every((word, offset) => lower[start + offset] === word)) starts.push(start);
+  }
+  return starts;
+}
+
+function mentionsOf(app: InstalledApp, words: string[], lower: string[]): Mention[] {
+  const name = windowName(app);
+  return phrasesOf(app).flatMap(({ words: phrase, whole }) =>
+    startsOf(lower, phrase)
+      .filter((start) => !isEveryday(phrase) || usedAsApp(words, lower, start, start + phrase.length))
+      .map((start) => ({ app: name, start, end: start + phrase.length, whole })),
+  );
+}
+
+/** Inside a longer mention: "WhatsApp" in "WhatsApp Web", "Photos" in "Amazon Photos". */
+const within = (inner: Mention, outer: Mention) => outer.start <= inner.start && inner.end <= outer.end && outer.end - outer.start > inner.end - inner.start;
+const sameSpan = (a: Mention, b: Mention) => a.start === b.start && a.end === b.end;
+
+/** The mentions that say which app: none inside a longer one, and a whole name over a shortening of the same words. */
+function deciding(mentions: Mention[]): Mention[] {
+  const outer = mentions.filter((mention) => !mentions.some((other) => within(mention, other)));
+  return outer.filter((mention) => mention.whole || !outer.some((other) => other.whole && sameSpan(other, mention)));
+}
+
+/**
+ * The installed app a goal names ("send a message on Discord" → "Discord"), as its windows report it, or
+ * undefined when it names none or several. The whole name must be there as words; a name of everyday words
+ * ("Photos", "Phone Link") counts only when used like an app: "in Photos", "open Photos", "the Photos app",
+ * "Photos mein", or capitalised mid-sentence.
+ */
+export function appNamedIn(goal: string, catalog: InstalledApp[]): string | undefined {
+  const words = textWords(goal);
+  const lower = words.map((word) => word.toLowerCase());
+  const mentions = catalog.filter((app) => normalizeName(app.name) !== OWN_NAME).flatMap((app) => mentionsOf(app, words, lower));
+  const names = new Set(deciding(mentions).map((mention) => mention.app));
+  return names.size === 1 ? [...names][0] : undefined;
 }
 

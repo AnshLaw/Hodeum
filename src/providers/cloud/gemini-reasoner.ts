@@ -1,10 +1,10 @@
 import { DEFAULT_GEMINI_MODEL } from "../../data/settings";
 import type { ActionTarget, StateSignal, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
 import type { ReasoningHooks, ReasoningProvider } from "../interfaces";
-import { agreementConfidence, quotedLabels, type Resolution } from "../vision/grounding";
+import { agreementConfidence, type Resolution } from "../vision/grounding";
 import { LANGUAGE_LINES, selectCandidates, untrusted } from "../vision/prompt";
 import { validateReply, type MoreTarget, type VisionReply } from "../vision/schema";
-import { laterTargets, namesOf, resolveNamed, targetsField, withMention } from "../vision/targets";
+import { firstQuotes, laterTargets, namesOf, resolveNamed, targetsField, withMention } from "../vision/targets";
 import { CloudSkipped } from "./gated";
 import { describeActions, type ControlLabel } from "../../features/hode/change";
 import { CONTENT_PLACEHOLDER as HIDDEN, cloudName } from "./redact";
@@ -116,9 +116,9 @@ export function buildGeminiRequest(context: TeachingContext, candidates: UiEleme
 /** A name we hid from Gemini says nothing about which control it means. */
 const shown = (label: string) => label !== "" && !label.includes(HIDDEN);
 
-/** The names Gemini gave its target: target_label, then any it quoted. */
+/** The names Gemini gave its target: target_label, then any it quoted for it (not for a later control). */
 function labelsOf(reply: VisionReply): string[] {
-  const labels = [reply.target_label?.trim() ?? "", ...quotedLabels(reply.speech)];
+  const labels = [reply.target_label?.trim() ?? "", ...firstQuotes(reply.speech, reply.more_targets)];
   return [...new Set(labels.filter(shown))];
 }
 
