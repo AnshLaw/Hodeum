@@ -24,3 +24,10 @@ src-tauri/icons/ios/
 # Local AI runtime and weights (downloaded by scripts/setup-local-ai.ps1)
 models/
 runtime/
+
+# iOS app: generated project and build output (built in CI, see .github/workflows/ios.yml)
+ios/Hodeum.xcodeproj/
+ios/build/
+ios/dist/
+ios/HodeyCore/.build/
+*.ipa
