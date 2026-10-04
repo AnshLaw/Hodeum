@@ -86,7 +86,9 @@ export interface UiElement {
 export type LearnerInput =
   | { kind: "click"; at: Point; button: MouseButton }
   | { kind: "undo" }
-  | { kind: "back" };
+  | { kind: "back" }
+  /** Enter pressed in the learner's app (sending a message, confirming a box); never what was typed. */
+  | { kind: "submit" };
 
 export interface ScreenObservation {
   app: string;

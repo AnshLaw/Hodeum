@@ -78,9 +78,12 @@ function offTrack(action: StepAction, change: ScreenChange, step: TaskStep | und
   const popup = [...change.appeared, ...change.disappeared].some((ref) => POPUP_ROLES.has(ref.role.toLowerCase()));
   const selection = change.selected.length + change.deselected.length > 0;
   const structural = change.appeared.length + change.disappeared.length >= STRUCTURAL_CHANGE_MIN;
-  const undone = (action.after.inputs ?? []).some((input) => input.kind === "undo" || input.kind === "back");
+  const inputs = action.after.inputs ?? [];
+  const undone = inputs.some((input) => input.kind === "undo" || input.kind === "back");
+  // Enter sends or confirms something: worth a fresh look even when the read shows little change yet.
+  const submitted = inputs.some((input) => input.kind === "submit");
   const strayClick = step ? wrongControl(action, step) !== undefined : clickedControl(action) !== undefined;
-  return popup || selection || structural || undone || strayClick;
+  return popup || selection || structural || undone || submitted || strayClick;
 }
 
 /**

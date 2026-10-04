@@ -1,7 +1,7 @@
 import { onGoalSubmitted, onStartHode, onThinking } from "./flow";
 import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
 import { onPracticeAgain, onReviewAnswered } from "./closing";
-import { onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onShowMe, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
+import { onAppSwitched, onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onShowMe, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
 import type { EventOf, HodeEvent, HodeState, Transition } from "./model";
 import {
   onAnnotateCancel,
@@ -40,6 +40,7 @@ const handlers: Handlers = {
   EXPLAIN_REQUESTED: onExplainRequested,
   REPEAT: onRepeat,
   LOOK_AGAIN: onLookAgain,
+  APP_SWITCHED: onAppSwitched,
   LET_ME_TRY: onLetMeTry,
   SKIP_STEP: onSkipStep,
   REVIEW_ANSWERED: onReviewAnswered,

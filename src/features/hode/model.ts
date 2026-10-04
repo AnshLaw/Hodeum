@@ -219,6 +219,8 @@ export type HodeEvent =
   | { type: "VOICE_QUESTION"; question: string; lookUp?: boolean }
   /** The learner asks Hodey to re-read the screen now (PRD §11 "look again"). */
   | { type: "LOOK_AGAIN" }
+  /** Another window came to the front (the learner opened or switched apps, with or without a click). */
+  | { type: "APP_SWITCHED" }
   | { type: "LET_ME_TRY" }
   /** Past a step Hodey can't see done; nothing is learned or failed for it. */
   | { type: "SKIP_STEP" }
