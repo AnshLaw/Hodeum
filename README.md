@@ -126,6 +126,22 @@ npm run tauri:dev    # native notch + overlay windows
 cd src-tauri; cargo test --lib   # Rust geometry, hit-test, dock, app-bar, perception helpers
 ```
 
+### Install on this PC
+
+Builds a normal Windows app with a Start menu entry, a Desktop shortcut and a tray icon. Run `scripts/setup-local-ai.ps1` first (see above).
+
+```powershell
+npm run tauri:build
+# -> src-tauri\target\release\bundle\nsis\Hodeum_0.1.0_x64-setup.exe
+```
+
+1. Run `Hodeum_0.1.0_x64-setup.exe`. It installs for your user only (no admin) to `%LOCALAPPDATA%\Hodeum`, and fetches WebView2 only if Windows doesn't already have it.
+2. Leave **Create desktop shortcut** ticked on the last page. You get **Hodeum** on the Desktop and in Start (type "Hodeum" to search). Uninstall it from **Settings → Apps**, which also removes both shortcuts.
+3. The tray icon's tooltip says **Hodeum**. Left-click it to bring Hodey back if hidden. Right-click it for **Open Hodeum**, **Show / hide Hodey**, position, **Start Hodeum when I sign in** and **Quit Hodeum**.
+4. Windows often puts new tray icons in the overflow (the **^** arrow). To keep it visible, drag the icon from there onto the taskbar, or turn on Hodeum in **Settings → Personalization → Taskbar → Other system tray icons**.
+
+**This is a dev-machine install.** The installer contains the app and its speech DLLs, but not the ~4 GB of local AI files. When the app is built, the path to the checkout's `models/` and `runtime/` folders is written into it (from a git worktree, that path is the main checkout's). The installed app reads them from there, so leave that folder where it is. If you move or delete it, the local model and voice report as not found. To fix that, run the setup script again and rebuild.
+
 ### Practice stage walkthrough
 
 1. Hover the notch and choose **Start a Hode**, then pick **Make a PivotTable**.

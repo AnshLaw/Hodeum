@@ -51,11 +51,16 @@ export function seedPrefs(storage: ReadStorage & WriteStorage, prefs: DockPrefs)
 }
 
 /** Commands from the tray menu and the Hodey key + H. Must match ids in src-tauri/src/tray.rs. */
-export type ShellCommand = "toggle-visibility" | "dock-top" | "dock-left" | "dock-right" | "pinned" | "auto" | "sidebar-copilot" | "sidebar-floating";
+export type ShellCommand = "show" | "toggle-visibility" | "dock-top" | "dock-left" | "dock-right" | "pinned" | "auto" | "sidebar-copilot" | "sidebar-floating";
 
-/** Showing again after Hide pins the notch, so it doesn't immediately tuck away under auto-hide. */
+/**
+ * Showing again after Hide pins the notch, so it doesn't immediately tuck away under auto-hide.
+ * `show` (a left-click on the tray icon) only brings back a hidden notch; it never hides one.
+ */
 export function applyCommand(prefs: DockPrefs, command: string): DockPrefs {
   switch (command as ShellCommand) {
+    case "show":
+      return prefs.visibility === "hidden" ? { ...prefs, visibility: "pinned" } : prefs;
     case "toggle-visibility":
       return { ...prefs, visibility: prefs.visibility === "hidden" ? "pinned" : "hidden" };
     case "dock-top":
