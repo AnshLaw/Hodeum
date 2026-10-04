@@ -57,6 +57,12 @@ describe("modes in the notch", () => {
     expect(view.steps).toBeUndefined();
     expect(notchView(guiding({ mode: "teach", showAllSteps: true })).steps).toHaveLength(2);
   });
+
+  it("agent mode shows the whole flow without being asked", () => {
+    const view = notchView(guiding({ mode: "agent" }));
+    expect(view.steps?.map((s) => s.state)).toEqual(["current", "todo"]);
+    expect(view.controls).not.toContain("all_steps");
+  });
 });
 
 describe("spoken answers", () => {

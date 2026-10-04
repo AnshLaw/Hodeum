@@ -80,7 +80,9 @@ describe("iPhone Dark Mode Hode", () => {
     await h.start();
     await h.act("app:Settings");
     expect(h.state().action?.kind).toBe("clarify");
-    expect(h.spoken.at(-1)).toBe(COPY.clarifyPhone);
+    // Opening Settings was right: acknowledged first, then the next target is looked for.
+    expect(h.state().ack).toBeDefined();
+    expect(h.spoken.at(-1)).toBe(`${h.state().ack} ${COPY.clarifyPhone}`);
 
     await h.act("list:scroll");
     expect(h.state().action?.kind).toBe("guide");

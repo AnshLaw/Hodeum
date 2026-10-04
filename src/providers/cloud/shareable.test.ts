@@ -16,6 +16,15 @@ describe("shareableText", () => {
     expect(shareableText(spoken().acks[0], corpus)).toBe(true);
   });
 
+  it("lets a step's acknowledgement go with the next instruction, and a Teach line ending in the why", () => {
+    for (const language of ["en", "hi", "hinglish"] as const) {
+      const say = spoken(language);
+      const step = localizePack(PIVOT, language).steps[1];
+      for (const ack of [...say.stepDone, ...say.stepDoneLight]) expect(shareableText(`${ack} ${step.speech.hint}`, corpus)).toBe(true);
+      expect(shareableText(`${step.speech.demonstrate} ${step.explain}`, corpus)).toBe(true);
+    }
+  });
+
   it("keeps anything else local: answers, open-goal guidance, lines that name what's on screen", () => {
     expect(shareableText("That cell says 90,000.", corpus)).toBe(false);
     expect(shareableText(spoken().itsHere("Q3 salaries.xlsx"), corpus)).toBe(false);

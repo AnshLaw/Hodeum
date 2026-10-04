@@ -77,6 +77,12 @@ export interface HodeState {
   surprise?: string;
   /** The learner acted while the step was being prepared; only then may the first screen read finish it. */
   actedWhilePreparing?: boolean;
+  /** "Exactly right." for the step just done, said ahead of the next step's guidance. */
+  pendingAck?: string;
+  /** That acknowledgement, shown in the notch until the learner acts again. */
+  ack?: string;
+  /** The last acknowledgement used, so the next one is a different phrase. */
+  lastAck?: string;
 }
 
 export const initialState: HodeState = {

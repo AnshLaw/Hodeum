@@ -24,6 +24,7 @@ const MOST_HELP = ASSISTANCE_LEVELS[0];
 function escalateState(s: HodeState, options: { correction?: string; countsAsMistake: boolean }): HodeState {
   return {
     ...s,
+    ack: undefined,
     level: escalate(s.level),
     escalated: true,
     mistakes: s.mistakes + (options.countsAsMistake ? 1 : 0),
@@ -98,11 +99,24 @@ function onUnfinishedAction(s: HodeState, step: TaskStep, wasReasoning: boolean)
   return { state: { ...s, wrongActions }, effects: [] };
 }
 
+/**
+ * A short "that's right" for a step just done: always in Teach (a remembered step gets its own line),
+ * in Help only when Hodey stepped in on it, and a lighter one in Agent. Never the same phrase twice running.
+ */
+export function acknowledgement(s: HodeState): string | undefined {
+  if (s.mode === "help" && !s.escalated) return undefined;
+  const words = spoken(s.language);
+  const unaided = s.mode === "teach" && !s.escalated && (s.level === "observe" || s.level === "independent");
+  if (unaided && s.lastAck !== words.rememberedOnYourOwn) return words.rememberedOnYourOwn;
+  const pool = (s.mode === "agent" ? words.stepDoneLight : words.stepDone).filter((line) => line !== s.lastAck);
+  return pool[s.stepIndex % pool.length];
+}
+
 function completeStep(s: HodeState, step: TaskStep): Transition {
   const outcome: StepOutcome = { completed: true, mistakes: s.mistakes, level: s.level, escalated: s.escalated };
   const learnedSkills = s.learnedSkills.includes(step.skill) ? s.learnedSkills : [...s.learnedSkills, step.skill];
   const done: HodeEffect[] = [CANCEL_TIMER, { type: "clearOverlay" }, { type: "recordOutcome", skillId: step.skill, outcome }];
-  const finished = { ...s, learnedSkills };
+  const finished: HodeState = { ...s, learnedSkills, ack: undefined, pendingAck: undefined };
   const nextIndex = s.stepIndex + 1;
   if (!s.pack || nextIndex >= s.pack.steps.length) {
     return {
@@ -110,9 +124,10 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
       effects: [...done, { type: "say", text: spoken(s.language).hodeCompleteSpeech }],
     };
   }
-  const unaided = !s.escalated && (s.level === "observe" || s.level === "independent");
-  const praise: HodeEffect[] = unaided ? [{ type: "say", text: spoken(s.language).rememberedOnYourOwn }] : [];
-  return withLeadingEffects(beginStep(finished, nextIndex), [...done, ...praise]);
+  // Said with the next step's guidance, so the next instruction doesn't cut the acknowledgement off.
+  const ack = acknowledgement(s);
+  const acknowledged: HodeState = ack ? { ...finished, pendingAck: ack, lastAck: ack } : finished;
+  return withLeadingEffects(beginStep(acknowledged, nextIndex), done);
 }
 
 /** Open-ended Hodes have no success signal to check, so every learner action asks the model what's next. */
@@ -150,7 +165,7 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
   if (s.waitingForApp) return requestReason({ ...s, observation: e.observation, waitingForApp: undefined });
   const previous = s.observation;
   const stepActions = remember(s.stepActions, { before: previous, after: e.observation });
-  const next = { ...s, observation: e.observation, stepActions };
+  const next: HodeState = { ...s, observation: e.observation, stepActions, ack: undefined };
   if (evaluateSignal(step.success, e.observation)) return completeStep(next, step);
   const mistake = step.mistakes.find((m) => becameTrue(m.signal, previous, e.observation));
   if (mistake) {

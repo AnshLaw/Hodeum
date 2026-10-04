@@ -79,7 +79,8 @@ function guidanceView(s: HodeState): NotchView {
   const step = currentStep(s);
   const total = s.pack?.steps.length ?? 0;
   const silent = s.level === "observe" || s.level === "independent";
-  const eyebrow = `${COPY.stepOf(s.stepIndex + 1, total)} · ${MODE_COPY[s.mode].title}`;
+  // A step just done right is acknowledged here too, so it's seen when Hodey is muted.
+  const eyebrow = s.ack ?? `${COPY.stepOf(s.stepIndex + 1, total)} · ${MODE_COPY[s.mode].title}`;
   if (s.mode === "help" && silent && !s.correction) return standingByView(s, eyebrow, total);
   const speech = s.action?.speech ?? "";
   const showObjective = speech === "" || (silent && s.action?.kind === "guide");
@@ -92,9 +93,10 @@ function guidanceView(s: HodeState): NotchView {
     detail: s.explanation ?? s.notice ?? prerequisites,
     progress: { current: s.stepIndex, total },
     busy: false,
-    controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "repeat", "look_again", ...(s.mode === "help" ? [] : (["all_steps"] as const)), "point", "pause", "end"],
+    controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "repeat", "look_again", ...(s.mode === "teach" ? (["all_steps"] as const) : []), "point", "pause", "end"],
     hintLabel: QUIET_LEVELS.has(s.level) ? COPY.needHint : COPY.hint,
-    steps: s.showAllSteps ? stepItems(s) : undefined,
+    // Agent shows the whole flow; Teach only once the learner asks for All steps.
+    steps: s.mode === "agent" || s.showAllSteps ? stepItems(s) : undefined,
   };
 }
 
