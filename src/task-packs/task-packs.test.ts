@@ -95,3 +95,13 @@ describe("appFromGoal", () => {
     expect(appFromGoal("open the sidebar in edge")).toBe("Edge");
   });
 });
+
+/** Words a speech engine can't pronounce right without knowing the sense ("lives" as lyves). */
+const HETERONYMS = /\b(lives|reads?|wound|tears?|leads?|bass|wind|minute|object|present|record|refuse|desert|bow)\b/i;
+
+describe("lesson speech", () => {
+  it("avoids words the voice may say in the wrong sense", () => {
+    const spoken = TASK_PACKS.flatMap((pack) => pack.steps.flatMap((s) => [s.objective, s.explain, ...Object.values(s.speech), ...s.mistakes.map((m) => m.correction)]));
+    expect(spoken.filter((line) => HETERONYMS.test(line))).toEqual([]);
+  });
+});

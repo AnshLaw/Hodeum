@@ -18,7 +18,7 @@
         "observe": "",
         "independent": ""
       },
-      "explain": "Settings is where every iPhone option lives, including how the screen looks.",
+      "explain": "Settings holds every iPhone option, including how the screen looks.",
       "success": { "kind": "element_visible", "names": ["Airplane Mode"] },
       "mistakes": []
     },
