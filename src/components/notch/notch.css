@@ -392,6 +392,8 @@
 .notch,
 .sidebar {
   --sliver: 5px;
+  --sidebar-float-gap: 10px;
+  --sidebar-tab-height: 120px;
 }
 
 .sidebar {
@@ -564,12 +566,14 @@
   border-left: 1px solid var(--hd-line);
 }
 
-/* Floating: a card hovering over windows, which keep their space. */
+/*
+ * Floating: a card hovering over windows, which keep their space. It spans the dock's height like the
+ * copilot panel, so new steps or a shorter Point & Ask card never re-centre it and move the header.
+ */
 .sidebar--floating.sidebar--active {
-  align-self: center;
+  align-self: stretch;
   width: 340px;
-  max-height: calc(100% - 20px);
-  margin: 0 10px;
+  margin: var(--sidebar-float-gap);
   border-radius: 18px;
 }
 
@@ -577,13 +581,25 @@
   width: 44px;
 }
 
+/*
+ * The tab and the panel it opens into share an edge and a centre line, and the panel is never shorter
+ * than the tab, so the panel always covers the spot the cursor opened it from. Otherwise opening could
+ * leave the cursor outside the panel, which closes it back into the tab under the cursor: a hover loop.
+ */
+.sidebar {
+  min-height: var(--sidebar-tab-height);
+}
+
 .sidebar__tab {
   display: flex;
   width: 44px;
+  height: var(--sidebar-tab-height);
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   padding: 14px 0;
+  overflow: hidden;
 }
 
 .sidebar__tab-label {
