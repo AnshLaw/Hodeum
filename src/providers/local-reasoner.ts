@@ -1,5 +1,5 @@
 import type { TeachingAction, TeachingContext } from "../lib/types";
-import type { ReasoningProvider } from "./interfaces";
+import type { ReasoningHooks, ReasoningProvider } from "./interfaces";
 
 /**
  * Cheapest reliable signal first (PRD §10): the deterministic task-pack planner answers whenever it
@@ -16,7 +16,7 @@ export class LocalReasoningProvider implements ReasoningProvider {
     private readonly visionReady: () => boolean,
   ) {}
 
-  async reason(context: TeachingContext): Promise<TeachingAction> {
+  async reason(context: TeachingContext, hooks?: ReasoningHooks): Promise<TeachingAction> {
     let planned: TeachingAction | undefined;
     let plannerError: unknown;
     try {
@@ -26,6 +26,7 @@ export class LocalReasoningProvider implements ReasoningProvider {
     }
     if (planned && !needsVision(planned)) return planned;
     if (!this.visionReady()) return orThrow(planned, plannerError);
+    hooks?.onThinking?.();
     try {
       return await this.vision.reason(context);
     } catch (error) {

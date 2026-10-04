@@ -9,10 +9,16 @@ import type {
   TeachingContext,
 } from "../lib/types";
 
+/** What a reasoner tells the Hode while it works. */
+export interface ReasoningHooks {
+  /** The request reached a slow reasoner (a vision model or the cloud), so Hodey shows it's thinking. */
+  onThinking?(): void;
+}
+
 /** Local planners, Qwen3-VL, and (opt-in) Gemini all implement this. The Hode engine never sees which. */
 export interface ReasoningProvider {
   readonly id: string;
-  reason(input: TeachingContext): Promise<TeachingAction>;
+  reason(input: TeachingContext, hooks?: ReasoningHooks): Promise<TeachingAction>;
   healthCheck(): Promise<boolean>;
 }
 

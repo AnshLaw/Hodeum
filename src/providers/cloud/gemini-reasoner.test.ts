@@ -24,6 +24,22 @@ function bridge(reply: unknown) {
 /** The step targets Insert, so it ranks first among the listed controls. */
 const POINT_AT_INSERT = { kind: "guide", speech: "Open the Insert tab.", target_index: 0, confidence: 0.9 };
 
+const RECENT: TeachingContext["recentActions"] = [
+  {
+    inputs: ["click"],
+    clicked: { role: "list item", name: "Tax return 2025.pdf" },
+    change: {
+      windowChanged: false,
+      appeared: [{ role: "menu", name: "Context" }, { role: "list item", name: "Jane budget.xlsx" }],
+      disappeared: [],
+      selected: [{ role: "tab item", name: "Insert" }],
+      deselected: [],
+      moved: [],
+    },
+    verdict: "off_track",
+  },
+];
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -99,6 +115,21 @@ describe("buildGeminiRequest", () => {
   });
 });
 
+describe("recent learner actions in the Gemini request", () => {
+  it("says what the learner's last actions changed, naming interface controls only", () => {
+    const { prompt } = buildGeminiRequest(ctx({ recentActions: RECENT }), HOME_SELECTED.elements);
+    expect(prompt).toContain("last actions");
+    expect(prompt).toContain("menu <screen>Context</screen>");
+    expect(prompt).toContain("click on a list item");
+    expect(prompt).toContain("1 other item changed");
+    expect(prompt).not.toMatch(/Tax return|Jane|budget/);
+  });
+
+  it("adds nothing when there were no actions yet", () => {
+    expect(buildGeminiRequest(ctx(), HOME_SELECTED.elements).prompt).not.toContain("last actions");
+  });
+});
+
 describe("GeminiReasoningProvider", () => {
   it("maps a valid reply to a teaching action grounded in the observation", async () => {
     const { invoke } = bridge(POINT_AT_INSERT);
@@ -111,6 +142,15 @@ describe("GeminiReasoningProvider", () => {
       skill: "excel.navigation.insert_tab",
       assistanceLevel: "guide",
     });
+  });
+
+  it("says it's thinking just before the request leaves, never for a request it skips", async () => {
+    const onThinking = vi.fn();
+    await new GeminiReasoningProvider(bridge(POINT_AT_INSERT)).reason(ctx(), { onThinking });
+    expect(onThinking).toHaveBeenCalledTimes(1);
+    const skipped = vi.fn();
+    await expect(new GeminiReasoningProvider(bridge(POINT_AT_INSERT)).reason(ctx({ utterance: "what?" }), { onThinking: skipped })).rejects.toBeInstanceOf(CloudSkipped);
+    expect(skipped).not.toHaveBeenCalled();
   });
 
   it("turns guidance after a mistake into a correction", async () => {

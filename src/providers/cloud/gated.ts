@@ -1,7 +1,7 @@
 import type { CloudProvider } from "../../data/settings";
 import type { ActivityChannel } from "../../lib/activity";
 import type { TeachingAction, TeachingContext } from "../../lib/types";
-import type { ReasoningProvider } from "../interfaces";
+import type { ReasoningHooks, ReasoningProvider } from "../interfaces";
 import type { CloudPolicy } from "./policy";
 
 export type GatePolicy = Pick<CloudPolicy, "allowed" | "reportSuccess" | "reportFailure">;
@@ -35,10 +35,10 @@ export class GatedReasoner implements ReasoningProvider {
     this.id = inner.id;
   }
 
-  async reason(context: TeachingContext): Promise<TeachingAction> {
+  async reason(context: TeachingContext, hooks?: ReasoningHooks): Promise<TeachingAction> {
     if (!this.policy.allowed(this.provider)) throw new CloudSkipped(this.provider, "not allowed right now");
     try {
-      const action = await this.send(context);
+      const action = await this.send(context, hooks);
       this.policy.reportSuccess(this.provider);
       return action;
     } catch (error) {
@@ -51,8 +51,8 @@ export class GatedReasoner implements ReasoningProvider {
     return this.inner.healthCheck();
   }
 
-  private send(context: TeachingContext): Promise<TeachingAction> {
-    const work = () => this.inner.reason(context);
+  private send(context: TeachingContext, hooks?: ReasoningHooks): Promise<TeachingAction> {
+    const work = () => this.inner.reason(context, hooks);
     return this.activity ? this.activity.track("cloud", work) : work();
   }
 }

@@ -87,6 +87,22 @@ describe("spoken answers", () => {
   });
 });
 
+describe("re-checking after a learner action", () => {
+  it("keeps the guidance card while a cheap local check runs, with no orb or scan", () => {
+    const view = notchView(guiding({ phase: "reasoning" }));
+    expect(view).toMatchObject({ mode: "guidance", size: "guidance", busy: false, title: guideAction().speech });
+  });
+
+  it("shows Hodey thinking once a vision model or the cloud is really working", () => {
+    expect(notchView(guiding({ phase: "reasoning", thinking: true }))).toMatchObject({ size: "orb", busy: true, title: COPY.looking });
+  });
+
+  it("still looks when the learner asked something or there's no guidance yet", () => {
+    expect(notchView(guiding({ phase: "reasoning", spokenQuestion: "what is this" }))).toMatchObject({ size: "orb", busy: true });
+    expect(notchView(guiding({ phase: "reasoning", action: undefined }))).toMatchObject({ size: "orb", busy: true });
+  });
+});
+
 describe("islandSize", () => {
   const looking = notchView({ ...initialState, phase: "reasoning" });
   const quiet = { settled: true, hovered: false, menuOpen: false, peek: false, listening: false, phone: false };

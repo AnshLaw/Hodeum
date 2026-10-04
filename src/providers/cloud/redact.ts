@@ -48,7 +48,7 @@ export function scrub(text: string): string {
  * What Gemini may read for one control: the lesson's own label when it's the step's target, the
  * scrubbed label for interface controls, and nothing for content.
  */
-export function cloudName(element: UiElement, step: TaskStep | undefined): string {
+export function cloudName(element: Pick<UiElement, "name" | "role">, step: TaskStep | undefined): string {
   const target = step?.target.names.find((name) => nameMatches(name, element.name));
   if (target) return untrusted(step?.target.label ?? target.replace(/\*/g, ""));
   if (!INTERFACE_ROLES.has(element.role)) return CONTENT_PLACEHOLDER;

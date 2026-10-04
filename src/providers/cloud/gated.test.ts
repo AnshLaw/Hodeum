@@ -30,6 +30,13 @@ describe("GatedReasoner", () => {
     expect(policy.reportFailure).not.toHaveBeenCalled();
   });
 
+  it("hands the thinking hook to the provider only when the policy lets it run", async () => {
+    const provider = inner(async () => ACTION);
+    const hooks = { onThinking: vi.fn() };
+    await new GatedReasoner(provider, "gemini", gate(true)).reason(ctx, hooks);
+    expect(provider.reason).toHaveBeenCalledWith(ctx, hooks);
+  });
+
   it("reports success", async () => {
     const policy = gate(true);
     expect(await new GatedReasoner(inner(async () => ACTION), "gemini", policy).reason(ctx)).toBe(ACTION);

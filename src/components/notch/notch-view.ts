@@ -1,6 +1,6 @@
 import { COPY } from "../../lib/copy";
 import { AGENT_STYLE_COPY, MODE_COPY } from "../../lib/modes";
-import { currentStep, type HodeState } from "../../features/hode/model";
+import { currentStep, rechecking, type HodeState } from "../../features/hode/model";
 import { skillName } from "../../features/skills/graph";
 
 export type NotchSize = "idle" | "orb" | "compact" | "guidance" | "lesson" | "success" | "phone" | "skills";
@@ -157,15 +157,21 @@ function openGuidanceView(s: HodeState): NotchView {
   };
 }
 
+/** Hodey reading the screen or working something out with a model: the orb with its sweeping ring. */
+function lookingView(): NotchView {
+  return { mode: "status", size: "orb", title: COPY.looking, busy: true, controls: ["pause"] };
+}
+
 export function notchView(s: HodeState): NotchView {
   switch (s.phase) {
     case "idle":
       return { mode: "idle", size: "idle", title: COPY.idleTitle, detail: s.notice, busy: false, controls: ["start", "point"] };
     case "goal_entry":
       return { mode: "goal", size: "lesson", title: COPY.startHode, detail: s.notice, busy: false, controls: [] };
-    case "observing":
     case "reasoning":
-      return { mode: "status", size: "orb", title: COPY.looking, busy: true, controls: ["pause"] };
+      return rechecking(s) ? guidanceView(s) : lookingView();
+    case "observing":
+      return lookingView();
     case "guiding":
       return guidanceView(s);
     case "answering":

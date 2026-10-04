@@ -257,18 +257,48 @@ describe("verifying learner actions", () => {
     expect(t.state.ack).toBeUndefined();
   });
 
+  /** A click on the Home tab: a real action on another control, though the screen doesn't change. */
+  const CLICKED_HOME: ScreenObservation = { ...HOME_SELECTED, inputs: [{ kind: "click", at: { x: 20, y: 10 }, button: "left" }] };
+
   it("escalates after repeated unrelated actions", () => {
-    const once = step(guiding("hint"), { type: "LEARNER_ACTED", observation: HOME_SELECTED });
+    const once = step(guiding("hint"), { type: "LEARNER_ACTED", observation: CLICKED_HOME });
     expect(once.state.wrongActions).toBe(1);
     expect(once.effects).toEqual([]);
-    const twice = step(once.state, { type: "LEARNER_ACTED", observation: HOME_SELECTED });
+    const twice = step(once.state, { type: "LEARNER_ACTED", observation: CLICKED_HOME });
     expect(twice.state).toMatchObject({ level: "guide", wrongActions: 0, phase: "reasoning" });
   });
 
   it("re-reasons when the learner acts while reasoning is in flight", () => {
-    const t = step(reasoning(), { type: "LEARNER_ACTED", observation: HOME_SELECTED });
+    const t = step(reasoning(), { type: "LEARNER_ACTED", observation: CLICKED_HOME });
     expect(t.state.requestId).toBe(2);
     expect(step(t.state, { type: "ACTION_READY", requestId: 1, action: guideAction(), failures: [] }).state).toBe(t.state);
+  });
+
+  it("does nothing when an action changed nothing: no reasoning, no speech, no wrong action", () => {
+    const t = step(guiding("hint"), { type: "LEARNER_ACTED", observation: { ...HOME_SELECTED, at: 5 } });
+    expect(t.effects).toEqual([]);
+    expect(t.state).toMatchObject({ phase: "guiding", wrongActions: 0, level: "hint" });
+    // Still remembered, so stuck patterns (the target missing, an undo loop) can be spotted.
+    expect(t.state.stepActions).toHaveLength(1);
+    const noise = obs([...HOME_SELECTED.elements, el("Average: 4", "text", { bounds: { x: 0, y: 700, width: 80, height: 20 } })]);
+    const twice = fold(guiding("hint"), { type: "LEARNER_ACTED", observation: noise }, { type: "LEARNER_ACTED", observation: noise });
+    expect(twice.state).toMatchObject({ phase: "guiding", wrongActions: 0, level: "hint" });
+  });
+
+  it("keeps the reasoning in flight when the learner's action changed nothing", () => {
+    const t = step(reasoning(), { type: "LEARNER_ACTED", observation: { ...HOME_SELECTED, at: 5 } });
+    expect(t.state.requestId).toBe(1);
+    expect(t.effects).toEqual([]);
+    expect(step(t.state, { type: "ACTION_READY", requestId: 1, action: guideAction(), failures: [] }).state.phase).toBe("guiding");
+  });
+
+  it("re-points when the step's target comes into view, without counting a wrong action or repeating itself", () => {
+    const onPivotStep: HodeState = { ...guiding("guide"), stepIndex: 1, observation: HOME_SELECTED };
+    const t = step(onPivotStep, { type: "LEARNER_ACTED", observation: INSERT_SELECTED });
+    expect(t.state).toMatchObject({ phase: "reasoning", wrongActions: 0, level: "guide", escalated: false });
+    const same = step(t.state, { type: "ACTION_READY", requestId: t.state.requestId, action: guideAction({ speech: onPivotStep.action!.speech }), failures: [] });
+    expect(types(same)).toEqual(["renderOverlay", "startStuckTimer"]);
+    expect(same.state.repointing).toBe(false);
   });
 
   it("finishes the Hode on the last step", () => {
@@ -493,6 +523,19 @@ describe("richer stuck detection (PRD §7)", () => {
   it("past the most help, explains why and resets the step (the last rung of the ladder)", () => {
     const t = step(guiding("demonstrate"), { type: "STUCK_TIMEOUT" });
     expect(reasonedWith(t)).toMatchObject({ context: { assistanceLevel: "demonstrate", correction: "Insert adds things. Click Insert. I highlighted it." } });
+  });
+
+  it("after that reset, waits for the learner instead of re-deciding on every timeout", () => {
+    const reset = fold(guiding("demonstrate"), { type: "STUCK_TIMEOUT" }, { type: "ACTION_READY", requestId: 2, action: guideAction(), failures: [] }).state;
+    expect(reset.phase).toBe("guiding");
+    expect(step(reset, { type: "STUCK_TIMEOUT" }).state).toBe(reset);
+    // Looking around changes nothing; a real action makes the reset available again.
+    const lookedAround = step(reset, act({ ...HOME_SELECTED, at: 9 })).state;
+    expect(step(lookedAround, { type: "STUCK_TIMEOUT" }).state).toBe(lookedAround);
+    const menu = obs([...HOME_SELECTED.elements, el("See more", "menu", { bounds: { x: 300, y: 40, width: 120, height: 200 } })]);
+    const acted = step(reset, act(menu)).state;
+    const settled = step(acted, { type: "ACTION_READY", requestId: acted.requestId, action: guideAction(), failures: [] }).state;
+    expect(step(settled, { type: "STUCK_TIMEOUT" }).state.phase).toBe("reasoning");
   });
 });
 
