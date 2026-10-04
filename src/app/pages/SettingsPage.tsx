@@ -6,6 +6,7 @@ import type { VisionStatus } from "../../providers/vision/types";
 import type { AppServices, VoicePreview } from "../services";
 import { AccountSettings } from "./settings/AccountSettings";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
+import { CloudSettings } from "./settings/CloudSettings";
 import { Row } from "./settings/controls";
 import { OnScreenSettings } from "./settings/OnScreenSettings";
 import { KeySettings } from "./settings/KeySettings";
@@ -102,6 +103,7 @@ export function SettingsPage({ services }: { services: AppServices }) {
           )
         }
       />
+      {settings && <CloudSettings cloud={settings.cloud} keys={services.cloudKeys} bus={services.bus} onChange={(cloud) => update({ ...settings, cloud })} />}
       <AccountSettings bus={services.bus} />
     </div>
   );
