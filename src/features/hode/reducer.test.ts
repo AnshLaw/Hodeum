@@ -488,9 +488,17 @@ describe("a learner who acts before Hodey is ready", () => {
     expect(done.state.learnedSkills).toContain(PACK.steps[1].skill);
   });
 
-  it("finishes a step the learner already did before Hodey read the screen", () => {
+  it("never credits a step that was already done with no learner action: Hodey still teaches it", () => {
     const loaded = step(preparingNextStep(), { type: "SKILL_LOADED", skillId: PACK.steps[1].skill, record: null }).state;
-    expect(step(loaded, { type: "OBSERVED", observation: at(FIELDS_VISIBLE, 2) }).state.phase).toBe("success");
+    const t = step(loaded, { type: "OBSERVED", observation: at(FIELDS_VISIBLE, 2) });
+    expect(t.state.phase).toBe("reasoning");
+    expect(t.state.learnedSkills).not.toContain(PACK.steps[1].skill);
+  });
+
+  it("counts a click the screen read already shows, when it came in while preparing", () => {
+    const clicked = step(preparingNextStep(), { type: "LEARNER_ACTED", observation: at(FIELDS_VISIBLE, 2) }).state;
+    const loaded = step(clicked, { type: "SKILL_LOADED", skillId: PACK.steps[1].skill, record: null }).state;
+    expect(step(loaded, { type: "OBSERVED", observation: at(FIELDS_VISIBLE, 3) }).state.phase).toBe("success");
   });
 
   it("still reasons as usual when the step isn't done yet", () => {

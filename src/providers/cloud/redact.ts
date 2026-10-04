@@ -6,15 +6,14 @@ import { untrusted } from "../vision/prompt";
 export const CONTENT_PLACEHOLDER = "(content hidden)";
 
 /**
- * Controls whose names are the app's own interface labels ("Insert", "Share", "Bold"). Every other
- * role (list and tree items, edits, text, links, title bars) can hold the learner's files or words.
+ * Controls whose names are the app's own interface labels ("Share", "Bold"). Every other role (list
+ * and tree items, edits, text, links, title bars, and tabs, which name browser pages and sheets) can
+ * hold the learner's files or words. A lesson's target is named by the lesson either way.
  */
 const INTERFACE_ROLES = new Set([
   "button",
   "split button",
   "splitbutton",
-  "tab item",
-  "tab",
   "menu item",
   "menu",
   "menu bar",
@@ -27,7 +26,6 @@ const INTERFACE_ROLES = new Set([
   "slider",
   "spinner",
   "scroll bar",
-  "sheet tab",
 ]);
 
 /** Runs of this many digits are account, phone or invoice numbers, not interface labels. */

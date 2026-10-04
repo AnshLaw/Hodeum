@@ -64,6 +64,21 @@ describe("RoutedMemory", () => {
     vi.useRealTimers();
   });
 
+  it("starts the cloud cooldown when recall hangs, so the next Hode doesn't wait again", async () => {
+    vi.useFakeTimers();
+    const local = fake([], [], "local");
+    const cloud = fake([], [], "cloud");
+    vi.mocked(cloud.getRelevantMemory).mockReturnValueOnce(new Promise(() => undefined));
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const onCloudTimeout = vi.fn();
+    const recalled = new RoutedMemory(local, cloud, onCloudTimeout).getRelevantMemory(QUERY);
+    await vi.advanceTimersByTimeAsync(CLOUD_RECALL_WAIT_MS);
+    await recalled;
+    expect(onCloudTimeout).toHaveBeenCalledOnce();
+    error.mockRestore();
+    vi.useRealTimers();
+  });
+
   it("works with no cloud provider", async () => {
     const local = fake([], [], "local");
     const memory = new RoutedMemory(local);

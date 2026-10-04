@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HOME_SELECTED, INSERT_BOUNDS, PACK, annotation, el, obs } from "../../features/hode/test-fixtures";
 import type { TeachingContext } from "../../lib/types";
 import { CloudSkipped } from "./gated";
-import { CONTENT_PLACEHOLDER, GeminiReasoningProvider, MAX_GEMINI_ELEMENTS, buildGeminiRequest } from "./gemini-reasoner";
+import { CONTENT_PLACEHOLDER, GeminiReasoningProvider, STUCK_NOTE, MAX_GEMINI_ELEMENTS, buildGeminiRequest } from "./gemini-reasoner";
 
 const ctx = (overrides: Partial<TeachingContext> = {}): TeachingContext => ({
   goal: "make a pivot table",
@@ -72,6 +72,19 @@ describe("buildGeminiRequest", () => {
     const { prompt } = buildGeminiRequest(ctx({ step: undefined }), controls);
     expect(prompt).toContain("Save to OneDrive");
     expect(prompt).not.toMatch(/jane|contoso|Taxes|bank\.example|48392017/i);
+  });
+
+  it("sends a lesson's own correction, but only a generic note for corrections built from the screen", () => {
+    const lessonCorrection = PACK.steps[0].mistakes[0].correction;
+    expect(buildGeminiRequest(ctx({ correction: lessonCorrection }), HOME_SELECTED.elements).prompt).toContain(lessonCorrection);
+    const { prompt } = buildGeminiRequest(ctx({ correction: 'You clicked "Tax return 2025.pdf" three times. Close "Save changes to Jane-budget.xlsx?" first.' }), HOME_SELECTED.elements);
+    expect(prompt).not.toMatch(/Tax return|Jane|budget/);
+    expect(prompt).toContain(STUCK_NOTE);
+  });
+
+  it("treats tab names as content: browser tabs and sheet names are the learner's", () => {
+    const { prompt } = buildGeminiRequest(ctx({ step: undefined }), [el("Gmail - Inbox", "tab item"), el("Salary 2025", "sheet tab")]);
+    expect(prompt).not.toMatch(/Gmail|Inbox|Salary/);
   });
 
   it("never sends element ids, which can carry names on some surfaces", () => {

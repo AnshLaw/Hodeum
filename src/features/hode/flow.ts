@@ -78,6 +78,7 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       stepActions: [],
       stuck: undefined,
       surprise: undefined,
+      actedWhilePreparing: false,
     },
     effects: [{ type: "loadSkill", skillId: step.skill }],
   };

@@ -10,6 +10,8 @@ import type { KeyPresence } from "./keys";
 
 /** Enough controls to ground any step; keeps each request small (PRD §10.1: UIA metadata only). */
 export const MAX_GEMINI_ELEMENTS = 40;
+/** Sent instead of a correction built from the screen (stuck signals quote control and window names). */
+export const STUCK_NOTE = "The learner seems stuck or off track on this step.";
 const GENERAL_SKILL = "general.reasoning";
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -45,6 +47,12 @@ export function describeSignal(signal: StateSignal): string {
   return `the screen turns ${signal.tone}`;
 }
 
+/** The correction, only when it's the lesson's own words for a known mistake. */
+function lessonCorrection(context: TeachingContext): string | undefined {
+  const known = context.step?.mistakes.some((mistake) => mistake.correction === context.correction);
+  return known ? context.correction : undefined;
+}
+
 function stepLines(context: TeachingContext): string[] {
   const lines = [`App: <screen>${untrusted(context.observation.app)}</screen>.`];
   // The lesson's title stands in for the goal: the goal is the learner's own words, which stay on this PC.
@@ -55,7 +63,7 @@ function stepLines(context: TeachingContext): string[] {
     lines.push(`The step is done when ${describeSignal(step.success)}.`);
   }
   lines.push(`How much help to give: ${context.assistanceLevel} (demonstrate = explicit, hint = a nudge without naming the control).`);
-  if (context.correction) lines.push(`The learner just made a mistake: ${context.correction}`);
+  if (context.correction) lines.push(`The learner just made a mistake: ${lessonCorrection(context) ?? STUCK_NOTE}`);
   return lines;
 }
 

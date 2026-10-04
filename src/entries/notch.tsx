@@ -107,7 +107,7 @@ async function boot(): Promise<void> {
   const lessonLines = lessonCorpus(TASK_PACKS);
   const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity, shareable: (text) => shareableText(text, lessonLines) });
   // SQLite always; Backboard only while the cloud policy allows it (and writes only in "auto").
-  const memory = new RoutedMemory(localMemory, new BackboardMemoryProvider({ invoke, policy: cloud.policy, kv }));
+  const memory = new RoutedMemory(localMemory, new BackboardMemoryProvider({ invoke, policy: cloud.policy, kv }), () => cloud.policy.reportFailure("backboard"));
   const runtime = new HodeRuntime({ perception, reasoners: [gemini, local], skills: learning, bus, tts, memory });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   runtime.subscribe(() => {

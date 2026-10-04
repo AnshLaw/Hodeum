@@ -134,13 +134,15 @@ export function onObservedStep(s: HodeState, e: EventOf<"OBSERVED">): Transition
   const step = currentStep(s);
   if (!preparingStep(s) || !step) return onObserved(s, e);
   const observation = newer(s.observation, e.observation);
-  if (!inWrongApp(s, observation) && evaluateSignal(step.success, observation)) return completeStep({ ...s, observation }, step);
+  // Only a learner action finishes a step here: a screen that already met the goal still gets taught.
+  const acted = s.actedWhilePreparing === true;
+  if (acted && !inWrongApp(s, observation) && evaluateSignal(step.success, observation)) return completeStep({ ...s, observation }, step);
   return onObserved(s, { ...e, observation });
 }
 
 export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
   // Keep a click made while the step is being prepared; the screen read for the step counts it.
-  if (preparingStep(s) && currentStep(s)) return { state: { ...s, observation: newer(s.observation, e.observation) }, effects: [] };
+  if (preparingStep(s) && currentStep(s)) return { state: { ...s, observation: newer(s.observation, e.observation), actedWhilePreparing: true }, effects: [] };
   if (s.open && (s.phase === "guiding" || s.phase === "reasoning")) return onOpenAction(s, e);
   const step = currentStep(s);
   if ((s.phase !== "guiding" && s.phase !== "reasoning") || !step) return noop(s);

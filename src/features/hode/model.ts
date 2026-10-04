@@ -75,6 +75,8 @@ export interface HodeState {
   stuck?: StuckSignal;
   /** An unexpected dialog Hodey asked the learner to close; guidance resumes once it's gone. */
   surprise?: string;
+  /** The learner acted while the step was being prepared; only then may the first screen read finish it. */
+  actedWhilePreparing?: boolean;
 }
 
 export const initialState: HodeState = {
