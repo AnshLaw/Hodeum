@@ -1,3 +1,5 @@
+// First, so component styles of equal specificity win in dev as they do in release builds.
+import "../components/shared/base.css";
 import type { HindiScript } from "../data/settings";
 import { asrLanguage } from "../lib/language";
 import { invoke } from "@tauri-apps/api/core";

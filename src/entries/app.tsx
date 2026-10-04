@@ -1,3 +1,5 @@
+// First, so component styles of equal specificity win in dev as they do in release builds.
+import "../components/shared/base.css";
 import { NativeFrame } from "../app/native-frame";
 import type { AppServices } from "../app/services";
 import { TauriWebSearch, TauriWindowSource } from "../app/tauri-services";

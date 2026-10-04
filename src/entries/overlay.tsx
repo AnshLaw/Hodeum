@@ -1,3 +1,5 @@
+// First, so component styles of equal specificity win in dev as they do in release builds.
+import "../components/shared/base.css";
 import { TauriBus } from "../lib/tauri-bus";
 import { TauriShell } from "../lib/tauri-shell";
 import { connectAppearance } from "../lib/appearance";
