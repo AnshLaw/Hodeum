@@ -44,7 +44,12 @@ export function parseVisionReply(content: string): VisionReply {
   } catch {
     throw new Error(`The vision model returned text that isn't JSON: ${content.slice(0, 120)}`);
   }
+  return validateReply(raw, "The vision model");
+}
+
+/** Same contract for every reasoner (local or cloud), checked here whatever the model claimed. */
+export function validateReply(raw: unknown, source: string): VisionReply {
   const result = visionReplySchema.safeParse(raw);
-  if (!result.success) throw new Error(`The vision model's reply didn't match the contract: ${z.prettifyError(result.error)}`);
+  if (!result.success) throw new Error(`${source}'s reply didn't match the contract: ${z.prettifyError(result.error)}`);
   return result.data;
 }

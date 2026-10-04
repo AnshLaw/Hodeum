@@ -1,10 +1,11 @@
 import { errorMessage } from "../lib/errors";
 import type { TeachingAction, TeachingContext } from "../lib/types";
+import { CloudSkipped } from "./cloud/gated";
 import type { ReasoningProvider } from "./interfaces";
 
 export interface RoutedAction {
   action: TeachingAction;
-  /** Providers that failed before one succeeded, as `id: message`. */
+  /** Providers that failed before one succeeded, as `id: message`. A skipped cloud provider isn't one. */
   failures: string[];
 }
 
@@ -15,6 +16,7 @@ export async function reasonWithFallback(providers: ReasoningProvider[], context
     try {
       return { action: await provider.reason(context), failures };
     } catch (error) {
+      if (error instanceof CloudSkipped) continue;
       const message = `${provider.id}: ${errorMessage(error)}`;
       console.error("Reasoning provider failed", message);
       failures.push(message);

@@ -93,7 +93,8 @@ pub fn run() {
             account::device_name,
             cloud::keys::cloud_key_status,
             cloud::keys::cloud_key_set,
-            cloud::keys::cloud_key_clear
+            cloud::keys::cloud_key_clear,
+            cloud::gemini::gemini_reason
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())
