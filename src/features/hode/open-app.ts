@@ -46,7 +46,8 @@ export function appChoiceEvent(s: HodeState, text: string, apps: InstalledApp[])
 
 /**
  * Opens the app: from idle (closing the goal form), or as a side errand that leaves a running Hode's step alone.
- * A Hode waiting for that app carries on when its window comes forward (the runtime's app-switch check).
+ * Its line is said and shown, every time, so a muted learner sees it too. A Hode waiting for that app carries
+ * on when its window comes forward (the runtime's app-switch check).
  */
 export function onOpenApp(s: HodeState, e: EventOf<"OPEN_APP">): Transition {
   if (s.phase === "annotating") return noop(s);
@@ -55,8 +56,9 @@ export function onOpenApp(s: HodeState, e: EventOf<"OPEN_APP">): Transition {
   const words = spoken(s.language);
   // Teach mode: opening apps is a skill too, so Hodey says how to do it without asking next time.
   const line = mode === "teach" ? `${words.opening(e.app.name)} ${words.openTip}` : words.opening(e.app.name);
+  const shown: HodeState = { ...s, notice: line, appChoice: undefined };
   const effects: HodeEffect[] = [{ type: "say", text: line }, { type: "launchApp", app: e.app }];
-  return { state: idle ? { ...s, phase: "idle", notice: line, appChoice: undefined } : s, effects };
+  return { state: idle ? { ...shown, phase: "idle" } : shown, effects };
 }
 
 function failureLine(s: HodeState, e: EventOf<"APP_OPEN_FAILED">): string {
@@ -66,10 +68,12 @@ function failureLine(s: HodeState, e: EventOf<"APP_OPEN_FAILED">): string {
   return words.openFailed(e.app.name);
 }
 
-/** Says why the app didn't open; shown on the card too when no Hode's guidance is there. Asking which app, it keeps the choice open. */
+/**
+ * Says why the app didn't open, and shows it, in every phase: a muted learner sees it beside a Hode's step, and
+ * one marking the screen finds it there afterwards. Asking which app, it keeps the choice open.
+ */
 export function onAppOpenFailed(s: HodeState, e: EventOf<"APP_OPEN_FAILED">): Transition {
-  if (s.phase === "annotating") return noop(s);
   const line = failureLine(s, e);
   const appChoice = e.reason === APP_AMBIGUOUS ? (e.options ?? [e.app.name]) : undefined;
-  return { state: noHode(s) ? { ...s, notice: line, appChoice } : s, effects: [{ type: "say", text: line }] };
+  return { state: { ...s, notice: line, appChoice }, effects: [{ type: "say", text: line }] };
 }

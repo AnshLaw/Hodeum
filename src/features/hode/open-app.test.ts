@@ -30,10 +30,25 @@ describe("OPEN_APP", () => {
     expect(step(entry, { type: "OPEN_APP", app: EXCEL, said: "open excel" }).state.phase).toBe("idle");
   });
 
-  it("is a side errand during a Hode: the step and its guidance stay as they were", () => {
+  it("is a side errand during a Hode: the step and its guidance stay as they were, with the line shown too", () => {
     const t = step(guiding, { type: "OPEN_APP", app: EXCEL, said: "open excel" });
-    expect(t.state).toBe(guiding);
-    expect(t.effects.map((e) => e.type)).toEqual(["say", "launchApp"]);
+    const line = `${en.opening("Excel")} ${en.openTip}`;
+    expect(t.state).toEqual({ ...guiding, notice: line });
+    expect(t.effects).toEqual([{ type: "say", text: line }, { type: "launchApp", app: EXCEL }]);
+  });
+
+  it("shows its line, so a muted learner sees it, in every phase it opens apps from", () => {
+    for (const phase of ["answering", "paused", "acting", "checkpoint", "success", "recovering"] as const) {
+      expect(step({ ...guiding, phase }, { type: "OPEN_APP", app: EXCEL, said: "open excel" }).state.notice, phase).toBe(`${en.opening("Excel")} ${en.openTip}`);
+    }
+  });
+
+  it("replaces what the card said, and says it again when asked again", () => {
+    const greeted = { ...initialState, notice: en.greeting };
+    const first = step(greeted, { type: "OPEN_APP", app: EXCEL, said: "open excel", mode: "help" });
+    expect(first.state.notice).toBe(en.opening("Excel"));
+    const again = step(first.state, { type: "OPEN_APP", app: EXCEL, said: "open excel", mode: "help" });
+    expect(again.effects).toEqual([{ type: "say", text: en.opening("Excel") }, { type: "launchApp", app: EXCEL }]);
   });
 
   it("speaks in the learner's language", () => {
@@ -62,10 +77,18 @@ describe("APP_OPEN_FAILED", () => {
     expect(which.state.notice).toBe(en.appWhich(["Outlook", "Outlook (classic)"]));
   });
 
-  it("keeps a running Hode's card, only saying it", () => {
+  it("shows it as well as saying it during a Hode, leaving the step as it was", () => {
     const t = step(guiding, { type: "APP_OPEN_FAILED", app: EXCEL, reason: "timeout" });
-    expect(t.state).toBe(guiding);
+    expect(t.state).toEqual({ ...guiding, notice: en.openFailed("Excel") });
     expect(t.effects).toEqual([{ type: "say", text: en.openFailed("Excel") }]);
+  });
+
+  it("isn't lost while the learner marks the screen: it waits on the card for when they're done", () => {
+    const marking = { ...guiding, phase: "annotating" as const, resumePhase: "guiding" as const };
+    const t = step(marking, { type: "APP_OPEN_FAILED", app: EXCEL, reason: "timeout" });
+    expect(t.state).toEqual({ ...marking, notice: en.openFailed("Excel") });
+    expect(t.effects).toEqual([{ type: "say", text: en.openFailed("Excel") }]);
+    expect(step(t.state, { type: "ANNOTATE_CANCEL" }).state).toMatchObject({ phase: "guiding", notice: en.openFailed("Excel") });
   });
 });
 
