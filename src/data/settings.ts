@@ -39,7 +39,31 @@ export const MAX_SENSITIVE_APP = 60;
 /** Apps and sites matched (case-insensitive) against the active app and window title; cloud stays off there. */
 export const DEFAULT_SENSITIVE_APPS = ["1Password", "Bitwarden", "KeePass", "LastPass", "Dashlane", "Bank", "NetBanking", "PayPal", "Paytm", "PhonePe", "Credential Manager", "Password", "Medical", "Health"];
 
-export const DEFAULT_CLOUD = { reasoning: false, voice: false, memory: "off", sensitiveApps: DEFAULT_SENSITIVE_APPS } as const;
+/** Must match DEFAULT_MODEL in src-tauri/src/cloud/gemini.rs. */
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+/** Must match DEFAULT_MODEL in src-tauri/src/cloud/elevenlabs.rs. */
+export const DEFAULT_ELEVENLABS_MODEL = "eleven_flash_v2_5";
+/** "Sarah", a stock voice every account has. Must match DEFAULT_VOICE_ID in src-tauri/src/cloud/elevenlabs.rs. */
+export const DEFAULT_ELEVENLABS_VOICE = "EXAVITQu4vr4xnSDxMaL";
+/** Must match MAX_MODEL_CHARS in src-tauri/src/cloud/gemini.rs and MAX_ID_CHARS in elevenlabs.rs. */
+export const MAX_GEMINI_MODEL = 80;
+export const MAX_ELEVENLABS_ID = 64;
+/** The charsets Rust accepts before putting an id in a URL. */
+const GEMINI_MODEL_ID = /^[A-Za-z0-9._-]+$/;
+const ELEVENLABS_MODEL_ID = /^[A-Za-z0-9_]+$/;
+const ELEVENLABS_VOICE_ID = /^[A-Za-z0-9]+$/;
+
+export const DEFAULT_CLOUD = {
+  reasoning: false,
+  voice: false,
+  memory: "off",
+  sensitiveApps: DEFAULT_SENSITIVE_APPS,
+  geminiModel: DEFAULT_GEMINI_MODEL,
+  elevenlabsModel: DEFAULT_ELEVENLABS_MODEL,
+  elevenlabsVoice: DEFAULT_ELEVENLABS_VOICE,
+} as const;
+
+const cloudId = (max: number, charset: RegExp, fallback: string) => z.string().trim().min(1).max(max).regex(charset).catch(fallback);
 
 const cloudSchema = z
   .object({
@@ -49,6 +73,10 @@ const cloudSchema = z
     voice: z.boolean().catch(false),
     memory: z.enum(MEMORY_MODES).catch("off"),
     sensitiveApps: z.array(z.string().trim().min(1).max(MAX_SENSITIVE_APP)).max(MAX_SENSITIVE_APPS).catch([...DEFAULT_SENSITIVE_APPS]),
+    /** The Gemini model Hodey asks (an id from Gemini's model list, without "models/"). */
+    geminiModel: cloudId(MAX_GEMINI_MODEL, GEMINI_MODEL_ID, DEFAULT_GEMINI_MODEL),
+    elevenlabsModel: cloudId(MAX_ELEVENLABS_ID, ELEVENLABS_MODEL_ID, DEFAULT_ELEVENLABS_MODEL),
+    elevenlabsVoice: cloudId(MAX_ELEVENLABS_ID, ELEVENLABS_VOICE_ID, DEFAULT_ELEVENLABS_VOICE),
   })
   .default({ ...DEFAULT_CLOUD, sensitiveApps: [...DEFAULT_SENSITIVE_APPS] });
 

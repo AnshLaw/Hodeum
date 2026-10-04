@@ -15,7 +15,7 @@ import { WebSpeechTTSProvider } from "../providers/web-speech-tts";
 import { TASK_PACKS } from "../task-packs";
 import { ExcelScene } from "./scenes/excel";
 import { ExplorerScene } from "./scenes/explorer";
-import { PracticeCloudKeys } from "./practice-cloud-keys";
+import { PracticeCloudCatalog, PracticeCloudKeys } from "./practice-cloud-keys";
 import { IphoneScene } from "./scenes/iphone";
 import { FrameCanvas } from "../features/phone/frame-canvas";
 import { PhoneMirror } from "../features/phone/phone-mirror";
@@ -55,6 +55,7 @@ export function createStageEnvironment(): StageEnvironment {
   const settings = new MemorySettingsStore();
   const chats = new MemoryChatStore();
   const cloudKeys = new PracticeCloudKeys();
+  const cloudCatalog = new PracticeCloudCatalog(cloudKeys);
   const tts = new WebSpeechTTSProvider();
   const memory = new LocalMemoryProvider();
   const runtime = new HodeRuntime({ perception: withScreenActivity(perception, activity), reasoners: [new TaskPackReasoningProvider()], skills: learning, bus, tts, memory });
@@ -80,6 +81,7 @@ export function createStageEnvironment(): StageEnvironment {
       bus,
       packs: TASK_PACKS,
       cloudKeys,
+      cloudCatalog,
       window: { minimize: close, toggleMaximize: () => undefined, close },
       limitation: STAGE_LIMITATION,
     }),

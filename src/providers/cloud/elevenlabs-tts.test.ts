@@ -48,13 +48,29 @@ describe("ElevenLabsTTSProvider", () => {
     const voice = elevenLabs(invoke);
     voice.rate = 1.1;
     await voice.speak(chunks("Click the ", "Insert tab", "."), new AbortController().signal);
-    expect(invoke).toHaveBeenCalledWith("elevenlabs_speak", { text: "Click the Insert tab.", speed: 1.1 });
+    expect(invoke).toHaveBeenCalledWith("elevenlabs_speak", { text: "Click the Insert tab.", speed: 1.1, model: "eleven_flash_v2_5", voiceId: "EXAVITQu4vr4xnSDxMaL" });
   });
 
   it("sends the same Hindi text the local Hindi voice would say", async () => {
     const invoke = vi.fn(async () => false);
     await elevenLabs(invoke).speak(chunks("अब Insert टैब पर क्लिक कीजिए।"), new AbortController().signal);
-    expect(invoke).toHaveBeenCalledWith("elevenlabs_speak", { text: "अब इंसर्ट टैब पर क्लिक कीजिए।", speed: 1 });
+    expect(invoke).toHaveBeenCalledWith("elevenlabs_speak", { text: "अब इंसर्ट टैब पर क्लिक कीजिए।", speed: 1, model: "eleven_flash_v2_5", voiceId: "EXAVITQu4vr4xnSDxMaL" });
+  });
+
+  it("uses the model and voice chosen in Settings", async () => {
+    const invoke = vi.fn(async () => false);
+    const voice = elevenLabs(invoke);
+    voice.model = "eleven_multilingual_v2";
+    voice.voiceId = "JBFqnCBsd6RMkjVDRZzb";
+    await voice.speak(chunks("Open Insert."), new AbortController().signal);
+    expect(invoke).toHaveBeenCalledWith("elevenlabs_speak", { text: "Open Insert.", speed: 1, model: "eleven_multilingual_v2", voiceId: "JBFqnCBsd6RMkjVDRZzb" });
+  });
+
+  it("knows an English-only model can't say Hindi", () => {
+    const voice = elevenLabs(vi.fn());
+    expect(voice.multilingual).toBe(true);
+    voice.model = "eleven_monolingual_v1";
+    expect(voice.multilingual).toBe(false);
   });
 
   it("sends nothing once the utterance is aborted", async () => {

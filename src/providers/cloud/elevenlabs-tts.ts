@@ -1,4 +1,4 @@
-import type { CloudProvider } from "../../data/settings";
+import { DEFAULT_ELEVENLABS_MODEL, DEFAULT_ELEVENLABS_VOICE, type CloudProvider } from "../../data/settings";
 import type { ActivityTracker } from "../../lib/activity";
 import { speakable } from "../../lib/hinglish";
 import { hasDevanagari } from "../../lib/language";
@@ -12,6 +12,8 @@ const SPEAK_COMMAND = "elevenlabs_speak";
 /** ElevenLabs plays through Hodey's local speaker, so the one barge-in stop silences both. */
 const STOP_COMMAND = "tts_stop";
 const PROVIDER: CloudProvider = "elevenlabs";
+/** ElevenLabs' English-only models (e.g. eleven_monolingual_v1); every other one speaks Hindi too. */
+const ENGLISH_ONLY_MODEL = /monolingual|english/i;
 
 /** A cloud voice, and whether it can say Hindi (Devanagari) text. */
 export interface CloudVoice extends TTSProvider {
@@ -19,14 +21,20 @@ export interface CloudVoice extends TTSProvider {
 }
 
 /**
- * ElevenLabs Flash v2.5, streamed and played by Rust (the key never reaches the webview). Only
- * Hodey's own sentence is sent. Resolves when playback ends, or at once when the signal aborts.
+ * ElevenLabs (Flash v2.5 by default), streamed and played by Rust (the key never reaches the webview).
+ * Only Hodey's own sentence is sent. Resolves when playback ends, or at once when the signal aborts.
  */
 export class ElevenLabsTTSProvider implements CloudVoice {
-  /** Flash v2.5 speaks Hindi and Hinglish with the same voice. */
-  readonly multilingual = true;
   /** Speaking speed from settings (1 = normal). */
   rate = 1;
+  /** The model and voice chosen in Settings > Cloud; Rust checks both before use. */
+  model: string = DEFAULT_ELEVENLABS_MODEL;
+  voiceId: string = DEFAULT_ELEVENLABS_VOICE;
+
+  /** Flash v2.5 and the other multilingual models speak Hindi and Hinglish with the same voice. */
+  get multilingual(): boolean {
+    return !ENGLISH_ONLY_MODEL.test(this.model);
+  }
 
   constructor(private readonly invoke: Invoke) {}
 
@@ -39,7 +47,7 @@ export class ElevenLabsTTSProvider implements CloudVoice {
       signal.addEventListener("abort", onAbort, { once: true });
     });
     try {
-      await Promise.race([this.invoke<boolean>(SPEAK_COMMAND, { text: content, speed: this.rate }), aborted]);
+      await Promise.race([this.invoke<boolean>(SPEAK_COMMAND, { text: content, speed: this.rate, model: this.model, voiceId: this.voiceId }), aborted]);
     } finally {
       signal.removeEventListener("abort", onAbort);
     }

@@ -4,7 +4,15 @@ import { NO_KEYS } from "../../../providers/cloud/keys";
 import {
   CLOUD_ROWS,
   MAX_KEY_CHARS,
+  RECOMMENDED_SUFFIX,
   addSensitiveApp,
+  catalogErrorMessage,
+  catalogStatus,
+  elevenLabsModelOption,
+  geminiOption,
+  linkLabel,
+  pickerOptions,
+  voiceOption,
   controlEnabled,
   isDefaultSensitiveApps,
   keyDraftError,
@@ -91,5 +99,49 @@ describe("sensitive apps", () => {
     expect(reset).not.toBe(DEFAULT_SENSITIVE_APPS);
     expect(isDefaultSensitiveApps(reset)).toBe(true);
     expect(isDefaultSensitiveApps(["Bank"])).toBe(false);
+  });
+});
+
+describe("cloud model and voice pickers", () => {
+  const listed = [
+    { value: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+    { value: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
+  ];
+
+  it("links each provider to its official key page", () => {
+    expect(CLOUD_ROWS.map((row) => row.keyUrl)).toEqual(["https://aistudio.google.com/app/apikey", "https://elevenlabs.io/app/settings/api-keys", "https://app.backboard.io"]);
+    expect(linkLabel("https://aistudio.google.com/app/apikey")).toBe("aistudio.google.com/app/apikey");
+  });
+
+  it("marks the recommended default", () => {
+    expect(pickerOptions(listed, "gemini-3.7-flash", "gemini-3.8-flash")).toEqual([
+      { value: "gemini-3.8-flash", label: `Gemini 3.8 Flash${RECOMMENDED_SUFFIX}` },
+      { value: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
+    ]);
+  });
+
+  it("keeps the current choice selectable when the list lacks it or failed", () => {
+    expect(pickerOptions(listed, "gemini-2.5-pro", "gemini-3.8-flash")[0]).toEqual({ value: "gemini-2.5-pro", label: "gemini-2.5-pro" });
+    expect(pickerOptions([], "gemini-3.8-flash", "gemini-3.8-flash")).toEqual([{ value: "gemini-3.8-flash", label: `Gemini 3.8 Flash${RECOMMENDED_SUFFIX}` }]);
+    expect(pickerOptions([], "EXAVITQu4vr4xnSDxMaL", "EXAVITQu4vr4xnSDxMaL")[0].label).toBe(`Sarah${RECOMMENDED_SUFFIX}`);
+  });
+
+  it("labels models and voices by name", () => {
+    expect(geminiOption({ id: "gemini-3.8-flash", displayName: "Gemini 3.8 Flash" })).toEqual({ value: "gemini-3.8-flash", label: "Gemini 3.8 Flash" });
+    expect(geminiOption({ id: "gemini-x", displayName: "" }).label).toBe("gemini-x");
+    expect(elevenLabsModelOption({ id: "eleven_flash_v2_5", name: "Eleven Flash v2.5", multilingual: true }).label).toBe("Eleven Flash v2.5");
+    expect(elevenLabsModelOption({ id: "eleven_monolingual_v1", name: "Eleven English v1", multilingual: false }).label).toBe("Eleven English v1 · English only");
+    expect(voiceOption({ id: "a1", name: "Sarah", category: "premade", labels: { accent: "american", gender: "female" } }).label).toBe("Sarah · American, female");
+    expect(voiceOption({ id: "a2", name: "My clone", category: "cloned", labels: {} }).label).toBe("My clone");
+  });
+
+  it("explains every list state with a way forward", () => {
+    expect(catalogStatus({ status: "idle" }, "models")).toMatch(/Save a key/);
+    expect(catalogStatus({ status: "loading" }, "voices")).toBe("Loading voices…");
+    expect(catalogStatus({ status: "error", error: "That key was rejected." }, "models")).toBe("Couldn't load the models: That key was rejected.");
+    expect(catalogStatus({ status: "ready", items: [] }, "voices")).toMatch(/No voices found/);
+    expect(catalogStatus({ status: "ready", items: [1] }, "voices")).toBeUndefined();
+    expect(catalogErrorMessage("No Gemini key is saved.")).toBe("No Gemini key is saved.");
+    expect(catalogErrorMessage(new Error("offline"))).toBe("offline");
   });
 });
