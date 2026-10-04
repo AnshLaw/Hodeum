@@ -55,6 +55,20 @@ describe("stepping into another app while the Hode's window stays open", () => {
     expect(types(shown)).toContain("startStuckTimer");
   });
 
+  it("keeps a step that's ready while they're away to say when they're back", () => {
+    const raised = play(guiding(), { type: "STUCK_TIMEOUT" }, { type: "STUCK_TIMEOUT" });
+    expect(raised.state.phase).toBe("reasoning");
+    const next = guideAction({ assistanceLevel: "guide", speech: "Open the Insert tab." });
+    const away = play(raised.state, { type: "APP_SWITCHED", away: true }, { type: "ACTION_READY", requestId: raised.state.requestId, action: next, failures: [] });
+    expect(said(away)).toEqual([]);
+    expect(types(away)).not.toContain("renderOverlay");
+    const back = play(away.state, { type: "APP_SWITCHED", away: false });
+    expect(types(back)).toContain("observe");
+    const looked = play(back.state, { type: "OBSERVED", observation: { ...HOME_SELECTED, at: 2 } });
+    const shown = play(looked.state, { type: "ACTION_READY", requestId: looked.state.requestId, action: next, failures: [] });
+    expect(said(shown).join(" ")).toContain("Open the Insert tab.");
+  });
+
   it("still answers a question asked from the other app", () => {
     const away = play(guiding(), { type: "APP_SWITCHED", away: true });
     expect(play(away.state, { type: "VOICE_QUESTION", question: "what does Insert do?" }).state.phase).toBe("observing");

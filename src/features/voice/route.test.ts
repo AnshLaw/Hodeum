@@ -61,6 +61,11 @@ describe("pressing the mic and asking to be taught", () => {
     expect(events).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", openAllowed: false, visionStarting: true }]);
   });
 
+  it("says so for a goal said into Start a Hode, too", () => {
+    const entry: HodeState = { ...initialState, phase: "goal_entry" };
+    expect(routeUtterance(entry, "send a message on discord", TASK_PACKS, false, [], [], true)).toMatchObject([{ type: "GOAL_SUBMITTED", visionStarting: true }]);
+  });
+
   it("still answers a question about what's on screen", () => {
     expect(route(initialState, "What does this button do?")).toEqual([{ type: "VOICE_QUESTION", question: "What does this button do?" }]);
   });

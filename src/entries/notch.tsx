@@ -168,6 +168,10 @@ async function boot(): Promise<void> {
   let webAllowed = false;
   const howTo = createHowToLookup({ web: new TauriWebSearch(bus), webEnabled: () => webAllowed, onProgress: (progress) => bus.emit("web:search", progress) });
   const reference = spokenReference(howTo, (stop) => bus.on("web:cancel", stop));
+  // Planning an open goal looks it up in the background: no search card over the step the learner is on.
+  const quietHowTo = createHowToLookup({ web: new TauriWebSearch(bus), webEnabled: () => webAllowed });
+  const planLookup = spokenReference(quietHowTo, () => () => undefined);
+  const planReference = (goal: string, app: string | undefined, signal: AbortSignal) => planLookup(goal, app, signal, { web: true });
   // An open Teach Hode is planned in the background by the local model; it never waits on the plan.
   const hodePlanner = new LocalPlanner({ connection: () => connectionOf(vision.current()) });
   // The pointer goes with each request (physical px, like the screen read): it usually rests near the learner's work.
@@ -175,7 +179,7 @@ async function boot(): Promise<void> {
     const at = await cursorPosition();
     return { x: at.x, y: at.y };
   };
-  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference, planner: hodePlanner, pointer });
+  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference, planner: hodePlanner, planReference, pointer });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   const watchDot = screenWatch(activity);
   let hintedPack: string | undefined;

@@ -27,6 +27,11 @@ export interface RuntimeDeps {
   reference?: (question: string, app: string | undefined, signal: AbortSignal, options: { web: boolean }) => Promise<string | undefined>;
   /** Plans open Teach Hodes in the background; without one, they're planned a step at a time. */
   planner?: PlannerProvider;
+  /**
+   * Reference steps for planning a goal, looked up quietly (no search card over the first step): the offline
+   * help, and the web when Settings allows it.
+   */
+  planReference?: (goal: string, app: string | undefined, signal: AbortSignal) => Promise<string | undefined>;
   /** Where the learner's pointer is, in physical screen px; rejects when it can't be read. */
   pointer?: () => Promise<Point>;
 }
@@ -55,6 +60,10 @@ export const PRESS_SETTLE_MS = 450;
 const CANT_PRESS = "Hodey can't click in this app, so this step is yours.";
 /** A lookup plus a local-model plan; past this, the Hode carries on a step at a time without one. */
 const PLAN_TIMEOUT_MS = 45_000;
+/** A plan called off for the learner's next step is asked for again after it, this many times in all. */
+const MAX_PLAN_TRIES = 3;
+
+type PlanEffect = Extract<HodeEffect, { type: "planOpenGoal" }>;
 const POINTER_POLL_MS = 150;
 /** Still this long after moving, the pointer has come to rest on where the learner is working. */
 const POINTER_REST_MS = 600;
@@ -97,6 +106,10 @@ export class HodeRuntime {
   private stuckMs: number | undefined;
   private autoLanguage = false;
   private pointerWatch: ReturnType<typeof setInterval> | undefined;
+  /** The plan being made; llama-server serves one request at a time, so it gives way to the next step. */
+  private planning: { effect: PlanEffect; controller: AbortController; tries: number } | undefined;
+  /** A plan that gave way to a step, asked for again once that step is answered. */
+  private deferredPlan: { effect: PlanEffect; tries: number } | undefined;
   /** A pointer that can't be read is logged once, not on every request. */
   private pointerFailed = false;
   /** What learning memory recalled for the running Hode; skill loads wait for it. */
@@ -215,6 +228,7 @@ export class HodeRuntime {
     this.clearPressTimer();
     this.clearOpenedSwitch();
     this.stopPointerWatch();
+    this.planning?.controller.abort();
     this.stopSpeech();
     this.wanted = [];
     this.deps.perception.setWanted?.([]);
@@ -319,23 +333,50 @@ export class HodeRuntime {
    * Plans an open Hode in the background: reference steps first (the offline help, and the web when Settings
    * allows it), then the local model. A failed plan is logged, and the Hode carries on a step at a time.
    */
-  private planOpenGoal({ planId, goal, app, language }: Extract<HodeEffect, { type: "planOpenGoal" }>): void {
+  private planOpenGoal(effect: PlanEffect, tries = 1): void {
     const planner = this.deps.planner;
     if (!planner) return;
-    const signal = AbortSignal.timeout(PLAN_TIMEOUT_MS);
+    const { planId, goal, app, language } = effect;
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(PLAN_TIMEOUT_MS)]);
+    this.planning = { effect, controller, tries };
     this.planReference(goal, app, signal)
       .then((reference) => planner.plan({ goal, app, reference, language }, signal))
+      .finally(() => {
+        if (this.planning?.controller === controller) this.planning = undefined;
+      })
       .then(
         (plan) => this.dispatch({ type: "PLAN_READY", planId, goal, plan }),
-        (error: unknown) => console.error("Couldn't plan the Hode; Hodey plans it a step at a time", error),
+        (error: unknown) => {
+          // Given way to the learner's next step: it's asked for again after that.
+          if (!controller.signal.aborted) console.error("Couldn't plan the Hode; Hodey plans it a step at a time", error);
+        },
       );
+  }
+
+  /** The learner's next step comes first: the plan gives way (the model takes one request at a time) and waits. */
+  private yieldPlan(): void {
+    const planning = this.planning;
+    if (!planning) return;
+    planning.controller.abort();
+    this.planning = undefined;
+    this.deferredPlan = planning.tries < MAX_PLAN_TRIES ? { effect: planning.effect, tries: planning.tries + 1 } : undefined;
+  }
+
+  /** Once a step is answered, a plan that gave way to it is asked for again, if it's still this Hode's and still wanted. */
+  private resumePlan(): void {
+    const deferred = this.deferredPlan;
+    if (!deferred || this.reasoning) return;
+    this.deferredPlan = undefined;
+    if (this.state.planId !== deferred.effect.planId || this.state.plan !== undefined) return;
+    this.planOpenGoal(deferred.effect, deferred.tries);
   }
 
   /** Reference steps for planning a goal; without them (none found, or the lookup failed) the model plans from what it knows. */
   private async planReference(goal: string, app: string | undefined, signal: AbortSignal): Promise<string | undefined> {
-    if (!this.deps.reference) return undefined;
+    if (!this.deps.planReference) return undefined;
     try {
-      return await this.deps.reference(goal, app, signal, { web: true });
+      return await this.deps.planReference(goal, app, signal);
     } catch (error) {
       console.error("Looking up the goal failed; Hodey plans it from what it knows", error);
       return undefined;
@@ -476,6 +517,7 @@ export class HodeRuntime {
 
   private reason(requestId: number, context: TeachingContext): void {
     this.reasoning?.controller.abort();
+    this.yieldPlan();
     const controller = new AbortController();
     this.reasoning = { requestId, controller };
     const hooks = { onThinking: () => this.dispatch({ type: "THINKING", requestId }), signal: controller.signal };
@@ -490,6 +532,7 @@ export class HodeRuntime {
           // Backstop: an answer to a request that was called off never reaches the Hode.
           if (controller.signal.aborted) return;
           this.dispatch({ type: "ACTION_READY", requestId, action, failures });
+          this.resumePlan();
         },
         (error) => {
           // Called off because the Hode moved on: nothing failed.

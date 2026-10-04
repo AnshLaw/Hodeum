@@ -232,7 +232,7 @@ export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], ope
   const text = clean(raw, wakeWords);
   if (text.length < MIN_CHARS) return [];
   if (s.phase === "annotating") return [];
-  if (s.phase === "goal_entry") return classify(text) === "noise" ? [] : goalEvents(text, { packs, openAllowed, apps });
+  if (s.phase === "goal_entry") return classify(text) === "noise" ? [] : goalEvents(text, { packs, openAllowed, apps, visionStarting });
   // The closing question is open: anything said is an answer to it, even one word ("Insert").
   const answering = s.phase === "success" && s.review !== undefined && s.review.picked === undefined;
   if (answering && !isAcknowledgement(text)) return [asCommand(text) ?? { type: "REVIEW_ANSWERED", said: text }];

@@ -97,9 +97,10 @@ function askedTexts(context: TeachingContext): (string | undefined)[] {
   return context.openGoal ? [context.utterance, context.goal, context.lastInstruction] : [context.utterance];
 }
 
-/** The learner's pointer, when it's over the window that was read. */
+/** The learner's pointer, when it's over the window that was read (never on the phone: it's the desktop's pointer). */
 function pointerIn(context: TeachingContext): Point | undefined {
   const { pointer } = context;
+  if (context.pack?.surface === "phone") return undefined;
   const window = windowBoundsOf(context);
   return pointer && (!window || containsPoint(window, pointer)) ? pointer : undefined;
 }

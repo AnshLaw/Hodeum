@@ -46,12 +46,12 @@ function asker(scene: ExcelScene): ReasoningProvider {
   };
 }
 
-function start(planner: PlannerProvider, reference = vi.fn(async () => REFERENCE)) {
+function start(planner: PlannerProvider, planReference = vi.fn(async () => REFERENCE)) {
   const scene = new ExcelScene();
-  const runtime = new HodeRuntime({ perception: new MockPerception(() => scene), reasoners: [asker(scene)], skills: new MemorySkillStore(), bus: new LocalBus(), tts, reference, planner });
+  const runtime = new HodeRuntime({ perception: new MockPerception(() => scene), reasoners: [asker(scene)], skills: new MemorySkillStore(), bus: new LocalBus(), tts, planReference, planner });
   runtime.dispatch({ type: "START_HODE" });
   runtime.dispatch({ type: "GOAL_SUBMITTED", goal: GOAL, openAllowed: true, mode: "teach" });
-  return { runtime, reference };
+  return { runtime, planReference };
 }
 
 afterEach(() => {
@@ -61,11 +61,31 @@ afterEach(() => {
 describe("planning an open Teach Hode in the background", () => {
   it("looks the goal up, plans it with the local model, and keeps the plan", async () => {
     const plan = vi.fn(async () => PLAN);
-    const { runtime, reference } = start({ plan });
+    const { runtime, planReference } = start({ plan });
     await settle();
     expect(runtime.getState().phase).toBe("guiding");
-    expect(reference).toHaveBeenCalledWith(GOAL, undefined, expect.any(AbortSignal), { web: true });
+    expect(planReference).toHaveBeenCalledWith(GOAL, undefined, expect.any(AbortSignal));
     expect(plan).toHaveBeenCalledWith({ goal: GOAL, reference: REFERENCE, language: "en" }, expect.any(AbortSignal));
+    expect(runtime.getState().plan).toEqual(PLAN);
+    runtime.dispose();
+  });
+
+  it("gives the model to the learner's next step, and asks for the plan again once that step is answered", async () => {
+    const signals: AbortSignal[] = [];
+    const plan = vi.fn(async (_request: unknown, signal: AbortSignal): Promise<HodePlan> => {
+      signals.push(signal);
+      if (signals.length > 1) return PLAN;
+      return new Promise<HodePlan>((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("called off"))));
+    });
+    const { runtime } = start({ plan });
+    await settle();
+    expect(plan).toHaveBeenCalledTimes(1);
+    // Stuck twice: the area lights up, then the next rung needs the model.
+    runtime.dispatch({ type: "STUCK_TIMEOUT" });
+    runtime.dispatch({ type: "STUCK_TIMEOUT" });
+    await settle();
+    expect(signals[0]?.aborted).toBe(true);
+    expect(plan).toHaveBeenCalledTimes(2);
     expect(runtime.getState().plan).toEqual(PLAN);
     runtime.dispose();
   });

@@ -353,6 +353,7 @@ function lineFor(s: HodeState, action: TeachingAction): { line: string; instruct
 
 export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
   const action = withWhy(s, shown);
+  if (s.away === true) return keepForReturn(s, action);
   const primitives = overlayOf(s, action);
   const effects: HodeEffect[] = [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }];
   const { line, instruction } = lineFor(s, action);
@@ -381,6 +382,14 @@ export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
     prompted: false,
   };
   return { state, effects };
+}
+
+/**
+ * The learner is in another app: the step waits for them, drawing nothing over their other app and saying
+ * nothing. Its lines stay pending and unsaid, so the fresh look on their return says them.
+ */
+function keepForReturn(s: HodeState, action: TeachingAction): Transition {
+  return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false }, effects: [{ type: "clearOverlay" }] };
 }
 
 /** Taskbar controls that find an app, best first: its search box, then Start. */

@@ -73,6 +73,10 @@ describe("the pointer in the model's prompt", () => {
     expect(selectCandidates(ctx({ x: 520, y: 510 })).map((e) => e.name)).toEqual(["Send", "Bold"]);
   });
 
+  it("leaves the pointer out of a phone Hode: the desktop pointer isn't on the phone's screen", () => {
+    expect(selectCandidates({ ...ctx({ x: 520, y: 510 }), pack: { ...PACK, surface: "phone" } }).map((e) => e.name)).toEqual(["Bold", "Send"]);
+  });
+
   it("tells the model where the pointer rests", () => {
     const [, user] = buildMessages(ctx({ x: 400, y: 300 }), [], { png: "", rect: { x: 0, y: 0, width: 800, height: 600 } });
     const text = (user.content as Array<{ type: string; text?: string }>).map((part) => part.text ?? "").join("\n");
