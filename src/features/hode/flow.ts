@@ -8,6 +8,7 @@ import {
   STUCK_MS,
   currentStep,
   standingBy,
+  withTurn,
   initialState,
   noop,
   pinFor,
@@ -153,6 +154,7 @@ function contextFor(s: HodeState, observation: ScreenObservation): TeachingConte
     openGoal: s.open,
     lastInstruction: s.open ? (s.instructionSaid ?? s.action?.speech) : undefined,
     doneSteps: s.open ? s.openDone : undefined,
+    history: s.dialogue,
     language: s.language,
     recentActions: summarizeActions(s.stepActions, currentStep(s)),
   };
@@ -299,6 +301,7 @@ export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
     ack: s.pendingAck ?? s.ack,
     reason: s.pendingReason ?? s.reason,
     instructionSaid: instruction === "" ? s.instructionSaid : instruction,
+    dialogue: instruction === "" ? s.dialogue : withTurn(s.dialogue, { who: "hodey", text: instruction }),
     whySaid: s.whySaid === true || (why !== undefined && instruction.includes(why)),
     actedSinceInstruction: instruction === "" ? s.actedSinceInstruction : false,
     prompted: false,
@@ -331,7 +334,7 @@ function showAnswer(s: HodeState, reply: TeachingAction): Transition {
   // Ringing the mark itself, the beam replaces the mark's dashed outline.
   const primitives = action.target?.elementId === MARKED_AREA_ID ? overlayOf({ ...s, question: undefined, focusRegion: undefined }, action) : overlayOf(s, action);
   return {
-    state: { ...s, phase: "answering", action, answerSaid: false },
+    state: { ...s, phase: "answering", action, answerSaid: false, dialogue: withTurn(s.dialogue, { who: "hodey", text: action.speech }) },
     effects: [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }, { type: "say", text: action.speech }],
   };
 }

@@ -15,6 +15,7 @@ import {
   type HodeState,
   type Transition,
   STUCK_MS,
+  withTurn,
 } from "./model";
 
 const IN_HODE: HodePhase[] = ["observing", "reasoning", "guiding", "answering", "recovering", "acting"];
@@ -113,7 +114,7 @@ export function onVoiceQuestion(s: HodeState, e: EventOf<"VOICE_QUESTION">): Tra
   const { acks } = spoken(s.language);
   const ack = acks[requestId % acks.length];
   return {
-    state: { ...s, ...from, phase: "observing", spokenQuestion: question, question: undefined, requestId },
+    state: { ...s, ...from, phase: "observing", spokenQuestion: question, question: undefined, requestId, dialogue: withTurn(s.dialogue, { who: "learner", text: question }) },
     effects: [{ type: "stopSpeech" }, { type: "cancelStuckTimer" }, { type: "say", text: ack }, { type: "observe" }],
   };
 }
@@ -136,8 +137,9 @@ export function onAnnotationSubmitted(s: HodeState, e: EventOf<"ANNOTATION_SUBMI
   if (annotation.intent === "focus") {
     return resume({ ...s, focusRegion: annotation, notice: s.pack ? s.notice : COPY.focusSet });
   }
+  const dialogue = annotation.question ? withTurn(s.dialogue, { who: "learner", text: annotation.question }) : s.dialogue;
   return {
-    state: { ...s, phase: "observing", question: annotation },
+    state: { ...s, phase: "observing", question: annotation, dialogue },
     effects: [{ type: "observe", region: padRect(annotation.shape.bounds, QUESTION_PADDING_PX) }],
   };
 }

@@ -194,6 +194,12 @@ export interface LearnerAnnotation {
   window?: WindowRef;
 }
 
+/** One turn of the conversation: something the learner asked or said, or something Hodey said. */
+export interface DialogueTurn {
+  who: "learner" | "hodey";
+  text: string;
+}
+
 export interface TeachingContext {
   goal: string;
   pack?: TaskPack;
@@ -210,6 +216,8 @@ export interface TeachingContext {
   lastInstruction?: string;
   /** Open-ended Hodes: the instructions the learner has already carried out, oldest first. */
   doneSteps?: string[];
+  /** The last few exchanges, oldest first, so a follow-up ("why?") is answered in context. Local reasoners only: the learner's words never leave the PC. */
+  history?: DialogueTurn[];
   /** What to reply in; English when absent. */
   language?: ReplyLanguage;
   /** The learner's last few actions this step, oldest first: what they did and what it changed. */
