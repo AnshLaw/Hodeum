@@ -128,6 +128,8 @@ export interface HodeState {
   reason?: string;
   /** The current step's why has been said (in a demonstration, a correction, or Explain). */
   whySaid?: boolean;
+  /** Teach's hint rung, second beat: the area that holds the answer is lit (the question came alone first). */
+  areaShown?: boolean;
   /** Paused, then a question: where the pause itself resumes to, kept while the question is answered. */
   pausedResume?: Pick<HodeState, "resumePhase" | "resumeAction" | "resumeObservation">;
   /** A short line said once, ahead of the next guidance ("I can't see that done yet."). */

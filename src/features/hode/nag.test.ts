@@ -67,7 +67,9 @@ describe("the stuck timer climbs the ladder once, then waits", () => {
     const menuOpen = { ...obs([el("File", "menu item"), el("Save As", "menu item")]), inputs: CLICK_FILE };
     const acted = answer(step(s, { type: "LEARNER_ACTED", observation: menuOpen }), (state) => openGuide("Choose Save As.", state.level));
     expect(acted.state.toppedOut).toBe(false);
-    expect(reasons(step(acted.state, { type: "STUCK_TIMEOUT" }))).toBe(1);
+    const area = step(acted.state, { type: "STUCK_TIMEOUT" });
+    expect(reasons(area)).toBe(0);
+    expect(reasons(step(area.state, { type: "STUCK_TIMEOUT" }))).toBe(1);
   });
 });
 

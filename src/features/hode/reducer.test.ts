@@ -377,8 +377,10 @@ describe("verifying learner actions", () => {
 });
 
 describe("learner controls", () => {
-  it("escalates on the stuck timer", () => {
-    const t = step(guiding("hint"), { type: "STUCK_TIMEOUT" });
+  it("escalates on the stuck timer (in Teach, after first lighting the area)", () => {
+    const area = step(guiding("hint"), { type: "STUCK_TIMEOUT" });
+    expect(area.state).toMatchObject({ level: "hint", areaShown: true, phase: "guiding" });
+    const t = step(area.state, { type: "STUCK_TIMEOUT" });
     expect(t.state).toMatchObject({ level: "guide", escalated: true, mistakes: 0, phase: "reasoning" });
   });
 
@@ -608,7 +610,9 @@ describe("richer stuck detection (PRD §7)", () => {
   });
 
   it("'where is it?' raises help like the stuck timer, never pausing", () => {
-    const t = step(guiding("hint"), { type: "SAID_STUCK" });
+    const area = step(guiding("hint"), { type: "SAID_STUCK" });
+    expect(area.state).toMatchObject({ phase: "guiding", level: "hint", areaShown: true, stuck: { kind: "said_stuck" } });
+    const t = step(area.state, { type: "SAID_STUCK" });
     expect(t.state).toMatchObject({ phase: "reasoning", level: "guide", escalated: true, mistakes: 0, stuck: { kind: "said_stuck" } });
     expect(types(t)).toEqual(["cancelStuckTimer", "reason"]);
     expect(step(reasoning(), { type: "SAID_STUCK" }).state.phase).toBe("reasoning");

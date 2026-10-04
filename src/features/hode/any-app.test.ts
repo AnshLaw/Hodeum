@@ -38,7 +38,9 @@ function openGoal(app?: string): Transition {
 describe("a hint about a control that stands alone", () => {
   it("still lights up where to look: a generous area around it, inside the window", () => {
     const t = play(openGoal("Discord").state, { type: "OBSERVED", observation: DISCORD });
-    const shown = play(t.state, { type: "ACTION_READY", requestId: t.state.requestId, action: hint("Where would you type a message?"), failures: [] });
+    const asked = play(t.state, { type: "ACTION_READY", requestId: t.state.requestId, action: hint("Where would you type a message?"), failures: [] });
+    expect(overlays(asked)).toEqual([]);
+    const shown = play(asked.state, { type: "STUCK_TIMEOUT" });
     const [primitives] = overlays(shown);
     expect(primitives).toHaveLength(1);
     const area = primitives[0];

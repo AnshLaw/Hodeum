@@ -41,6 +41,8 @@ export interface SpokenCopy {
   openedIt: (app: string) => string;
   /** Opening an app from the taskbar control Hodey ringed (`label`: "Search" or "Start"). */
   searchToOpen: (label: string, app: string) => string;
+  /** Teach's hint, second beat: the area that holds the answer is lit. */
+  lookHere: string;
   /** Said when the learner gets a step right (Teach, or Help once Hodey stepped in); varied so it doesn't sound canned. */
   stepDone: readonly string[];
   /** Agent mode's lighter acknowledgement of a step done right. */
@@ -103,6 +105,7 @@ const ENGLISH: SpokenCopy = {
   howToOpen: (app) => `Press the Windows key, type ${app}, then press Enter. I'll pick up once ${app} is open.`,
   openedIt: (app) => `${app} is open. The Windows key, the app's name, then Enter: that opens any app on your PC.`,
   searchToOpen: (label, app) => `Click ${label}, which I've highlighted, then type ${app} and press Enter.`,
+  lookHere: "Have a look in the area I've lit up.",
   stepDone: ["Nice, that's it.", "Exactly right.", "Good, that's the one.", "Yes, well done."],
   stepDoneLight: ["Good.", "Done."],
   nothingMarked: COPY.nothingMarked,
@@ -151,6 +154,7 @@ const HINDI: SpokenCopy = {
   howToOpen: (app) => `विंडोज़ बटन दबाइए, ${app} टाइप कीजिए, फिर एंटर दबाइए। ${app} खुलते ही हम आगे बढ़ेंगे।`,
   openedIt: (app) => `${app} खुल गया। विंडोज़ बटन, ऐप का नाम, फिर एंटर: इसी से आपके कंप्यूटर का कोई भी ऐप खुल जाता है।`,
   searchToOpen: (label, app) => `मैंने ${label} हाइलाइट किया है: उस पर क्लिक कीजिए, फिर ${app} टाइप करके एंटर दबाइए।`,
+  lookHere: "जो हिस्सा मैंने हाइलाइट किया है, उसमें देखिए।",
   stepDone: ["बढ़िया, यही था।", "बिल्कुल सही।", "हाँ, यही वाला।", "शाबाश, सही किया।"],
   stepDoneLight: ["ठीक है।", "हो गया।"],
   nothingMarked: "वहाँ अभी कोई कंट्रोल समझ नहीं आ रहा। किसी एक बटन के आसपास छोटा हिस्सा मार्क करके देखिए।",
@@ -199,6 +203,7 @@ const HINGLISH: SpokenCopy = {
   howToOpen: (app) => `Windows button दबाइए, ${app} type कीजिए, फिर Enter दबाइए। ${app} खुलते ही हम आगे बढ़ेंगे।`,
   openedIt: (app) => `${app} खुल गया। Windows button, app का नाम, फिर Enter: इसी से आपके computer का कोई भी app खुल जाता है।`,
   searchToOpen: (label, app) => `मैंने ${label} highlight किया है: उस पर click कीजिए, फिर ${app} type करके Enter दबाइए।`,
+  lookHere: "जो area मैंने highlight किया है, उसमें देखिए।",
   stepDone: ["बढ़िया, यही था।", "Perfect, बिल्कुल सही।", "हाँ, यही वाला।", "Great, सही किया।"],
   stepDoneLight: ["Good।", "Done।"],
   nothingMarked: "वहाँ अभी कोई control समझ नहीं आ रहा। किसी एक button के आसपास छोटा area mark करके देखिए।",

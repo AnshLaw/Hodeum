@@ -131,6 +131,7 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       instructionSaid: undefined,
       pendingNote: undefined,
       whySaid: false,
+      areaShown: false,
       claimedDone: false,
       offerSkip: false,
       prompted: false,
@@ -290,7 +291,7 @@ function openProgress(s: HodeState, action: TeachingAction): HodeState {
   if (action.kind === "complete") return { ...s, openDone };
   const ack = acknowledgement(s);
   const acknowledged: HodeState = ack ? { ...s, pendingAck: ack, lastAck: ack } : s;
-  const fresh = { level: OPEN_START[s.mode], escalated: false, toppedOut: false, mistakes: 0, wrongActions: 0, stepActions: [], instructionSaid: undefined };
+  const fresh = { level: OPEN_START[s.mode], escalated: false, toppedOut: false, mistakes: 0, wrongActions: 0, stepActions: [], instructionSaid: undefined, areaShown: false };
   return { ...acknowledged, ...fresh, openDone, actedSinceInstruction: false };
 }
 
@@ -307,7 +308,9 @@ function showOpenAction(s: HodeState, action: TeachingAction): Transition {
 export function overlayOf(s: HodeState, action: TeachingAction) {
   const elements = s.observation?.elements ?? [];
   const nearby = action.target ? neighboursOf(action.target.bounds, elements) : [];
-  return overlayFor(action, pinFor(s), nearby, hintArea(action, elements, s.observation?.window?.bounds));
+  // Teach lets the learner try a question on their own first: the area lights up once they're stuck.
+  const area = s.mode !== "teach" || s.areaShown === true ? hintArea(action, elements, s.observation?.window?.bounds) : undefined;
+  return overlayFor(action, pinFor(s), nearby, area);
 }
 
 /**
