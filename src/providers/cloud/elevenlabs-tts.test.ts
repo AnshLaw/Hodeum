@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TTSProvider } from "../interfaces";
+import type { SpokenSegment, TTSProvider } from "../interfaces";
 import { ActivityTracker } from "../../lib/activity";
+import { fakeSegmentedVoice } from "../../test-support/fake-voice";
 import { CloudFirstTTS, ElevenLabsTTSProvider, type VoicePolicy } from "./elevenlabs-tts";
 
 async function* chunks(...parts: string[]): AsyncGenerator<string> {
@@ -202,5 +203,73 @@ describe("CloudFirstTTS", () => {
     const { tts, cloud } = setup();
     cloud.healthCheck.mockResolvedValue(false);
     expect(await tts.healthCheck()).toBe(true);
+  });
+});
+
+describe("CloudFirstTTS segments", () => {
+  function setup(allowed: boolean, cloudSpeak?: TTSProvider["speak"]) {
+    const local = fakeSegmentedVoice();
+    const cloud = { multilingual: true, speak: vi.fn(cloudSpeak ?? (async () => undefined)), stop: vi.fn(async () => undefined), healthCheck: vi.fn(async () => true) };
+    const tts = new CloudFirstTTS({ cloud, local: local.voice, policy: fakePolicy(allowed), shareable: () => true });
+    const heard: SpokenSegment[] = [];
+    tts.onSegment((segment) => heard.push(segment));
+    return { tts, local, heard };
+  }
+
+  it("relays the local voice's segments while it says the line", async () => {
+    const { tts, local, heard } = setup(false);
+    const line = tts.speak(chunks("Click Insert."), new AbortController().signal);
+    await settle();
+    local.report({ index: 0, text: "Click Insert." });
+    local.finish();
+    await line;
+    local.report({ index: 1, text: "after the line ended" });
+    expect(heard).toEqual([{ index: 0, text: "Click Insert." }]);
+  });
+
+  it("has none while ElevenLabs speaks, even if the local voice reports one", async () => {
+    const playing = deferred<void>();
+    const { tts, local, heard } = setup(true, () => playing.promise);
+    const line = tts.speak(chunks("Click Insert."), new AbortController().signal);
+    await settle();
+    local.report({ index: 0, text: "Click Insert." });
+    playing.resolve();
+    await line;
+    expect(local.lines).toEqual([]);
+    expect(heard).toEqual([]);
+  });
+
+  it("relays the segments of the local voice saying a line ElevenLabs couldn't", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { tts, local, heard } = setup(true, async () => {
+      throw new Error("network down");
+    });
+    const line = tts.speak(chunks("Click Insert."), new AbortController().signal);
+    await settle();
+    local.report({ index: 0, text: "Click Insert." });
+    local.finish();
+    await line;
+    expect(heard).toEqual([{ index: 0, text: "Click Insert." }]);
+    error.mockRestore();
+  });
+
+  it("drops the local voice's segments once the learner talks over it", async () => {
+    const { tts, local, heard } = setup(false);
+    const controller = new AbortController();
+    const line = tts.speak(chunks("A long explanation."), controller.signal);
+    await settle();
+    controller.abort();
+    local.report({ index: 0, text: "A long explanation." });
+    await line;
+    expect(heard).toEqual([]);
+  });
+
+  it("has no segments when the local voice can't tell them", () => {
+    const { local } = fakeLocal();
+    const cloud = { multilingual: true, speak: vi.fn(async () => undefined), stop: vi.fn(async () => undefined), healthCheck: vi.fn(async () => true) };
+    const tts = new CloudFirstTTS({ cloud, local, policy: fakePolicy(false), shareable: () => true });
+    const off = tts.onSegment(() => undefined);
+    expect(off).toBeTypeOf("function");
+    off();
   });
 });

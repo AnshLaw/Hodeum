@@ -34,10 +34,23 @@ export interface ReasoningProvider {
   healthCheck(): Promise<boolean>;
 }
 
+/** One part of a line Hodey is saying (a sentence, or a long first sentence's opening clause), as it starts playing. */
+export interface SpokenSegment {
+  /** From 0, in the order the parts are said. */
+  index: number;
+  /** The words of this part, as spoken (after respelling for the voice). */
+  text: string;
+}
+
 export interface TTSProvider {
   speak(text: AsyncIterable<string>, signal: AbortSignal): Promise<void>;
   stop(): Promise<void>;
   healthCheck(): Promise<boolean>;
+  /**
+   * Each part of the line this voice is saying, as it starts playing; nothing for a stopped line or another
+   * voice's. Only Hodey's local voice can tell; the cloud and Windows voices leave this out.
+   */
+  onSegment?(listener: (segment: SpokenSegment) => void): () => void;
 }
 
 export interface MemoryQuery {

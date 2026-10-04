@@ -57,6 +57,11 @@ export interface BusEvents {
   "account:retry": Empty;
   /** A row was deleted locally; sync deletes it in the cloud too instead of pulling it back. */
   "sync:deleted": { table: "skills" | "chats"; id: string };
+  /**
+   * Emitted by Rust (src-tauri/src/voice/speak.rs) as each part of a line in Hodey's local voice starts playing:
+   * `id` is the line's `tts_speak` id, `index` counts from 0. Never for a stopped line.
+   */
+  "tts:segment": { id: string; index: number; text: string };
 }
 
 export interface HodeSummary {

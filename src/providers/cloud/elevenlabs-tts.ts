@@ -2,8 +2,9 @@ import { DEFAULT_ELEVENLABS_MODEL, DEFAULT_ELEVENLABS_VOICE, type CloudProvider 
 import type { ActivityTracker } from "../../lib/activity";
 import { speakable } from "../../lib/hinglish";
 import { hasDevanagari } from "../../lib/language";
-import type { TTSProvider } from "../interfaces";
+import type { SpokenSegment, TTSProvider } from "../interfaces";
 import { collect, once } from "../speech/native-voice";
+import { SegmentRelay } from "../speech/segment-relay";
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -84,12 +85,16 @@ export interface CloudFirstDeps {
  * then the local chain. A cloud skip or failure says the same utterance locally.
  */
 export class CloudFirstTTS implements TTSProvider {
-  constructor(private readonly deps: CloudFirstDeps) {}
+  private readonly localSegments: SegmentRelay;
+
+  constructor(private readonly deps: CloudFirstDeps) {
+    this.localSegments = new SegmentRelay(deps.local);
+  }
 
   async speak(text: AsyncIterable<string>, signal: AbortSignal): Promise<void> {
     const content = await collect(text, signal);
     if (signal.aborted) return;
-    if (!this.useCloud(content)) return this.deps.local.speak(once(content), signal);
+    if (!this.useCloud(content)) return this.localSegments.speak(once(content), signal);
     try {
       await this.streamCloud(content, signal);
       this.deps.policy.reportSuccess(PROVIDER);
@@ -97,8 +102,13 @@ export class CloudFirstTTS implements TTSProvider {
       if (signal.aborted) return;
       console.error("ElevenLabs voice failed; Hodey's local voice says this instead", error);
       this.deps.policy.reportFailure(PROVIDER);
-      await this.deps.local.speak(once(content), signal);
+      await this.localSegments.speak(once(content), signal);
     }
+  }
+
+  /** The local voice's segments while it says the line; ElevenLabs' speech has none. */
+  onSegment(listener: (segment: SpokenSegment) => void): () => void {
+    return this.localSegments.onSegment(listener);
   }
 
   private useCloud(content: string): boolean {
