@@ -70,9 +70,9 @@ Hodey swallows these letter presses, so the app underneath never sees them, and 
   - when idle, a goal ("teach me how to make a pivot table") starts a Hode, and a what/where question asks about the screen;
   - during a Hode, "hint", "explain", "repeat", "I did it", "pause", "continue" and "stop" are controls, and anything else is a question.
 - **Tap-to-talk:** listening stops after one sentence, so room noise can't steer Hodey. Tapping also interrupts Hodey mid-sentence. If Hodey hears its own voice coming back through the speakers, it ignores it.
-- **Hodey's voice:** Supertonic, with 10 natural voices in Settings, plus Windows voices as a fallback.
+- **Hodey's voice:** Kokoro-82M, the most natural local voice. Pick from 12 English voices in Settings, American and British, female and male; "Heart" is the default. Supertonic's 10 voices are a second option. Both run on the CPU, about three times faster than real time, and Hodey says one sentence while it prepares the next. Windows voices are used only if no natural voice is installed. (NVIDIA's MagpieTTS was considered, but it can't run in real time on the CPU, and the GPU is busy with the vision model.)
 - **Privacy:** the orange dot shows while the mic is on. Audio and transcripts are never saved.
-- **Setup:** `scripts/setup-local-ai.ps1` downloads the voice models (about 600 MB) into `models/voice`.
+- **Setup:** `scripts/setup-local-ai.ps1` downloads the voice models (about 950 MB) into `models/voice`.
 
 **Local by default**: no cloud keys needed. SQLite (`hodeum.db` in the app config folder) stores skills, Hode history, chats and settings, never screenshots or audio. The local model server runs inside a Windows job object, so it stops with Hodeum even after a crash.
 

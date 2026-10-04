@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { TTSProvider } from "../interfaces";
 import { NativeSpeechInput, NativeTTSProvider, RoutedTTS, voiceChoice, type VoiceBridge, type VoiceStatus } from "./native-voice";
 
-const READY: VoiceStatus = { asr: "ready", tts: "ready", listening: false, detail: null, tts_detail: null, voices: 10 };
+const READY: VoiceStatus = { asr: "ready", tts: "ready", listening: false, detail: null, tts_detail: null, voices: [{ id: "kokoro:3", label: "Heart · American" }] };
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -63,14 +63,14 @@ describe("NativeTTSProvider", () => {
   it("speaks through Supertonic and resolves when that utterance is done", async () => {
     const { bridge, fire, invoke } = fakeBridge();
     const tts = new NativeTTSProvider(bridge);
-    tts.voiceId = 3;
+    tts.voiceId = "kokoro:26";
     tts.rate = 1.2;
     let done = false;
     const speaking = tts.speak(words("Click Insert."), new AbortController().signal).then(() => (done = true));
     await settle();
     const call = invoke.mock.calls.find(([command]) => command === "tts_speak");
     const args = call?.[1] as { id: string };
-    expect(args).toMatchObject({ text: "Click Insert.", voiceId: 3, speed: 1.2 });
+    expect(args).toMatchObject({ text: "Click Insert.", voiceId: "kokoro:26", speed: 1.2 });
     fire("tts:done", { id: "someone-else", interrupted: false, error: null });
     await settle();
     expect(done).toBe(false);
@@ -128,9 +128,9 @@ describe("RoutedTTS", () => {
 
 describe("voiceChoice", () => {
   it("reads Hodey's natural voices, Windows voices, and the default", () => {
-    expect(voiceChoice("")).toEqual({ engine: "natural", id: 0 });
-    expect(voiceChoice("hodey:4")).toEqual({ engine: "natural", id: 4 });
-    expect(voiceChoice("hodey:x")).toEqual({ engine: "natural", id: 0 });
+    expect(voiceChoice("")).toEqual({ engine: "natural", id: "" });
+    expect(voiceChoice("hodey:kokoro:26")).toEqual({ engine: "natural", id: "kokoro:26" });
+    expect(voiceChoice("hodey:4")).toEqual({ engine: "natural", id: "4" });
     expect(voiceChoice("Microsoft Zira - English (United States)")).toEqual({ engine: "windows", uri: "Microsoft Zira - English (United States)" });
   });
 });

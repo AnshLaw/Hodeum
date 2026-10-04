@@ -8,8 +8,14 @@ export interface VoiceStatus {
   listening: boolean;
   detail: string | null;
   tts_detail: string | null;
-  /** Supertonic voices available. */
-  voices: number;
+  /** Hodey's natural voices on this PC (Kokoro first, then Supertonic). */
+  voices: NaturalVoice[];
+}
+
+/** Mirrors `VoiceOption` in src-tauri/src/voice/voices.rs. */
+export interface NaturalVoice {
+  id: string;
+  label: string;
 }
 
 /** Must match the event names in src-tauri/src/voice. */
@@ -115,12 +121,12 @@ async function collect(text: AsyncIterable<string>, signal: AbortSignal): Promis
   return content.trim();
 }
 
-/** Supertonic, Hodey's natural voice, synthesized and played on this PC. */
+/** Hodey's natural voice (Kokoro, else Supertonic), synthesized and played on this PC. */
 export class NativeTTSProvider implements TTSProvider {
   /** Speaking speed from settings (1 = normal). */
   rate = 1;
-  /** Which Supertonic voice. */
-  voiceId = 0;
+  /** A natural voice id like "kokoro:3"; empty for Hodey's default. */
+  voiceId = "";
 
   constructor(private readonly bridge: VoiceBridge, private readonly voice?: NativeVoiceStatus) {}
 
@@ -190,15 +196,14 @@ async function* once(text: string): AsyncGenerator<string> {
   yield text;
 }
 
-/** Saved in settings as `hodey:<n>` for a Supertonic voice; anything else is a Windows voice URI. */
+/** Saved in settings as `hodey:<voice id>` for a natural voice; anything else is a Windows voice URI. */
 export const NATURAL_PREFIX = "hodey:";
 
-export type VoiceChoice = { engine: "natural"; id: number } | { engine: "windows"; uri: string };
+export type VoiceChoice = { engine: "natural"; id: string } | { engine: "windows"; uri: string };
 
 /** The learner's voice setting. Empty means the default: Hodey's natural voice when installed. */
 export function voiceChoice(name: string): VoiceChoice {
-  if (name === "") return { engine: "natural", id: 0 };
+  if (name === "") return { engine: "natural", id: "" };
   if (!name.startsWith(NATURAL_PREFIX)) return { engine: "windows", uri: name };
-  const id = Number.parseInt(name.slice(NATURAL_PREFIX.length), 10);
-  return { engine: "natural", id: Number.isInteger(id) && id >= 0 ? id : 0 };
+  return { engine: "natural", id: name.slice(NATURAL_PREFIX.length) };
 }

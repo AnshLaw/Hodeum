@@ -41,20 +41,20 @@ function preview(voice: Settings["voice"], natural: VoicePreview | undefined, on
   });
 }
 
-/** How many of Hodey's natural voices are installed (0 until the voice has loaded). */
-function useNaturalVoices(natural?: VoicePreview): number {
-  const [count, setCount] = useState(natural?.naturalVoices() ?? 0);
+/** Hodey's natural voices (empty until the voice has loaded). */
+function useNaturalVoices(natural?: VoicePreview): { id: string; label: string }[] {
+  const [voices, setVoices] = useState(natural?.naturalVoices() ?? []);
   useEffect(() => {
     if (!natural) return;
-    setCount(natural.naturalVoices());
-    return natural.subscribe(() => setCount(natural.naturalVoices()));
+    setVoices(natural.naturalVoices());
+    return natural.subscribe(() => setVoices(natural.naturalVoices()));
   }, [natural]);
-  return count;
+  return voices;
 }
 
 export function VoiceSettings({ voice, natural, onChange }: { voice: Settings["voice"]; natural?: VoicePreview; onChange: (voice: Settings["voice"]) => void }) {
   const voices = useLocalVoices();
-  const naturalCount = useNaturalVoices(natural);
+  const naturalVoices = useNaturalVoices(natural);
   const [error, setError] = useState<string>();
   return (
     <>
@@ -64,12 +64,12 @@ export function VoiceSettings({ voice, natural, onChange }: { voice: Settings["v
       <Row label="Voice" detail={error ? `Couldn't play the preview: ${error}` : "All voices run on this PC. Online voices aren't offered: they'd send Hodey's words to the cloud."}>
         <span className="hvoice">
           <select className="hselect" value={voice.name} onChange={(e) => onChange({ ...voice, name: e.target.value })} aria-label="Voice">
-            <option value="">{naturalCount > 0 ? "Hodey (natural voice)" : "System default"}</option>
-            {naturalCount > 0 && (
-              <optgroup label="Hodey's natural voices">
-                {Array.from({ length: naturalCount }, (_, i) => (
-                  <option key={i} value={`${NATURAL_PREFIX}${i}`}>
-                    Hodey {i + 1}
+            <option value="">{naturalVoices.length > 0 ? `Hodey's voice (${naturalVoices[0].label.split(" · ")[0]})` : "System default"}</option>
+            {naturalVoices.length > 0 && (
+              <optgroup label="Natural voices">
+                {naturalVoices.map((v) => (
+                  <option key={v.id} value={`${NATURAL_PREFIX}${v.id}`}>
+                    {v.label}
                   </option>
                 ))}
               </optgroup>

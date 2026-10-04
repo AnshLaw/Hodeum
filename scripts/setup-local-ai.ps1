@@ -39,7 +39,9 @@ if (-not (Test-Path $vad)) {
 }
 $packs = @(
   @{ Name = "sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11"; Url = "$sherpa/asr-models/sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11.tar.bz2" },
-  @{ Name = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11"; Url = "$sherpa/tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2" }
+  @{ Name = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11"; Url = "$sherpa/tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2" },
+  # Kokoro-82M: Hodey's most natural local voice (about 50 voices, full precision).
+  @{ Name = "kokoro-multi-lang-v1_0"; Url = "$sherpa/tts-models/kokoro-multi-lang-v1_0.tar.bz2" }
 )
 foreach ($pack in $packs) {
   $dir = Join-Path $voiceDir $pack.Name

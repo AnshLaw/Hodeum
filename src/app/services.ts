@@ -28,8 +28,8 @@ export interface ChatProvider {
 
 /** Hodey's natural (Supertonic) voices on this PC, for choosing and previewing in Settings. */
 export interface VoicePreview {
-  /** How many natural voices there are; 0 when not installed or still loading. */
-  naturalVoices(): number;
+  /** Hodey's natural voices; empty when not installed or still loading. */
+  naturalVoices(): { id: string; label: string }[];
   subscribe(listener: () => void): () => void;
   preview(voice: Settings["voice"], text: string): Promise<void>;
 }

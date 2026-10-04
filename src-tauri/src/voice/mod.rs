@@ -5,6 +5,7 @@ pub mod listen;
 pub mod models;
 pub mod segment;
 pub mod speak;
+pub mod voices;
 
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
@@ -29,8 +30,8 @@ pub struct VoiceStatus {
     /// Why the mic can't be used, or what it's doing ("Loading…").
     pub detail: Option<String>,
     pub tts_detail: Option<String>,
-    /// How many Supertonic voices there are to choose from.
-    pub voices: i32,
+    /// Hodey's natural voices (Kokoro first, then Supertonic).
+    pub voices: Vec<voices::VoiceOption>,
 }
 
 pub struct Voice {
@@ -62,11 +63,11 @@ pub(crate) fn set_status_detail(app: &AppHandle, detail: Option<String>) {
     update(app, |s| s.detail = detail);
 }
 
-pub(crate) fn set_tts_voices(app: &AppHandle, voices: Result<i32, String>) {
+pub(crate) fn set_tts_voices(app: &AppHandle, voices: Result<Vec<voices::VoiceOption>, String>) {
     update(app, |s| match voices {
-        Ok(count) => {
+        Ok(list) => {
             s.tts = "ready";
-            s.voices = count;
+            s.voices = list;
             s.tts_detail = None;
         }
         Err(reason) => {
@@ -86,7 +87,7 @@ pub fn start(app: &AppHandle) {
     let (listen_tx, listen_rx) = mpsc::channel();
     let (speak_tx, speak_rx) = mpsc::channel();
     let stop = Arc::new(StopSwitch::default());
-    let status = VoiceStatus { asr, tts: "loading", listening: false, detail, tts_detail: None, voices: 0 };
+    let status = VoiceStatus { asr, tts: "loading", listening: false, detail, tts_detail: None, voices: Vec::new() };
     app.manage(Voice { status: Mutex::new(status), listen: Mutex::new(listen_tx), speak: Mutex::new(speak_tx), stop: Arc::clone(&stop) });
     let listener = app.clone();
     let installed = asr == "ready";
@@ -140,7 +141,7 @@ pub fn voice_stop(voice: State<'_, Voice>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn tts_speak(id: String, text: String, voice_id: i32, speed: f32, voice: State<'_, Voice>) -> Result<(), String> {
+pub fn tts_speak(id: String, text: String, voice_id: String, speed: f32, voice: State<'_, Voice>) -> Result<(), String> {
     let generation = voice.stop.generation.load(std::sync::atomic::Ordering::SeqCst);
     let job = SpeakJob { id, text, voice: voice_id, speed, generation };
     voice.speak.lock().map_err(|e| e.to_string())?.send(job).map_err(|_| "Hodey's voice has stopped; restart Hodeum.".to_string())
@@ -155,7 +156,8 @@ pub fn tts_stop(voice: State<'_, Voice>) -> Result<(), String> {
 mod tests {
     use super::listen::{load_engines, transcribe};
     use super::models::{asr_files, tts_files, voice_root};
-    use super::speak::load_tts;
+    use super::models::kokoro_files;
+    use super::speak::{load_kokoro, load_tts};
     use sherpa_onnx::{GenerationConfig, LinearResampler};
 
     const ASR_RATE: i32 = 16_000;
@@ -182,5 +184,29 @@ mod tests {
         let heard = transcribe(&mut engines, &audio).join(" ").to_lowercase();
         println!("asr: {heard:?} in {:?}", started.elapsed());
         assert!(heard.starts_with("teach me") && heard.contains("pivot table"), "heard {heard:?}");
+    }
+
+    /// Same as above for Kokoro, Hodey's preferred natural voice ("Heart", speaker 3).
+    #[test]
+    #[ignore]
+    fn kokoro_round_trip() {
+        let root = voice_root();
+        let tts = load_kokoro(&kokoro_files(&root).unwrap()).unwrap();
+        let config = GenerationConfig { sid: 3, ..GenerationConfig::default() };
+        let mut spoken = None;
+        for attempt in 1..=3 {
+            let started = std::time::Instant::now();
+            let audio = tts.generate_with_config("Teach me how to make a pivot table in Excel.", &config, None::<fn(&[f32], f32) -> bool>).unwrap();
+            println!("kokoro #{attempt}: {:.2}s of audio in {:?}", audio.samples().len() as f32 / audio.sample_rate() as f32, started.elapsed());
+            spoken = Some(audio);
+        }
+        let spoken = spoken.unwrap();
+        let resampler = LinearResampler::create(spoken.sample_rate(), ASR_RATE).unwrap();
+        let mut audio = vec![0.0; ASR_RATE as usize / 2];
+        audio.extend(resampler.resample(spoken.samples(), true));
+        let mut engines = load_engines(&asr_files(&root).unwrap()).unwrap();
+        let heard = transcribe(&mut engines, &audio).join(" ").to_lowercase();
+        println!("asr: {heard:?}");
+        assert!(heard.contains("pivot table"), "heard {heard:?}");
     }
 }

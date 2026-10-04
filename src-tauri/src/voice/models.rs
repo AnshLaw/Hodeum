@@ -7,6 +7,7 @@ const VOICE_DIR: &str = "models/voice";
 const VAD_FILE: &str = "silero_vad.onnx";
 const ASR_PACK: &str = "sherpa-onnx-nemotron";
 const TTS_PACK: &str = "sherpa-onnx-supertonic";
+const KOKORO_PACK: &str = "kokoro-multi-lang";
 pub const SETUP_HINT: &str = "Run scripts/setup-local-ai.ps1 to install Hodey's local voice.";
 
 #[derive(Debug)]
@@ -27,6 +28,18 @@ pub struct TtsFiles {
     pub tts_json: PathBuf,
     pub unicode_indexer: PathBuf,
     pub voice_style: PathBuf,
+}
+
+#[derive(Debug)]
+pub struct KokoroFiles {
+    pub model: PathBuf,
+    pub voices: PathBuf,
+    pub tokens: PathBuf,
+    /// espeak-ng phoneme data, for words not in the lexicons.
+    pub data_dir: PathBuf,
+    pub dict_dir: PathBuf,
+    /// Comma-separated lexicon files, as sherpa-onnx expects.
+    pub lexicon: String,
 }
 
 pub fn voice_root() -> PathBuf {
@@ -85,6 +98,25 @@ pub fn tts_files(root: &Path) -> Result<TtsFiles, String> {
         tts_json: find(&dir, "tts", ".json")?,
         unicode_indexer: find(&dir, "unicode_indexer", ".bin")?,
         voice_style: find(&dir, "voice", ".bin")?,
+    })
+}
+
+pub fn kokoro_files(root: &Path) -> Result<KokoroFiles, String> {
+    let dir = pack_dir(root, KOKORO_PACK)?;
+    let lexicons: Vec<String> = fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("lexicon") && n.to_string_lossy().ends_with(".txt")))
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    Ok(KokoroFiles {
+        model: find(&dir, "model", ".onnx")?,
+        voices: find(&dir, "voices", ".bin")?,
+        tokens: find(&dir, "tokens", ".txt")?,
+        data_dir: dir.join("espeak-ng-data"),
+        dict_dir: dir.join("dict"),
+        lexicon: lexicons.join(","),
     })
 }
 

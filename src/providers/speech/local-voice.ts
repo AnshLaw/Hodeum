@@ -19,7 +19,9 @@ export function createLocalVoice(bridge: VoiceBridge): LocalVoice {
   const natural = new NativeTTSProvider(bridge, status);
   const windows = new WebSpeechTTSProvider();
   let preferNatural = true;
-  const tts = new RoutedTTS(natural, windows, () => preferNatural && status.current()?.tts === "ready");
+  // While the natural voice is still loading, its queue holds the first lines rather than
+  // switching to a robotic Windows voice; Windows voices are for when no natural voice is installed.
+  const tts = new RoutedTTS(natural, windows, () => preferNatural && status.current()?.tts !== "missing");
   return {
     status,
     speech: new NativeSpeechInput(bridge, status),
@@ -27,7 +29,7 @@ export function createLocalVoice(bridge: VoiceBridge): LocalVoice {
     apply(voice) {
       const choice = voiceChoice(voice.name);
       preferNatural = choice.engine === "natural";
-      natural.voiceId = choice.engine === "natural" ? choice.id : 0;
+      natural.voiceId = choice.engine === "natural" ? choice.id : "";
       windows.voiceName = choice.engine === "windows" ? choice.uri : "";
       natural.rate = voice.rate;
       windows.rate = voice.rate;
@@ -50,7 +52,7 @@ export function showMicDot(speech: SpeechInput, activity: ActivityTracker): () =
 /** The app window's view of the local voice: how many natural voices, and a preview that uses the chosen one. */
 export function voicePreview(voice: LocalVoice): VoicePreview {
   return {
-    naturalVoices: () => (voice.status.current()?.tts === "ready" ? (voice.status.current()?.voices ?? 0) : 0),
+    naturalVoices: () => (voice.status.current()?.tts === "ready" ? (voice.status.current()?.voices ?? []) : []),
     subscribe: (listener) => voice.status.subscribe(() => listener()),
     async preview(settings, text) {
       voice.apply(settings);
