@@ -24,8 +24,9 @@ const WHISPER_WINDOW_SAMPLES: usize = WHISPER_WINDOW_SECS * SAMPLE_RATE as usize
 const NEMOTRON_NO_RESULT: &str = "Nemotron stopped returning text.";
 const WHISPER_NO_RESULT: &str = "Whisper stopped returning text.";
 /// Silence fed after the last word so the streaming encoder's lookahead covers it: without it the
-/// final word of an utterance is often cut short or dropped.
-const TAIL_PADDING_SECS: f32 = 0.6;
+/// final word of an utterance is often cut short or dropped. 0.6 s still lost it with the 560 ms-chunk
+/// model ("Open Excel" heard as "Open Ex"); 1.2 s kept it for every test voice, for ~150 ms more latency.
+const TAIL_PADDING_SECS: f32 = 1.2;
 const NEMOTRON_ID: &str = "nemotron";
 const WHISPER_ID: &str = "whisper";
 const NEMOTRON_LABEL: &str = "Nemotron (fast, streaming)";
@@ -509,7 +510,7 @@ mod tests {
     #[test]
     fn the_last_word_gets_enough_trailing_silence() {
         let padding = tail_padding();
-        assert_eq!(padding.len(), 9_600, "0.6 s at 16 kHz");
+        assert_eq!(padding.len(), 19_200, "1.2 s at 16 kHz");
         assert!(padding.iter().all(|&s| s == 0.0));
     }
 

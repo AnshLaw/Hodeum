@@ -26,17 +26,23 @@ pub enum SpeechEvent {
 /// Audio kept from just before speech is detected, so the first word isn't clipped. The detector
 /// needs ~0.25 s of speech before it fires, so this covers that plus a margin (0.6 s at 16 kHz).
 pub const PREROLL_SAMPLES: usize = 9_600;
+/// The most audio kept from one utterance for the GPU's second listen (Whisper hears 30 s at most).
+pub const MAX_UTTERANCE_SAMPLES: usize = 28 * 16_000;
 
 pub struct Segmenter<R: Recognizer> {
     recognizer: R,
     speaking: bool,
     preroll: VecDeque<f32>,
     last: String,
+    /// The utterance under way (preroll included), kept in memory for the final re-read.
+    utterance: Vec<f32>,
+    /// The last finished utterance's audio, until taken.
+    finished: Option<Vec<f32>>,
 }
 
 impl<R: Recognizer> Segmenter<R> {
     pub fn new(recognizer: R) -> Self {
-        Self { recognizer, speaking: false, preroll: VecDeque::with_capacity(PREROLL_SAMPLES), last: String::new() }
+        Self { recognizer, speaking: false, preroll: VecDeque::with_capacity(PREROLL_SAMPLES), last: String::new(), utterance: Vec::new(), finished: None }
     }
 
     /// One VAD window: its samples and whether the window contains speech.
@@ -47,7 +53,10 @@ impl<R: Recognizer> Segmenter<R> {
                 Vec::new()
             }
             (false, true) => self.begin(frame),
-            (true, true) => self.partial(frame).into_iter().collect(),
+            (true, true) => {
+                self.keep(frame);
+                self.partial(frame).into_iter().collect()
+            }
             (true, false) => self.end(frame),
         }
     }
@@ -84,6 +93,18 @@ impl<R: Recognizer> Segmenter<R> {
         self.speaking = false;
         self.last.clear();
         self.preroll.clear();
+        self.utterance.clear();
+        self.finished = None;
+    }
+
+    /// The audio of the utterance that just ended (once), for a second listen.
+    pub fn take_audio(&mut self) -> Option<Vec<f32>> {
+        self.finished.take()
+    }
+
+    fn keep(&mut self, samples: &[f32]) {
+        let room = MAX_UTTERANCE_SAMPLES.saturating_sub(self.utterance.len());
+        self.utterance.extend_from_slice(&samples[..samples.len().min(room)]);
     }
 
     fn begin(&mut self, frame: &[f32]) -> Vec<SpeechEvent> {
@@ -91,6 +112,8 @@ impl<R: Recognizer> Segmenter<R> {
         self.recognizer.start();
         let mut audio: Vec<f32> = self.preroll.drain(..).collect();
         audio.extend_from_slice(frame);
+        self.utterance.clear();
+        self.keep(&audio);
         let mut events = vec![SpeechEvent::Start];
         events.extend(self.partial(&audio));
         events
@@ -99,6 +122,8 @@ impl<R: Recognizer> Segmenter<R> {
     fn end(&mut self, frame: &[f32]) -> Vec<SpeechEvent> {
         self.speaking = false;
         self.last.clear();
+        self.keep(frame);
+        self.finished = Some(std::mem::take(&mut self.utterance));
         let text = self.recognizer.finish().trim().to_string();
         self.remember(frame);
         if text.is_empty() {
@@ -219,7 +244,15 @@ pub fn script_runs(text: &str) -> Vec<(String, bool)> {
 
 /// Splits text into sentences so speech can start after the first one is synthesized.
 /// Very short pieces are joined to the next so Hodey doesn't sound clipped.
+#[cfg(test)]
 pub fn sentences(text: &str) -> Vec<String> {
+    sentences_with(text, |_| false)
+}
+
+/// `sentences`, except that a piece already synthesized (`prepared`, like "Exactly right.") stays on
+/// its own however short, so it plays at once from the cache instead of being synthesized again
+/// together with the next sentence.
+fn sentences_with(text: &str, prepared: impl Fn(&str) -> bool) -> Vec<String> {
     const MIN_CHARS: usize = 24;
     let mut out: Vec<String> = Vec::new();
     let mut current = String::new();
@@ -228,7 +261,7 @@ pub fn sentences(text: &str) -> Vec<String> {
             current.push(' ');
         }
         current.push_str(word);
-        if word.ends_with(['.', '!', '?', DANDA]) && current.chars().count() >= MIN_CHARS {
+        if word.ends_with(['.', '!', '?', DANDA]) && (current.chars().count() >= MIN_CHARS || prepared(&current)) {
             out.push(std::mem::take(&mut current));
         }
     }
@@ -246,7 +279,12 @@ const MIN_CLAUSE: usize = 12;
 /// Sentences to speak, with a long first sentence split at a comma so Hodey starts talking sooner.
 /// Later chunks are synthesized while the first one plays.
 pub fn speech_chunks(text: &str) -> Vec<String> {
-    let mut chunks = sentences(text);
+    speech_chunks_with(text, |_| false)
+}
+
+/// `speech_chunks`, keeping each `prepared` sentence as its own chunk.
+pub fn speech_chunks_with(text: &str, prepared: impl Fn(&str) -> bool) -> Vec<String> {
+    let mut chunks = sentences_with(text, prepared);
     let Some(first) = chunks.first().cloned() else { return chunks };
     if first.chars().count() <= FIRST_CHUNK_MAX {
         return chunks;
@@ -331,6 +369,41 @@ mod tests {
         assert_eq!((out, done), (vec![SpeechEvent::Final("give me a hint".into())], false));
         let (out, done) = session.on_events(vec![SpeechEvent::Partial("wait".into()), SpeechEvent::Final("wait what".into())]);
         assert_eq!((out, done), (vec![SpeechEvent::Partial("wait".into()), SpeechEvent::Final("wait what".into())], false));
+    }
+
+    #[test]
+    fn a_prepared_short_line_is_spoken_as_its_own_chunk() {
+        let text = "Exactly right. Now click the Insert tab.";
+        assert_eq!(speech_chunks(text), vec![text], "unprepared, it's too short to stand alone");
+        let prepared = |s: &str| s == "Exactly right.";
+        assert_eq!(speech_chunks_with(text, prepared), vec!["Exactly right.", "Now click the Insert tab."]);
+        assert_eq!(speech_chunks_with("Exactly right.", prepared), vec!["Exactly right."]);
+    }
+
+    #[test]
+    fn keeps_each_utterance_s_audio_for_a_second_listen() {
+        let mut s = Segmenter::new(Fake::default());
+        s.push(&[0.0; 4], false);
+        s.push(&[0.5; 2], true);
+        s.push(&[0.6; 2], true);
+        assert_eq!(s.take_audio(), None, "not finished yet");
+        s.push(&[0.0; 1], false);
+        assert_eq!(s.take_audio(), Some(vec![0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.6, 0.6, 0.0]), "preroll, speech and the closing window");
+        assert_eq!(s.take_audio(), None, "taken once");
+        s.push(&[0.7; 1], true);
+        assert_eq!(s.flush(), Some("hint".into()));
+        assert_eq!(s.take_audio(), Some(vec![0.0, 0.7]), "a flushed utterance too, with its own preroll");
+    }
+
+    #[test]
+    fn caps_the_kept_audio() {
+        let mut s = Segmenter::new(Fake::default());
+        let second = vec![0.1; 16_000];
+        for _ in 0..40 {
+            s.push(&second, true);
+        }
+        s.push(&[0.0], false);
+        assert_eq!(s.take_audio().map(|a| a.len()), Some(MAX_UTTERANCE_SAMPLES));
     }
 
     #[test]

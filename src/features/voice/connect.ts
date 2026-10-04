@@ -1,4 +1,4 @@
-import type { TaskPack } from "../../lib/types";
+import type { InstalledApp, TaskPack } from "../../lib/types";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
 import type { HodeEvent, HodePhase, HodeState } from "../hode/model";
 import { routeUtterance, wakeRest } from "./route";
@@ -34,6 +34,8 @@ export interface VoiceDeps {
   heard?: (text: string) => void;
   /** Every Hode event, from any source: closing an answer or the Hode (by voice, button or timer) ends the conversation. */
   onHodeEvent?: (listener: (event: HodeEvent) => void) => () => void;
+  /** The PC's installed apps, so "open Excel" opens it. */
+  apps?: () => InstalledApp[];
 }
 
 const ENDS_CONVERSATION = new Set<HodeEvent["type"]>(["DISMISS", "END_HODE"]);
@@ -67,10 +69,20 @@ export function stripEcho(heard: string, said: string): string {
   return first < 0 ? "" : tokens.slice(first).join(" ");
 }
 
+/** Whether to treat what the mic hears as possibly Hodey's own voice. */
+function mayHearHodey(speech: SpeechInput, session: Session): boolean {
+  // Windows removes Hodey's voice from an echo-cancelled mic; a tap or hold stops Hodey before listening.
+  return session !== "tap" && speech.echoCancelled?.() !== true;
+}
+
+/** Which listening session is running: a tap or held key (Hodey stopped first), or the conversation's open mic. */
+type Session = "none" | "tap" | "conversation";
+
 /**
  * Wires local speech to the Hode, as a conversation like a voice chat: once the learner talks, the mic stays open
  * while Hodey answers, so they can cut in at any moment. Without echo cancellation the mic also hears Hodey, so
- * Hodey stops only for words that aren't its own, and its words are stripped from what the learner said.
+ * Hodey stops only for words that aren't its own, its words are stripped from what the learner said, and speech
+ * that began while Hodey talked counts only once the learner's own words break through.
  */
 export function connectVoice(deps: VoiceDeps): () => void {
   const conversation = new Conversation(deps);
@@ -98,6 +110,11 @@ class Conversation {
   /** The open-mic conversation session is running. */
   private open = false;
   private quietTimer: ReturnType<typeof setTimeout> | undefined;
+  private session: Session = "none";
+  /** The utterance being heard began while Hodey was talking. */
+  private overHodey = false;
+  /** ...and the learner's own words have since broken through (barge-in confirmed). */
+  private bargedIn = false;
 
   constructor(private readonly deps: VoiceDeps) {}
 
@@ -105,37 +122,56 @@ class Conversation {
     if (status === "listening") {
       // Tapping the mic means "I want to talk": Hodey stops at once. The conversation's own mic doesn't.
       if (this.opening) this.open = true;
-      else this.deps.interrupt();
+      else this.onTap();
+      this.session = this.opening ? "conversation" : "tap";
       this.opening = false;
       return;
     }
+    this.session = "none";
     if (this.open) this.end(false);
     else if (this.conversing) this.openMic();
   }
 
+  private onTap(): void {
+    this.deps.interrupt();
+    // A conversation usually follows: its echo-cancelled mic opens while the learner is still talking.
+    if (this.deps.conversation()) this.deps.speech.warmMic?.().catch((error: unknown) => console.error("Couldn't warm up the microphone", error));
+  }
+
   onSpeechStart(): void {
     if (this.open) this.armQuietTimer(SPEAKING_PATIENCE_MS);
-    if (!this.deps.hodeySaying()) this.deps.interrupt();
+    this.overHodey = this.deps.hodeySaying() !== undefined;
+    this.bargedIn = false;
+    if (!this.overHodey) this.deps.interrupt();
   }
 
   onTranscript(text: string, final: boolean): void {
     const saying = this.deps.hodeySaying();
-    if (saying && isEcho(text, saying)) {
+    const echo = saying !== undefined && mayHearHodey(this.deps.speech, this.session) ? saying : undefined;
+    if (echo !== undefined && isEcho(text, echo)) {
       if (final && this.open) this.armQuietTimer();
       return;
     }
     if (!final) {
-      if (saying && ownWords(text, saying) >= BARGE_IN_WORDS) this.deps.interrupt();
+      if (saying && ownWords(text, saying) >= BARGE_IN_WORDS) {
+        this.bargedIn = true;
+        this.deps.interrupt();
+      }
       return;
     }
-    const said = saying ? stripEcho(text, saying) : text;
+    if (echo !== undefined && this.overHodey && !this.bargedIn && ownWords(text, echo) < BARGE_IN_WORDS) {
+      // Begun over Hodey, and never more than a word of its own: most likely Hodey heard through the speakers.
+      if (this.open) this.armQuietTimer();
+      return;
+    }
+    const said = echo !== undefined ? stripEcho(text, echo) : text;
     if (CLOSERS.test(said.trim())) {
       if (this.deps.getState().phase === "answering") this.deps.dispatch({ type: "DISMISS" });
       return this.end(true);
     }
     this.conversing = this.deps.conversation();
     this.deps.heard?.(said);
-    const events = routeUtterance(this.deps.getState(), said, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? []);
+    const events = routeUtterance(this.deps.getState(), said, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? [], this.deps.apps?.() ?? []);
     events.forEach(this.deps.dispatch);
     // Nothing came of it (noise, a thank-you): the learner's turn is still open, but not forever.
     if (events.length === 0 && this.open) this.armQuietTimer();
@@ -146,7 +182,7 @@ class Conversation {
   onWakeCandidate(text: string, final: boolean): void {
     if (this.deps.speech.status() !== "idle") return;
     const saying = this.deps.hodeySaying();
-    if (saying && isEcho(text, saying)) return;
+    if (saying && mayHearHodey(this.deps.speech, this.session) && isEcho(text, saying)) return;
     const rest = wakeRest(text, this.deps.wakeWords?.() ?? []);
     if (rest === undefined) return;
     if (saying) this.deps.interrupt();
@@ -157,7 +193,7 @@ class Conversation {
     }
     this.conversing = this.deps.conversation();
     this.deps.heard?.(rest);
-    routeUtterance(this.deps.getState(), rest, this.deps.packs, this.deps.openAllowed()).forEach(this.deps.dispatch);
+    routeUtterance(this.deps.getState(), rest, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? [], this.deps.apps?.() ?? []).forEach(this.deps.dispatch);
     if (this.conversing) this.openMic();
   }
 
@@ -213,7 +249,7 @@ export function withoutEcho(speech: SpeechInput, hodeySaying: () => string | und
   const view: SpeechInput = Object.create(speech);
   view.onTranscript = (handler) =>
     speech.onTranscript((text, final) => {
-      const saying = hodeySaying();
+      const saying = speech.echoCancelled?.() === true ? undefined : hodeySaying();
       if (saying && isEcho(text, saying)) return;
       const said = saying ? stripEcho(text, saying) : text;
       if (said) handler(said, final);

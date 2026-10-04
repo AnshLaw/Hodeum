@@ -9,7 +9,9 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use super::listen::{is_speech, open_input, Engines, Input, ListenCommand, VadMode, AUDIO_POLL, VAD_WINDOW};
+use super::listen::{emit_error, is_speech, retire, take_input, Engines, ListenCommand, VadMode, AUDIO_POLL, MIC_QUIET, VAD_WINDOW};
+use super::mic::{Input, WarmMic};
+use super::refine::refine;
 use super::segment::{Recognizer, SpeechEvent};
 use super::set_standby;
 
@@ -26,8 +28,11 @@ pub(crate) struct Candidate {
 
 /// First words a wake phrase can open with: greetings, Hodey's name and how it's misheard, in Latin
 /// and Hindi script. The full check (src/features/voice/route.ts) happens once the sentence ends.
-const BUILT_IN_FIRST_WORDS: [&str; 16] =
-    ["hey", "hi", "hello", "ok", "okay", "hodey", "hody", "hodi", "hodie", "hoadie", "hode", "howdy", "हे", "हाय", "ओके", "होडी"];
+/// Measured Nemotron/Whisper mishearings of "Hey Hodey": Holdy, Hudi, Hodee, and "Heyhodi" run together.
+const BUILT_IN_FIRST_WORDS: [&str; 26] = [
+    "hey", "hi", "hello", "ok", "okay", "hodey", "hody", "hodi", "hodie", "hoadie", "hode", "hodee", "howdy", "holdy", "holdie", "hudi", "hudy",
+    "heyhodi", "heyhody", "heyhodey", "hihodi", "हे", "हाय", "ओके", "होडी", "होडे",
+];
 /// Words heard before the first one is trusted: a streaming recognizer can still revise a word in progress.
 const SETTLED_AFTER_WORDS: usize = 2;
 
@@ -74,18 +79,24 @@ pub(crate) fn may_be_wake(partial: &str, custom: &[String]) -> bool {
     first_word(partial).is_none_or(|first| BUILT_IN_FIRST_WORDS.contains(&first.as_str()) || custom.contains(&first))
 }
 
-/// Listens until a command arrives or hands-free is switched off. Err: the microphone failed.
-pub fn standby(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>) -> Result<Outcome, String> {
-    let input = open_input(true)?;
+/// Listens until a command arrives or hands-free is switched off. Err: the microphone failed. A
+/// command keeps the (echo-cancelled) microphone open for the session it starts.
+pub fn standby(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>, warm: &mut WarmMic) -> Result<Outcome, String> {
+    let mut input = take_input(app, warm, true)?;
     set_standby(app, true);
-    let outcome = wait(app, engines, commands, &input);
+    let outcome = wait(app, engines, commands, &mut input);
     set_standby(app, false);
     engines.reset();
+    match outcome {
+        Ok(Outcome::Command(ListenCommand::DevicesChanged)) | Err(_) => retire(app, input),
+        Ok(Outcome::Command(_)) => warm.park(input),
+        Ok(_) => retire(app, input),
+    }
     outcome
 }
 
 /// A command (another microphone picked, too) ends the wait; the listener reopens standby afterwards.
-fn wait(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>, input: &Input) -> Result<Outcome, String> {
+fn wait(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>, input: &mut Input) -> Result<Outcome, String> {
     let mut overheard = Overheard::default();
     loop {
         match commands.try_recv() {
@@ -94,10 +105,13 @@ fn wait(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComman
             Ok(command) => return Ok(Outcome::Command(command)),
             Err(TryRecvError::Disconnected) => return Ok(Outcome::Closed),
         }
-        match input.audio.recv_timeout(AUDIO_POLL) {
+        match input.next(AUDIO_POLL) {
             Ok(chunk) => overheard.push(engines, &input.resampler.resample(&chunk, false)).into_iter().for_each(|text| emit_candidate(app, text)),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return Err("The microphone stopped.".into()),
+        }
+        if engines.take_quiet_warning() {
+            emit_error(app, MIC_QUIET);
         }
         if engines.segmenter.recognizer().failure().is_some() {
             return Ok(Outcome::EngineFailed);
@@ -146,7 +160,11 @@ impl Overheard {
                 None
             }
             SpeechEvent::Partial(text) => Some(Candidate { text, is_final: false }),
-            SpeechEvent::Final(text) => Some(Candidate { text, is_final: true }),
+            // Only the finished sentence gets the GPU's second listen; live text stays Nemotron's.
+            SpeechEvent::Final(text) => {
+                let audio = engines.segmenter.take_audio().unwrap_or_default();
+                Some(Candidate { text: refine(&text, &audio), is_final: true })
+            }
             SpeechEvent::Start => None,
         }
     }
@@ -169,6 +187,14 @@ mod tests {
         assert!(may_be_wake("Hey Hodey", &[]));
         assert!(may_be_wake("Okay, Hodi what's this", &[]));
         assert!(may_be_wake("हे होडी", &[]));
+    }
+
+    #[test]
+    fn hears_the_measured_mishearings_of_hodey() {
+        for heard in ["Hey Holdy, give", "Hudi give me", "Hodee what is", "Heyhodi give me", "Holdy, open Excel"] {
+            assert!(may_be_wake(heard, &[]), "{heard}");
+        }
+        assert!(!may_be_wake("Hold it there", &[]), "'hold it' is an everyday phrase, not a wake word");
     }
 
     #[test]

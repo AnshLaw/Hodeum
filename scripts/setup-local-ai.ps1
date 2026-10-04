@@ -3,7 +3,10 @@
 # Both folders are git-ignored. Re-running skips files that are already present.
 # Also fetches multilingual Whisper base (int8, ~200 MB), the backup speech engine used when Nemotron
 # is missing or fails; pass -SkipWhisper to leave it out.
-param([switch]$SkipWhisper)
+# GPU voice: whisper.cpp's CUDA server (runtime/whisper) and Whisper small q5_1 (models/voice), which
+# re-reads each finished utterance on the GPU for a cleaner final transcript. -WhisperTurbo adds
+# large-v3-turbo q5_0 (used only when the GPU has room); -SkipGpuVoice leaves all of it out.
+param([switch]$SkipWhisper, [switch]$WhisperTurbo, [switch]$SkipGpuVoice)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $llamaBuild = "b11380"
@@ -66,3 +69,47 @@ foreach ($pack in $packs) {
   Remove-Item $archive
 }
 Write-Host "voice ready: $voiceDir"
+
+# ---- GPU voice: whisper.cpp CUDA server + GGML Whisper models ----
+function Get-Verified([string]$Url, [string]$Target, [string]$Sha256) {
+  if (Test-Path $Target) { Write-Host "have  $Target"; return }
+  Write-Host "fetch $Target"
+  & curl.exe -L --fail --retry 3 -o "$Target.part" $Url
+  if ($LASTEXITCODE -ne 0) { throw "Download failed: $Url" }
+  $hash = (Get-FileHash -Algorithm SHA256 "$Target.part").Hash
+  if ($hash -ne $Sha256) { Remove-Item "$Target.part"; throw "Checksum mismatch for $Url (got $hash)" }
+  Move-Item "$Target.part" $Target -Force
+}
+if (-not $SkipGpuVoice) {
+  # Must match WHISPER_SERVER_EXE and the model names in src-tauri/src/voice/gpu_asr.rs.
+  $whisperBuild = "b5130"
+  $whisperZip = Join-Path $root "runtime/whisper-cublas-12.4.0-bin-x64.zip"
+  $whisperDir = Join-Path $root "runtime/whisper"
+  if (-not (Test-Path (Join-Path $whisperDir "whisper-server.exe"))) {
+    Get-Verified "https://github.com/ggml-org/whisper.cpp/releases/download/$whisperBuild/whisper-cublas-12.4.0-bin-x64.zip" $whisperZip "AF520DDD034D985B55DFEEA3E465ED93653BA2AEE1A55E865033EDC548C272A7"
+    New-Item -ItemType Directory -Force -Path $whisperDir | Out-Null
+    # Only the server and its ggml backends: the zip's own CUDA runtime (~560 MB) duplicates runtime/llama's,
+    # and its ggml DLLs must not mix with llama's (same names, different builds).
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($whisperZip)
+    try {
+      foreach ($entry in $zip.Entries) {
+        if ($entry.Name -match '^(whisper-server\.exe|whisper\.dll|ggml\.dll|ggml-base\.dll|ggml-cuda\.dll|ggml-cpu-.+\.dll)$') {
+          [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $whisperDir $entry.Name), $true)
+        }
+      }
+    } finally { $zip.Dispose() }
+    Remove-Item $whisperZip
+  }
+  foreach ($dll in @("cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll")) {
+    $link = Join-Path $whisperDir $dll
+    if (-not (Test-Path $link)) { New-Item -ItemType HardLink -Path $link -Target (Join-Path $llamaDir $dll) | Out-Null }
+  }
+  Write-Host "ready: $(Join-Path $whisperDir 'whisper-server.exe')"
+  $hf = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+  Get-Verified "$hf/ggml-small-q5_1.bin" (Join-Path $voiceDir "ggml-small-q5_1.bin") "AE85E4A935D7A567BD102FE55AFC16BB595BDB618E11B2FC7591BC08120411BB"
+  if ($WhisperTurbo) {
+    Get-Verified "$hf/ggml-large-v3-turbo-q5_0.bin" (Join-Path $voiceDir "ggml-large-v3-turbo-q5_0.bin") "394221709CD5AD1F40C46E6031CA61BCE88931E6E088C188294C6D5A55FFA7E2"
+  }
+  Write-Host "GPU voice ready: $whisperDir"
+}

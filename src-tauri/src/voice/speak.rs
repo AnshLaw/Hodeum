@@ -2,10 +2,10 @@
 //! in Settings (else the default output device). Speech is synthesized a sentence at a time so it starts quickly, and stops the instant the
 //! learner talks.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::num::NonZero;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -21,7 +21,7 @@ use super::models::{kokoro_files, tts_files, voice_root, KokoroFiles, TtsFiles};
 use super::voices::{catalog, pick, Engine};
 use super::cache::{key, PhraseCache};
 use super::devices::chosen_output_device;
-use super::segment::{script_runs, speech_chunks};
+use super::segment::{script_runs, speech_chunks, speech_chunks_with};
 use super::set_tts_voices;
 
 /// Kokoro runs about 3x faster than real time with 4 threads on a 12th-gen i7 (2 threads: ~0.7x).
@@ -286,11 +286,19 @@ fn prepare(engines: &Engines, cache: &mut PhraseCache, job: &SpeakJob, stop: &Ar
     }
 }
 
+/// Whether every script run of `chunk` is already synthesized in this job's voice and speed.
+fn is_prepared(engines: &Engines, cache: &PhraseCache, job: &SpeakJob, chunk: &str) -> bool {
+    let Some((_, engine, sid)) = engines.engine_for(&job.voice) else { return false };
+    script_runs(chunk).iter().all(|(run, _)| cache.contains(&key(engine, sid, job.speed, run)))
+}
+
 fn speak(engines: &Engines, cache: &mut PhraseCache, player: &Player, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<bool, String> {
     // Anything left from an interrupted utterance must never play before this one.
     player.clear();
     player.play();
-    for chunk in speech_chunks(&job.text) {
+    // A prepared acknowledgement ("Exactly right.") plays from the cache while the rest is synthesized.
+    let chunks = speech_chunks_with(&job.text, |chunk| is_prepared(engines, cache, job, chunk));
+    for chunk in chunks {
         if cancelled(stop, job) {
             return Ok(true);
         }
@@ -391,10 +399,38 @@ pub fn worker(app: AppHandle, commands: Receiver<SpeakerCommand>, stop: Arc<Stop
     };
     set_tts_voices(&app, Ok(engines.voices()));
     let mut cache = PhraseCache::new(PHRASE_CACHE_SIZE);
-    for command in commands {
+    let mut preparing = VecDeque::new();
+    while let Some(next) = next_command(&commands, &mut preparing) {
+        match next {
+            Next::Command(SpeakerCommand::Say(job)) => say(&app, &engines, &mut cache, &output.player, job, &stop),
+            Next::Command(SpeakerCommand::SwitchOutput) => output = reopened(&stop).unwrap_or(output),
+            // Prepared now, so a stop since it was queued (the learner cut Hodey off) doesn't cancel it.
+            Next::Prepare(job) => prepare(&engines, &mut cache, &SpeakJob { generation: stop.current(), ..job }, &stop),
+        }
+    }
+}
+
+enum Next {
+    Command(SpeakerCommand),
+    /// A line to synthesize ahead of time, once nothing is waiting to be said.
+    Prepare(SpeakJob),
+}
+
+/// Lines to say go first; lines to prepare wait until the queue is otherwise empty, so preparing a
+/// dozen phrases at startup never delays what Hodey has to say now. None: shutting down.
+fn next_command(commands: &Receiver<SpeakerCommand>, preparing: &mut VecDeque<SpeakJob>) -> Option<Next> {
+    loop {
+        let command = match commands.try_recv() {
+            Ok(command) => command,
+            Err(TryRecvError::Empty) => match preparing.pop_front() {
+                Some(job) => return Some(Next::Prepare(job)),
+                None => commands.recv().ok()?,
+            },
+            Err(TryRecvError::Disconnected) => return None,
+        };
         match command {
-            SpeakerCommand::Say(job) => say(&app, &engines, &mut cache, &output.player, job, &stop),
-            SpeakerCommand::SwitchOutput => output = reopened(&stop).unwrap_or(output),
+            SpeakerCommand::Say(job) if !job.play => preparing.push_back(job),
+            other => return Some(Next::Command(other)),
         }
     }
 }
@@ -407,6 +443,36 @@ mod tests {
     use sherpa_onnx::LinearResampler;
 
     const ASR_RATE: i32 = 16_000;
+
+    fn job(text: &str, play: bool) -> SpeakJob {
+        SpeakJob { id: text.into(), text: text.into(), voice: String::new(), speed: 1.0, generation: 0, play }
+    }
+
+    fn said(next: Option<Next>) -> String {
+        match next {
+            Some(Next::Command(SpeakerCommand::Say(job))) => format!("say {}", job.text),
+            Some(Next::Prepare(job)) => format!("prepare {}", job.text),
+            Some(Next::Command(SpeakerCommand::SwitchOutput)) => "switch".into(),
+            None => "closed".into(),
+        }
+    }
+
+    #[test]
+    fn what_hodey_says_goes_before_lines_being_prepared() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut preparing = VecDeque::new();
+        for text in ["One sec.", "Exactly right."] {
+            tx.send(SpeakerCommand::Say(job(text, false))).unwrap();
+        }
+        tx.send(SpeakerCommand::Say(job("Click Insert.", true))).unwrap();
+        assert_eq!(said(next_command(&rx, &mut preparing)), "say Click Insert.");
+        tx.send(SpeakerCommand::SwitchOutput).unwrap();
+        assert_eq!(said(next_command(&rx, &mut preparing)), "switch");
+        assert_eq!(said(next_command(&rx, &mut preparing)), "prepare One sec.");
+        assert_eq!(said(next_command(&rx, &mut preparing)), "prepare Exactly right.");
+        drop(tx);
+        assert_eq!(said(next_command(&rx, &mut preparing)), "closed");
+    }
 
     /// Needs the real models: `cargo test --lib -- --ignored hindi_round_trip --nocapture`.
     /// Hodey's Hindi voice says a pack line and a mixed Hindi/English line; Nemotron (Hindi) hears them.

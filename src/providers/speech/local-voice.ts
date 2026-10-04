@@ -5,7 +5,7 @@ import type { ActivityTracker } from "../../lib/activity";
 import type { SpeechInput } from "./speech-input";
 import type { VoicePreview } from "../../app/services";
 import { WebSpeechTTSProvider } from "../web-speech-tts";
-import { NativeSpeechInput, NativeTTSProvider, NativeVoiceStatus, RoutedTTS, voiceChoice, type VoiceBridge } from "./native-voice";
+import { NativeSpeechInput, NativeTTSProvider, NativeVoiceStatus, RoutedTTS, frequentLines, voiceChoice, type VoiceBridge } from "./native-voice";
 
 /** Hodey's ears and voice on this PC: Nemotron in, Supertonic (or a Windows voice) out. */
 export interface LocalVoice {
@@ -36,9 +36,9 @@ export function createLocalVoice(bridge: VoiceBridge): LocalVoice {
       natural.hindiVoiceId = voice.hindiVoice;
       natural.rate = voice.rate;
       windows.rate = voice.rate;
-      // The quick acknowledgements are said often and must start instantly: prepare them in this voice.
+      // The acknowledgements and "that's right" lines are said often and must start instantly: prepare them in this voice.
       const language = replyLanguage(voice.language);
-      if (preferNatural || language !== "en") natural.prepare([...spoken(language).acks]).catch((error) => console.error("Couldn't prepare Hodey's phrases", error));
+      if (preferNatural || language !== "en") natural.prepare(frequentLines(spoken(language))).catch((error) => console.error("Couldn't prepare Hodey's phrases", error));
     },
   };
 }

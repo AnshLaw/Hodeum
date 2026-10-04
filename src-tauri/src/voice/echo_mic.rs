@@ -2,8 +2,8 @@
 //! so Hodey's own voice from the speakers is removed before speech recognition (Windows 11 Voice
 //! Clarity, or the sound driver's own canceller). Used only when Windows confirms echo cancellation is
 //! on; otherwise the plain microphone is used and the frontend's transcript echo check does the work.
-//! Windows converts the audio to 16 kHz mono f32 itself. Uses the microphone and speakers picked in
-//! Settings while they're plugged in, else the Windows defaults.
+//! Windows converts the audio to 16 kHz mono f32 itself. Uses the same microphone as every other
+//! listening mode (devices::listening_endpoint), and the speakers picked in Settings, else the defaults.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
@@ -14,7 +14,7 @@ use std::time::Duration;
 use windows::core::{GUID, PCWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::Media::Audio::{
-    eCapture, eCommunications, eConsole, eRender, AudioCategory_Communications, AudioClientProperties, IAcousticEchoCancellationControl, IAudioCaptureClient,
+    eConsole, eRender, AudioCategory_Communications, AudioClientProperties, IAcousticEchoCancellationControl, IAudioCaptureClient,
     IAudioClient2, IAudioClientDuckingControl, IAudioEffectsManager, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
     AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, AUDCLNT_STREAMOPTIONS_NONE, AUDIO_DUCKING_OPTIONS_DO_NOT_DUCK_OTHER_STREAMS,
     AUDIO_EFFECT, AUDIO_EFFECT_STATE_ON, WAVEFORMATEX,
@@ -22,7 +22,7 @@ use windows::Win32::Media::Audio::{
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED};
 use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
 
-use super::devices::{active_endpoint, chosen_input, chosen_output};
+use super::devices::{active_endpoint, chosen_output, listening_endpoint};
 use super::listen::SAMPLE_RATE;
 
 /// `AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION` (ksmedia.h).
@@ -53,14 +53,15 @@ impl Drop for EchoCancelledMic {
     }
 }
 
-/// Opens the communications microphone, sending 16 kHz mono chunks to `tx`. Err (with the reason) when
-/// Windows can't cancel echo on this PC, so the caller can use the plain microphone instead.
-pub fn open(tx: Sender<Vec<f32>>) -> Result<EchoCancelledMic, String> {
+/// Opens microphone `endpoint` (None: the listening microphone) as a communications stream, sending
+/// 16 kHz mono chunks to `tx`. Err (with the reason) when Windows can't cancel echo on it, so the
+/// caller can use the plain microphone instead.
+pub fn open(tx: Sender<Vec<f32>>, endpoint: Option<String>) -> Result<EchoCancelledMic, String> {
     let (ready_tx, ready_rx) = mpsc::channel();
     let stop = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&stop);
     // COM objects can't move between threads, so the whole capture lives on its own thread.
-    let thread = thread::spawn(move || capture(&tx, &flag, &ready_tx));
+    let thread = thread::spawn(move || capture(&tx, endpoint.as_deref(), &flag, &ready_tx));
     let mic = EchoCancelledMic { stop, thread: Some(thread) };
     match ready_rx.recv_timeout(OPEN_TIMEOUT) {
         Ok(Ok(())) => Ok(mic),
@@ -69,14 +70,14 @@ pub fn open(tx: Sender<Vec<f32>>) -> Result<EchoCancelledMic, String> {
     }
 }
 
-fn capture(tx: &Sender<Vec<f32>>, stop: &AtomicBool, ready: &Sender<Result<(), String>>) {
+fn capture(tx: &Sender<Vec<f32>>, endpoint: Option<&str>, stop: &AtomicBool, ready: &Sender<Result<(), String>>) {
     // SAFETY: COM is initialised for this thread and torn down after every COM object below is dropped.
     if let Err(error) = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.ok() {
         let _ = ready.send(Err(format!("COM didn't start: {error}")));
         return;
     }
     // SAFETY: plain WASAPI calls on objects created and used only on this thread.
-    match unsafe { Stream::open() } {
+    match unsafe { Stream::open(endpoint) } {
         Ok(stream) => {
             let _ = ready.send(Ok(()));
             if let Err(error) = unsafe { stream.pump(tx, stop) } {
@@ -106,9 +107,9 @@ impl Drop for Stream {
 }
 
 impl Stream {
-    unsafe fn open() -> windows::core::Result<Self> {
+    unsafe fn open(endpoint: Option<&str>) -> windows::core::Result<Self> {
         let devices: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
-        let client: IAudioClient2 = microphone(&devices)?.Activate(CLSCTX_ALL, None)?;
+        let client: IAudioClient2 = microphone(&devices, endpoint)?.Activate(CLSCTX_ALL, None)?;
         let properties = AudioClientProperties {
             cbSize: size_of::<AudioClientProperties>() as u32,
             bIsOffload: false.into(),
@@ -169,11 +170,12 @@ fn mono_16k() -> WAVEFORMATEX {
     }
 }
 
-/// The chosen microphone while it's plugged in, else the default communications microphone.
-unsafe fn microphone(devices: &IMMDeviceEnumerator) -> windows::core::Result<IMMDevice> {
-    match chosen_input().and_then(|id| active_endpoint(devices, &id, "microphone")) {
+/// `endpoint` while it's plugged in, else the listening microphone (the chosen one, else the console
+/// default: the communications default can be a different device from the one tap-to-talk hears).
+unsafe fn microphone(devices: &IMMDeviceEnumerator, endpoint: Option<&str>) -> windows::core::Result<IMMDevice> {
+    match endpoint.and_then(|id| active_endpoint(devices, id, "microphone")) {
         Some(device) => Ok(device),
-        None => devices.GetDefaultAudioEndpoint(eCapture, eCommunications),
+        None => listening_endpoint(devices),
     }
 }
 

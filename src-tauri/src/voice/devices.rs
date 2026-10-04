@@ -94,6 +94,55 @@ pub(crate) fn input_device() -> Option<cpal::Device> {
     chosen_input().and_then(|id| cpal_device(&id, "microphone")).or_else(|| cpal::default_host().default_input_device())
 }
 
+/// The microphone every listening mode uses (tap, hold, conversation, hands-free), so "Hey Hodey" and
+/// the request after it are heard on the same device.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ListeningMic {
+    /// Windows' endpoint id, which both cpal and the echo-cancelled stream open.
+    pub(crate) id: String,
+    pub(crate) name: String,
+}
+
+/// The chosen microphone while it's plugged in, else the Windows default. The default is the
+/// *console* one (what cpal opens too), never the communications one, which can be another device.
+///
+/// # Safety
+/// COM must be initialised on the calling thread.
+pub(crate) unsafe fn listening_endpoint(devices: &IMMDeviceEnumerator) -> windows::core::Result<IMMDevice> {
+    match chosen_input().and_then(|id| active_endpoint(devices, &id, "microphone")) {
+        Some(device) => Ok(device),
+        None => devices.GetDefaultAudioEndpoint(eCapture, eConsole),
+    }
+}
+
+unsafe fn resolve_listening_mic() -> Result<ListeningMic, String> {
+    let devices: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|e| e.to_string())?;
+    let device = listening_endpoint(&devices).map_err(|_| "No microphone found. Plug one in or enable it in Windows sound settings.".to_string())?;
+    let name = friendly_name(&device).unwrap_or_else(|e| {
+        eprintln!("couldn't read the microphone's name: {e}");
+        UNNAMED_DEVICE.to_string()
+    });
+    Ok(ListeningMic { id: endpoint_id(&device)?, name })
+}
+
+/// Resolves the listening microphone (on a fresh thread: the caller's COM apartment may be set).
+pub(crate) fn listening_mic() -> Result<ListeningMic, String> {
+    let worker = thread::spawn(|| {
+        // SAFETY: COM is initialised for this thread and torn down after every COM object is dropped.
+        unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.ok().map_err(|e| format!("COM didn't start: {e}"))?;
+        // SAFETY: endpoint lookups on objects created and used only on this thread.
+        let found = unsafe { resolve_listening_mic() };
+        unsafe { CoUninitialize() };
+        found
+    });
+    worker.join().map_err(|_| "finding the microphone crashed".to_string())?
+}
+
+/// The cpal device for the listening microphone.
+pub(crate) fn cpal_input(mic: &ListeningMic) -> Option<cpal::Device> {
+    cpal_device(&mic.id, "microphone")
+}
+
 /// The chosen speakers while they're plugged in; None means the default.
 pub(crate) fn chosen_output_device() -> Option<cpal::Device> {
     chosen_output().and_then(|id| cpal_device(&id, "speaker"))

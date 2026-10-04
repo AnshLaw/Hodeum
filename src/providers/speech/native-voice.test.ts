@@ -2,9 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import type { TTSProvider } from "../interfaces";
 import { ActivityTracker } from "../../lib/activity";
 import { showStandbyDot } from "./local-voice";
-import { NativeSpeechInput, NativeTTSProvider, NativeVoiceStatus, RoutedTTS, voiceChoice, type VoiceBridge, type VoiceStatus } from "./native-voice";
+import { spoken } from "../../lib/spoken";
+import { NativeSpeechInput, NativeTTSProvider, NativeVoiceStatus, RoutedTTS, frequentLines, voiceChoice, type VoiceBridge, type VoiceStatus } from "./native-voice";
 
-const READY: VoiceStatus = { asr: "ready", tts: "ready", listening: false, standby: false, detail: null, tts_detail: null, voices: [{ id: "kokoro:3", label: "Heart", description: "American · female" }] };
+const READY: VoiceStatus = {
+  asr: "ready",
+  tts: "ready",
+  listening: false,
+  standby: false,
+  detail: null,
+  tts_detail: null,
+  voices: [{ id: "kokoro:3", label: "Heart", description: "American · female" }],
+  echoCancelled: false,
+  mic: null,
+  refine: null,
+};
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -80,6 +92,47 @@ describe("NativeSpeechInput", () => {
     showStandbyDot(status, activity);
     fire("voice:status", { ...READY, standby: true });
     expect(activity.current().mic).toBe(true);
+  });
+});
+
+describe("NativeSpeechInput and the microphone", () => {
+  it("knows when Windows cancels Hodey's echo on the open mic", async () => {
+    const { bridge, fire } = fakeBridge();
+    const speech = new NativeSpeechInput(bridge);
+    await settle();
+    expect(speech.echoCancelled()).toBe(false);
+    fire("voice:status", { ...READY, listening: true, echoCancelled: true, mic: "Microphone Array" });
+    expect(speech.echoCancelled()).toBe(true);
+  });
+
+  it("warms the echo-cancelled mic and passes speech hints to the GPU's second listen", async () => {
+    const { bridge, invoke } = fakeBridge();
+    const speech = new NativeSpeechInput(bridge);
+    await speech.warmMic();
+    await speech.setSpeechHints(["PivotTable", "Insert"]);
+    expect(invoke).toHaveBeenCalledWith("voice_warm_mic");
+    expect(invoke).toHaveBeenCalledWith("set_speech_hints", { hints: ["PivotTable", "Insert"] });
+  });
+});
+
+describe("Hodey's frequent lines", () => {
+  it("are the acknowledgements and every 'that's right', once each", () => {
+    const words = spoken("en");
+    const lines = frequentLines(words);
+    expect(lines).toContain("Exactly right.");
+    expect(lines).toEqual(expect.arrayContaining([...words.acks, ...words.stepDoneLight, words.gotTheHang, words.rememberedOnYourOwn]));
+    expect(new Set(lines).size).toBe(lines.length);
+  });
+
+  it("are prepared in the learner's voice and speed", async () => {
+    const { bridge, invoke } = fakeBridge();
+    const tts = new NativeTTSProvider(bridge);
+    tts.voiceId = "kokoro:3";
+    tts.rate = 1.1;
+    await tts.prepare(frequentLines(spoken("en")));
+    const call = invoke.mock.calls.find(([command]) => command === "tts_prepare");
+    expect(call?.[1]).toMatchObject({ voiceId: "kokoro:3", speed: 1.1 });
+    expect((call?.[1] as { texts: string[] }).texts).toContain("Exactly right.");
   });
 });
 

@@ -27,6 +27,12 @@ class FakeSpeech implements SpeechInput {
     this.wake.forEach((h) => h(text, final));
   }
   converse = vi.fn(async () => undefined);
+  warmMic = vi.fn(async () => undefined);
+  /** Windows' echo cancellation is on for the open mic. */
+  aec = false;
+  echoCancelled() {
+    return this.aec;
+  }
   setStatus(status: SpeechInputStatus) {
     this.current = status;
     this.statusHandlers.forEach((h) => h(status));
@@ -273,6 +279,68 @@ describe("conversation", () => {
       speech.say("click the insert tab at the top");
       expect(interrupt).not.toHaveBeenCalled();
       expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }]);
+    });
+  });
+
+  describe("echo of Hodey's voice, by how the mic is listening", () => {
+    const ASKED = "Which tab would you use to add something new?";
+    const startTalking = (speech: FakeSpeech) => speech.speechStart.forEach((h) => h());
+
+    it("hears an answer that repeats Hodey's words when Windows cancels the echo", () => {
+      const { speech, dispatched } = setup(guiding, ASKED);
+      tap(speech, "give me a hint");
+      speech.aec = true;
+      speech.setStatus("listening");
+      startTalking(speech);
+      speech.say("new tab");
+      expect(dispatched.length).toBeGreaterThan(1);
+      expect(dispatched.at(-1)).not.toEqual({ type: "HINT_REQUESTED" });
+    });
+
+    it("hears an answer that repeats Hodey's words on a tap, which stopped Hodey first", () => {
+      const { speech, dispatched } = setup(guiding, ASKED);
+      speech.setStatus("listening");
+      startTalking(speech);
+      speech.say("new tab");
+      expect(dispatched).not.toEqual([]);
+    });
+
+    it("drops the same words on an open mic without echo cancellation", () => {
+      const { speech, dispatched } = setup(guiding, ASKED);
+      tap(speech, "give me a hint");
+      speech.setStatus("listening");
+      speech.say("new tab");
+      expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }]);
+    });
+
+    it("drops speech begun over Hodey without echo cancellation unless the learner's own words break through", () => {
+      const { speech, dispatched } = setup(guiding, ASKED);
+      tap(speech, "give me a hint");
+      speech.setStatus("listening");
+      startTalking(speech);
+      speech.say("you lose");
+      expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }]);
+      startTalking(speech);
+      speech.say("wait what", false);
+      speech.say("wait what is this");
+      expect(dispatched.at(-1)).toEqual({ type: "VOICE_QUESTION", question: "wait what is this" });
+    });
+
+    it("starts warming the echo-cancelled mic when a tap will lead into a conversation", () => {
+      const { speech } = setup(guiding);
+      speech.setStatus("listening");
+      expect(speech.warmMic).toHaveBeenCalledOnce();
+      const solo = setup(guiding, undefined, false);
+      solo.speech.setStatus("listening");
+      expect(solo.speech.warmMic).not.toHaveBeenCalled();
+    });
+
+    it("doesn't warm the mic for the conversation's own session", () => {
+      const { speech } = setup(guiding);
+      tap(speech, "give me a hint");
+      speech.warmMic.mockClear();
+      speech.setStatus("listening");
+      expect(speech.warmMic).not.toHaveBeenCalled();
     });
   });
 

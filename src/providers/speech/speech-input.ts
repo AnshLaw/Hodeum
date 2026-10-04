@@ -22,6 +22,10 @@ export interface SpeechInput {
   onWakeCandidate?(handler: (text: string, final: boolean) => void): () => void;
   /** Problems worth telling the learner about, e.g. a muted microphone. */
   onError?(handler: (message: string) => void): () => void;
+  /** Windows' echo cancellation is cleaning the microphone now: Hodey's own voice isn't in what it hears. */
+  echoCancelled?(): boolean;
+  /** A conversation will probably follow: start opening the echo-cancelled microphone ahead of it. */
+  warmMic?(): Promise<void>;
 }
 
 /**

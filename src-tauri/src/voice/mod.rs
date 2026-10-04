@@ -1,12 +1,18 @@
 //! Hodey's local voice: NVIDIA Nemotron speech recognition (Whisper as the backup) with Silero voice
-//! activity detection, and Kokoro/Supertonic speech, all on the CPU through sherpa-onnx. Nothing is recorded or leaves the PC.
+//! activity detection, and Kokoro/Supertonic speech, all on the CPU through sherpa-onnx. When the GPU
+//! has room, whisper.cpp re-reads each finished utterance there for a cleaner final transcript.
+//! Nothing is recorded or leaves the PC.
 
+pub mod agc;
 pub mod asr;
 pub mod cache;
 pub mod devices;
 pub mod echo_mic;
+pub mod gpu_asr;
 pub mod listen;
+pub mod mic;
 pub mod models;
+pub mod refine;
 pub mod segment;
 pub mod speak;
 pub mod standby;
@@ -43,6 +49,13 @@ pub struct VoiceStatus {
     /// The speech engine listening now ("nemotron" or "whisper"); None until one has loaded.
     #[serde(rename = "asrEngine")]
     pub asr_engine: Option<&'static str>,
+    /// Windows' echo cancellation is cleaning the microphone now, so Hodey's voice isn't in it.
+    #[serde(rename = "echoCancelled")]
+    pub echo_cancelled: bool,
+    /// The microphone Hodey listens on (every mode uses the same one), once one has been opened.
+    pub mic: Option<String>,
+    /// The GPU model re-reading finished utterances ("whisper-small-gpu"); None: Nemotron's text only.
+    pub refine: Option<&'static str>,
 }
 
 /// One speech-recognition model for Settings > Voice.
@@ -105,6 +118,22 @@ pub(crate) fn set_asr_engine(app: &AppHandle, engine: Option<&'static str>) {
     update(app, |s| s.asr_engine = engine);
 }
 
+/// The microphone just opened (its name, and whether Windows cancels echo on it), or closed (None).
+pub(crate) fn set_mic(app: &AppHandle, mic: Option<(String, bool)>) {
+    update(app, |s| match mic {
+        Some((name, echo_cancelled)) => {
+            s.mic = Some(name);
+            s.echo_cancelled = echo_cancelled;
+        }
+        // The name stays: Settings shows which microphone Hodey last listened on.
+        None => s.echo_cancelled = false,
+    });
+}
+
+pub(crate) fn set_refine(app: &AppHandle, model: Option<&'static str>) {
+    update(app, |s| s.refine = model);
+}
+
 pub(crate) fn set_tts_voices(app: &AppHandle, voices: Result<Vec<voices::VoiceOption>, String>) {
     update(app, |s| match voices {
         Ok(list) => {
@@ -129,13 +158,26 @@ pub fn start(app: &AppHandle) {
     let (listen_tx, listen_rx) = mpsc::channel();
     let (speak_tx, speak_rx) = mpsc::channel();
     let stop = Arc::new(StopSwitch::default());
-    let status = VoiceStatus { asr, tts: "loading", listening: false, standby: false, detail, tts_detail: None, voices: Vec::new(), asr_engine: None };
+    let status = VoiceStatus {
+        asr,
+        tts: "loading",
+        listening: false,
+        standby: false,
+        detail,
+        tts_detail: None,
+        voices: Vec::new(),
+        asr_engine: None,
+        echo_cancelled: false,
+        mic: None,
+        refine: None,
+    };
     app.manage(Voice { status: Mutex::new(status), listen: Mutex::new(listen_tx), speak: Mutex::new(speak_tx), stop: Arc::clone(&stop) });
     let listener = app.clone();
     let installed = asr == "ready";
     thread::spawn(move || listen::worker(listener, listen_rx, installed));
     let speaker = app.clone();
     thread::spawn(move || speak::worker(speaker, speak_rx, stop));
+    gpu_asr::spawn(app.clone());
 }
 
 #[tauri::command]
@@ -183,6 +225,13 @@ pub fn set_speech_language(language: String) -> Result<(), String> {
     listen::set_language(&language)
 }
 
+/// Words the learner is likely to say now (the task's controls and apps), so the GPU's second listen
+/// spells them right. Empty clears them; "Hodey" and the common apps are always included.
+#[tauri::command]
+pub fn set_speech_hints(hints: Vec<String>) -> Result<(), String> {
+    refine::set_hints(hints)
+}
+
 /// Settings > Voice > Hands-free: listen for "Hey Hodey" (and the learner's wake words) without a key.
 #[tauri::command]
 pub fn set_hands_free(enabled: bool, wake_words: Vec<String>, voice: State<'_, Voice>) -> Result<(), String> {
@@ -216,6 +265,13 @@ pub fn set_asr_model(id: String, voice: State<'_, Voice>) -> Result<(), String> 
     }
     asr::prefer(kind)?;
     send_listen(&voice, ListenCommand::SwitchEngine)
+}
+
+/// A conversation will probably follow this turn: start opening the echo-cancelled microphone now, so
+/// the learner's first words after Hodey answers aren't lost while it opens (up to 2.6 s the first time).
+#[tauri::command]
+pub fn voice_warm_mic(voice: State<'_, Voice>) -> Result<(), String> {
+    send_listen(&voice, ListenCommand::WarmEcho)
 }
 
 #[tauri::command]
@@ -257,6 +313,28 @@ mod tests {
     use sherpa_onnx::{GenerationConfig, LinearResampler};
 
     const ASR_RATE: i32 = 16_000;
+
+    #[test]
+    fn status_serializes_the_way_the_frontend_reads_it() {
+        let status = super::VoiceStatus {
+            asr: "ready",
+            tts: "ready",
+            listening: true,
+            standby: false,
+            detail: None,
+            tts_detail: None,
+            voices: Vec::new(),
+            asr_engine: Some("nemotron"),
+            echo_cancelled: true,
+            mic: Some("Microphone Array".into()),
+            refine: Some("whisper-small-gpu"),
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["echoCancelled"], true);
+        assert_eq!(json["mic"], "Microphone Array");
+        assert_eq!(json["refine"], "whisper-small-gpu");
+        assert_eq!(json["asrEngine"], "nemotron");
+    }
 
     #[test]
     fn models_serialize_the_way_the_frontend_reads_them() {
@@ -341,6 +419,34 @@ mod tests {
         assert!(heard.contains("pivot table"), "heard {heard:?}");
     }
 
+    /// Hold-to-talk (needs the real models): the talk key is released right as "Open Excel." ends, so
+    /// only the tail padding carries the last word through Nemotron. With 0.6 s it came back "Open Ex"
+    /// for most voices. `cargo test --lib -- --ignored hold_flush_keeps_last_word --nocapture`.
+    #[test]
+    #[ignore]
+    fn hold_flush_keeps_last_word() {
+        use super::segment::Segmenter;
+        let root = voice_root();
+        let tts = load_kokoro(&kokoro_files(&root).unwrap()).unwrap();
+        let mut asr = Segmenter::new(super::asr::Nemotron::load(&asr_files(&root).unwrap()).unwrap());
+        // Heart, Michael, Alpha, Omega: two American and two Indian-accented voices.
+        for sid in [3, 16, 31, 33] {
+            let config = GenerationConfig { sid, ..GenerationConfig::default() };
+            let spoken = tts.generate_with_config("Open Excel.", &config, None::<fn(&[f32], f32) -> bool>).unwrap();
+            // The key goes down a moment before the learner speaks.
+            let mut audio = vec![0.0; ASR_RATE as usize / 2];
+            audio.extend(LinearResampler::create(spoken.sample_rate(), ASR_RATE).unwrap().resample(spoken.samples(), true));
+            for window in audio.chunks(super::listen::VAD_WINDOW) {
+                asr.push(window, true);
+            }
+            let heard = asr.flush().unwrap_or_default().to_lowercase();
+            println!("voice {sid}: {heard:?}");
+            // "OpenXL" is a spelling slip with the whole word heard; the 0.6 s failures were "OpenX", "Open Ex", "Open Exc".
+            let heard = heard.trim_end_matches('.');
+            assert!(heard.ends_with("excel") || heard.ends_with("xl"), "voice {sid} heard {heard:?}");
+        }
+    }
+
     /// Hands-free (needs the real models): Kokoro says a room sentence and a wake phrase; only the wake
     /// phrase may come out, and the room sentence is abandoned early rather than transcribed in full.
     #[test]
@@ -370,12 +476,12 @@ mod tests {
     fn echo_cancelled_mic_report() {
         for attempt in 1..=2 {
             let started = std::time::Instant::now();
-            let opened = super::echo_mic::open(std::sync::mpsc::channel().0).is_ok();
+            let opened = super::echo_mic::open(std::sync::mpsc::channel().0, None).is_ok();
             println!("open #{attempt}: {opened} in {:?}", started.elapsed());
         }
         let (tx, rx) = std::sync::mpsc::channel();
         let started = std::time::Instant::now();
-        let mic = super::echo_mic::open(tx);
+        let mic = super::echo_mic::open(tx, None);
         println!("echo-cancelled mic: {:?} after {:?}", mic.as_ref().map(|_| "on"), started.elapsed());
         let Ok(_mic) = mic else { return };
         let mut samples = 0;
@@ -408,6 +514,7 @@ mod tests {
         let started = std::time::Instant::now();
         let heard = transcribe(&mut engines, &audio);
         let total = started.elapsed();
-        println!("asr: {heard:?} — whole utterance ({:.2}s audio + 1s silence) processed in {total:?}", audio.len() as f32 / ASR_RATE as f32);
+        println!("asr: {heard:?} — whole utterance ({:.2}s audio + 2s silence) processed in {total:?}", audio.len() as f32 / ASR_RATE as f32);
+        assert!(heard.len() == 1 && heard[0].to_lowercase().contains("hint"), "heard {heard:?}");
     }
 }

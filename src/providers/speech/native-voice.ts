@@ -1,6 +1,7 @@
 import { speakable } from "../../lib/hinglish";
 import { DEFAULT_HINDI_VOICE } from "../../data/settings";
 import { hasDevanagari } from "../../lib/language";
+import type { SpokenCopy } from "../../lib/spoken";
 import type { TTSProvider } from "../interfaces";
 import type { SpeechInput, SpeechInputStatus } from "./speech-input";
 
@@ -16,6 +17,14 @@ export interface VoiceStatus {
   tts_detail: string | null;
   /** Hodey's natural voices on this PC (Kokoro first, then Supertonic). */
   voices: NaturalVoice[];
+  /** The speech engine listening now ("nemotron" or "whisper"); null until one has loaded. */
+  asrEngine?: string | null;
+  /** Windows' echo cancellation is cleaning the microphone now, so Hodey's voice isn't in it. */
+  echoCancelled: boolean;
+  /** The microphone Hodey listens on (every mode uses the same one), once one has been opened. */
+  mic: string | null;
+  /** The GPU model re-reading each finished utterance ("whisper-small-gpu"); null: Nemotron's text only. */
+  refine: string | null;
 }
 
 /** Mirrors `VoiceOption` in src-tauri/src/voice/voices.rs. */
@@ -132,6 +141,27 @@ export class NativeSpeechInput implements SpeechInput {
   setHandsFree(enabled: boolean, wakeWords: string[]): Promise<void> {
     return this.bridge.invoke<void>("set_hands_free", { enabled, wakeWords });
   }
+
+  echoCancelled(): boolean {
+    return this.voice.current()?.echoCancelled === true;
+  }
+
+  warmMic(): Promise<void> {
+    return this.bridge.invoke<void>("voice_warm_mic");
+  }
+
+  /** Words the learner is likely to say now (the task's controls, app names), so the GPU's second listen spells them right. */
+  setSpeechHints(hints: string[]): Promise<void> {
+    return this.bridge.invoke<void>("set_speech_hints", { hints });
+  }
+}
+
+/**
+ * Hodey's short, frequent lines in `language`: the quick acknowledgements and the "that's right" after a step.
+ * Synthesized ahead of time so each plays at once (the Rust side keeps a prepared line as its own chunk).
+ */
+export function frequentLines(words: Pick<SpokenCopy, "acks" | "stepDone" | "stepDoneLight" | "rememberedOnYourOwn" | "gotTheHang">): string[] {
+  return [...new Set([...words.acks, ...words.stepDone, ...words.stepDoneLight, words.rememberedOnYourOwn, words.gotTheHang])];
 }
 
 /** The whole utterance from a text stream; empty if it was aborted part way. */

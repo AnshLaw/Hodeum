@@ -31,6 +31,11 @@ impl PhraseCache {
         Some(phrase)
     }
 
+    /// Whether the phrase is ready, without counting as a use.
+    pub fn contains(&self, key: &str) -> bool {
+        self.entries.iter().any(|(k, _)| k == key)
+    }
+
     pub fn put(&mut self, key: String, phrase: Phrase) {
         self.entries.retain(|(k, _)| *k != key);
         self.entries.push_front((key, phrase));
