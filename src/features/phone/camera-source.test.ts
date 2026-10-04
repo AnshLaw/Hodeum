@@ -17,8 +17,9 @@ describe("pickCamera", () => {
     expect(pickCamera(cams.slice(0, 2))?.deviceId).toBe("b");
   });
 
-  it("falls back to the first camera, or none", () => {
-    expect(pickCamera(cams.slice(0, 1))?.deviceId).toBe("a");
+  it("never guesses the laptop's own webcam: the learner must pick it", () => {
+    expect(pickCamera(cams.slice(0, 1))).toBeUndefined();
+    expect(pickCamera(cams.slice(0, 1), "Integrated Webcam")?.deviceId).toBe("a");
     expect(pickCamera([])).toBeUndefined();
   });
 });

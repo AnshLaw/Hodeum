@@ -56,6 +56,13 @@ describe("matchGoal", () => {
     expect(matchGoal(goal, TASK_PACKS)?.id).toBe(id);
   });
 
+  it.each(["turn on dark mode in windows", "enable dark mode in outlook", "switch excel to dark mode", "dark mode on my laptop"])(
+    "keeps the iPhone pack away from the desktop goal %j",
+    (goal) => {
+      expect(matchGoal(goal, TASK_PACKS)?.id).not.toBe("iphone-dark-mode");
+    },
+  );
+
   it("returns undefined for an unrelated goal", () => {
     expect(matchGoal("write a poem", TASK_PACKS)).toBeUndefined();
   });

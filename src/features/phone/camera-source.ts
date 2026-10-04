@@ -12,7 +12,8 @@ const IDEAL = { width: 1920, height: 1080, frameRate: 30 };
 
 export function pickCamera(devices: CameraInfo[], preferredLabel?: string): CameraInfo | undefined {
   const named = (pattern: RegExp) => devices.find((d) => pattern.test(d.label));
-  return devices.find((d) => d.label === preferredLabel) ?? named(IPHONE_LIKE) ?? named(CAPTURE_LIKE) ?? devices[0];
+  // No blind fallback: guessing would mirror the laptop's own webcam as "the iPhone".
+  return devices.find((d) => d.label === preferredLabel) ?? named(IPHONE_LIKE) ?? named(CAPTURE_LIKE);
 }
 
 /** Device labels stay hidden until the page has used a camera once, so ask briefly first. */
@@ -42,7 +43,7 @@ export class CameraPhoneSource implements PhoneSource {
 
   async start(sink: FrameSink): Promise<void> {
     const camera = pickCamera(await listCameras(), this.preferredLabel());
-    if (!camera) throw new Error("No camera found. Start iPhoneMirror or plug in the capture card, then retry.");
+    if (!camera) throw new Error("No iPhone camera found. Start iPhoneMirror or plug in the capture card, or pick the camera above.");
     const constraints = { deviceId: { exact: camera.deviceId }, width: { ideal: IDEAL.width }, height: { ideal: IDEAL.height }, frameRate: { ideal: IDEAL.frameRate } };
     this.stream = await navigator.mediaDevices.getUserMedia({ video: constraints });
     this.stream.getVideoTracks()[0]?.addEventListener("ended", () => this.emit({ state: "error", message: `${camera.label} stopped. Is it still plugged in?` }));

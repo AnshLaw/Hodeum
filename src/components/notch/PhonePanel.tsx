@@ -94,8 +94,11 @@ function SourceBar({ mirror, kind }: { mirror: PhoneMirror; kind?: PhoneSourceKi
           <button key={key} type="button" role="radio" aria-checked={kind === key} className="segmented__option" onClick={() => choose(key)}>{label}</button>
         ))}
       </div>
-      {kind === "camera" && cameras.length > 1 && (
+      {kind === "camera" && cameras.length > 0 && (
         <select aria-label={COPY.phoneCamera} value={loadPhonePrefs().cameraLabel ?? ""} onChange={(e) => pickCamera(e.target.value)}>
+          <option value="" disabled>
+            {COPY.phoneCamera}
+          </option>
           {cameras.map((c) => <option key={c.deviceId} value={c.label}>{c.label}</option>)}
         </select>
       )}

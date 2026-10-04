@@ -3,7 +3,7 @@
   "title": "Turn on Dark Mode on iPhone",
   "app": "iPhone",
   "surface": "phone",
-  "goalPhrases": ["iphone dark mode", "dark mode on my iphone", "dark mode on my phone", "dark mode phone"],
+  "goalPhrases": ["iphone dark", "phone dark"],
   "prerequisites": ["Mirror your iPhone into Hodey (menu → Show iPhone) and start on the Home Screen, in Light mode."],
   "steps": [
     {
