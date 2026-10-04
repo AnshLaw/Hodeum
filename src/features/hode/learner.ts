@@ -1,6 +1,6 @@
 import { spoken } from "../../lib/spoken";
-import { ASSISTANCE_LEVELS, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
-import { beginStep, inWrongApp, requestReason, waitForApp } from "./flow";
+import { ASSISTANCE_LEVELS, type ScreenObservation, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
+import { beginStep, inWrongApp, onObserved, requestReason, waitForApp } from "./flow";
 import {
   MAX_WRONG_ACTIONS,
   STUCK_MS,
@@ -121,7 +121,26 @@ function onOpenAction(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
   return withLeadingEffects(requestReason({ ...s, observation: e.observation, waitingForApp: undefined }), [CANCEL_TIMER]);
 }
 
+/** A lesson step being prepared (skill loading, screen being read), not a question being answered. */
+const preparingStep = (s: HodeState): boolean => s.phase === "observing" && !s.open && s.spokenQuestion === undefined && s.question === undefined;
+
+const newer = (a: ScreenObservation | undefined, b: ScreenObservation): ScreenObservation => (a && a.at > b.at ? a : b);
+
+/**
+ * The screen read for a new step. A learner who already did the step (often one who knows it well)
+ * acted while Hodey was preparing it: count the newest screen, not a read that started before the click.
+ */
+export function onObservedStep(s: HodeState, e: EventOf<"OBSERVED">): Transition {
+  const step = currentStep(s);
+  if (!preparingStep(s) || !step) return onObserved(s, e);
+  const observation = newer(s.observation, e.observation);
+  if (!inWrongApp(s, observation) && evaluateSignal(step.success, observation)) return completeStep({ ...s, observation }, step);
+  return onObserved(s, { ...e, observation });
+}
+
 export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
+  // Keep a click made while the step is being prepared; the screen read for the step counts it.
+  if (preparingStep(s) && currentStep(s)) return { state: { ...s, observation: newer(s.observation, e.observation) }, effects: [] };
   if (s.open && (s.phase === "guiding" || s.phase === "reasoning")) return onOpenAction(s, e);
   const step = currentStep(s);
   if ((s.phase !== "guiding" && s.phase !== "reasoning") || !step) return noop(s);

@@ -469,3 +469,32 @@ describe("richer stuck detection (PRD §7)", () => {
     expect(reasonedWith(t)).toMatchObject({ context: { assistanceLevel: "demonstrate", correction: "Insert adds things. Click Insert. I highlighted it." } });
   });
 });
+
+describe("a learner who acts before Hodey is ready", () => {
+  const at = (observation: typeof HOME_SELECTED, time: number) => ({ ...observation, at: time });
+  /** Insert done by the learner: the next step (click-pivot) is being prepared. */
+  function preparingNextStep(): HodeState {
+    return step(guiding(), { type: "LEARNER_ACTED", observation: at(INSERT_SELECTED, 1) }).state;
+  }
+
+  it("keeps a click made while the next step loads, and counts it when the screen is read", () => {
+    const preparing = preparingNextStep();
+    expect(preparing.phase).toBe("observing");
+    const clicked = step(preparing, { type: "LEARNER_ACTED", observation: at(FIELDS_VISIBLE, 3) }).state;
+    const loaded = step(clicked, { type: "SKILL_LOADED", skillId: PACK.steps[1].skill, record: null }).state;
+    // The screen read started before the click finished: its observation is older than the click's.
+    const done = step(loaded, { type: "OBSERVED", observation: at(INSERT_SELECTED, 2) });
+    expect(done.state.phase).toBe("success");
+    expect(done.state.learnedSkills).toContain(PACK.steps[1].skill);
+  });
+
+  it("finishes a step the learner already did before Hodey read the screen", () => {
+    const loaded = step(preparingNextStep(), { type: "SKILL_LOADED", skillId: PACK.steps[1].skill, record: null }).state;
+    expect(step(loaded, { type: "OBSERVED", observation: at(FIELDS_VISIBLE, 2) }).state.phase).toBe("success");
+  });
+
+  it("still reasons as usual when the step isn't done yet", () => {
+    const loaded = step(preparingNextStep(), { type: "SKILL_LOADED", skillId: PACK.steps[1].skill, record: null }).state;
+    expect(step(loaded, { type: "OBSERVED", observation: at(INSERT_SELECTED, 2) }).state.phase).toBe("reasoning");
+  });
+});
