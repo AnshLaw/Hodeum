@@ -1,7 +1,7 @@
 import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
-import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Point, Rect, ScreenObservation, StepOutcome, TeachingContext } from "../../lib/types";
+import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, LearnerAnnotation, OverlayPrimitive, PerformRequest, Point, Rect, ScreenObservation, StepOutcome, TeachingContext } from "../../lib/types";
 import type { AppSwitch, LearningMemory, MemoryProvider, PerceptionAdapter, PlannerProvider, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { sameApp } from "./flow";
 import { reasonWithFallback } from "../../providers/router";
@@ -13,6 +13,8 @@ import { wantedNames } from "./wanted";
 
 export interface RuntimeDeps {
   perception: PerceptionAdapter;
+  /** Moves a Point & Ask mark on the mirrored iPhone into the phone's frame pixels (`surface: "phone"`). */
+  placeAnnotation?: (annotation: LearnerAnnotation) => Promise<LearnerAnnotation>;
   /** Tried in order; keep a local provider last. */
   reasoners: ReasoningProvider[];
   skills: SkillStore;
@@ -134,7 +136,7 @@ export class HodeRuntime {
       deps.perception.onLearnerAction((observation) => (this.away ? undefined : this.dispatch({ type: "LEARNER_ACTED", observation }))),
       deps.bus.on("annotate:start", () => this.dispatch({ type: "ANNOTATE_START" })),
       deps.bus.on("annotate:cancel", () => this.dispatch({ type: "ANNOTATE_CANCEL" })),
-      deps.bus.on("annotation:submitted", ({ annotation }) => this.dispatch({ type: "ANNOTATION_SUBMITTED", annotation })),
+      deps.bus.on("annotation:submitted", ({ annotation }) => this.submitAnnotation(annotation)),
       deps.perception.onAppSwitched?.((window) => this.watcherSawSwitch(window)) ?? (() => undefined),
     ];
   }
@@ -465,8 +467,19 @@ export class HodeRuntime {
   }
 
   /** Desktop guidance belongs to the window it was placed on, the one last read; the overlay draws it only there. */
+  /** A mark on the mirrored iPhone becomes a question about the phone, in its frame's pixels. */
+  private submitAnnotation(annotation: LearnerAnnotation): void {
+    const place = this.deps.placeAnnotation ?? ((a: LearnerAnnotation) => Promise.resolve(a));
+    place(annotation)
+      .catch((error) => {
+        console.error("Couldn't tell whether Point & Ask was on the iPhone; reading the desktop", error);
+        return annotation;
+      })
+      .then((placed) => this.dispatch({ type: "ANNOTATION_SUBMITTED", annotation: placed }));
+  }
+
   private renderOverlay(primitives: OverlayPrimitive[], screen = false): void {
-    const surface = this.state.pack?.surface ?? "windows";
+    const surface = this.state.pack?.surface ?? this.state.question?.surface ?? "windows";
     // Screen-wide guidance (the taskbar's search box) isn't clipped to the learner's window.
     const anchor = surface === "windows" && !screen ? this.state.observation?.window : undefined;
     this.deps.bus.emit("overlay:render", anchor ? { primitives, surface, anchor } : { primitives, surface });

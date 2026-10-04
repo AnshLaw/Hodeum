@@ -43,6 +43,8 @@ import { AirPlayPhoneSource } from "../features/phone/airplay-source";
 import { CameraPhoneSource } from "../features/phone/camera-source";
 import { FrameCanvas } from "../features/phone/frame-canvas";
 import { PhoneMirror } from "../features/phone/phone-mirror";
+import { placeOnPhone } from "../features/phone/phone-annotation";
+import { notchScreenRect } from "../components/notch/footprint";
 import { PhonePerception, type OcrSegment } from "../features/phone/phone-perception";
 import { loadPhonePrefs } from "../features/phone/prefs";
 import { GroundedPlannerProvider, LocalReasoningProvider } from "../providers/local-reasoner";
@@ -55,7 +57,7 @@ import { createHowToLookup } from "../providers/web/lookup";
 import { spokenReference } from "../providers/web/reference";
 import { TauriWebSearch } from "../app/tauri-services";
 import { TASK_PACKS } from "../task-packs";
-import type { InstalledApp, TaskPack } from "../lib/types";
+import type { InstalledApp, LearnerAnnotation, TaskPack } from "../lib/types";
 import type { DebugDeps } from "../features/debug/automation";
 import { mount } from "./mount";
 
@@ -180,7 +182,16 @@ async function boot(): Promise<void> {
     const at = await cursorPosition();
     return { x: at.x, y: at.y };
   };
-  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference, planner: hodePlanner, planReference, pointer });
+  const notchShell = new TauriShell();
+  /** A Point & Ask mark over the iPhone mirror asks about the phone: where the mirror is drawn decides. */
+  const placeAnnotation = async (annotation: LearnerAnnotation): Promise<LearnerAnnotation> => {
+    const canvas = mirror.surface.element;
+    const frame = mirror.surface.size;
+    if (!mirror.isLive() || !canvas || !frame) return annotation;
+    const origin = await notchShell.notchOrigin();
+    return placeOnPhone(annotation, notchScreenRect(canvas.getBoundingClientRect(), origin), frame);
+  };
+  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference, planner: hodePlanner, planReference, pointer, placeAnnotation });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   const watchDot = screenWatch(activity);
   let hintedPack: string | undefined;
@@ -190,7 +201,7 @@ async function boot(): Promise<void> {
       hintedPack = state.pack?.id;
       voice.speech.setSpeechHints(lessonHints(state.pack)).catch((error) => console.error("Couldn't tell the GPU listener the lesson's words", error));
     }
-    surfaces.setSurface(state.pack?.surface ?? "windows");
+    surfaces.setSurface(state.pack?.surface ?? state.question?.surface ?? "windows");
     // In another app while the Hode's app waits behind it: its clicks and keys aren't read.
     const watching = WATCHING_PHASES.includes(state.phase) && !runtime.isAway();
     surfaces.setWatching(watching);
