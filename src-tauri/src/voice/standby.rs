@@ -7,14 +7,23 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::Mutex;
 
 use sherpa_onnx::LinearResampler;
+use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use super::listen::{open_mic, vad_step, Engines, ListenCommand, AUDIO_POLL, SAMPLE_RATE, VAD_WINDOW};
 use super::segment::SpeechEvent;
 use super::set_standby;
 
-/// A sentence that might be for Hodey; the frontend checks it against the wake words.
+/// Speech that might be for Hodey; the frontend checks it against the wake words. Partial text lets
+/// "Hey Hodey" stop Hodey mid-sentence before the learner has finished talking.
 pub const WAKE_EVENT: &str = "voice:wake-candidate";
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub(crate) struct Candidate {
+    pub(crate) text: String,
+    #[serde(rename = "final")]
+    pub(crate) is_final: bool,
+}
 
 /// First words a wake phrase can open with: greetings, Hodey's name and how it's misheard, in Latin
 /// and Hindi script. The full check (src/features/voice/route.ts) happens once the sentence ends.
@@ -94,8 +103,8 @@ fn wait(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComman
     }
 }
 
-fn emit_candidate(app: &AppHandle, text: String) {
-    if let Err(error) = app.emit(WAKE_EVENT, text) {
+fn emit_candidate(app: &AppHandle, candidate: Candidate) {
+    if let Err(error) = app.emit(WAKE_EVENT, candidate) {
         eprintln!("couldn't send overheard speech for the wake-word check: {error}");
     }
 }
@@ -109,8 +118,8 @@ pub(crate) struct Overheard {
 }
 
 impl Overheard {
-    /// 16 kHz audio in; the finished sentences that might be for Hodey out.
-    pub(crate) fn push(&mut self, engines: &mut Engines, samples: &[f32]) -> Vec<String> {
+    /// 16 kHz audio in; speech that might be for Hodey out (live, then the finished sentence).
+    pub(crate) fn push(&mut self, engines: &mut Engines, samples: &[f32]) -> Vec<Candidate> {
         let mut candidates = Vec::new();
         self.pending.extend_from_slice(samples);
         while self.pending.len() >= VAD_WINDOW {
@@ -127,15 +136,16 @@ impl Overheard {
         candidates
     }
 
-    fn on_event(&mut self, engines: &mut Engines, event: SpeechEvent) -> Option<String> {
+    fn on_event(&mut self, engines: &mut Engines, event: SpeechEvent) -> Option<Candidate> {
         match event {
             SpeechEvent::Partial(text) if !may_be_wake(&text, &custom_first_words()) => {
                 engines.segmenter.reset();
                 self.ignoring = true;
                 None
             }
-            SpeechEvent::Final(text) => Some(text),
-            SpeechEvent::Start | SpeechEvent::Partial(_) => None,
+            SpeechEvent::Partial(text) => Some(Candidate { text, is_final: false }),
+            SpeechEvent::Final(text) => Some(Candidate { text, is_final: true }),
+            SpeechEvent::Start => None,
         }
     }
 }

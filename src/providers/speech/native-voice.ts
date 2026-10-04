@@ -95,8 +95,8 @@ export class NativeSpeechInput implements SpeechInput {
     return this.bridge.invoke<void>("voice_stop");
   }
 
-  followUp(): Promise<void> {
-    return this.bridge.invoke<void>("voice_follow_up");
+  converse(): Promise<void> {
+    return this.bridge.invoke<void>("voice_converse");
   }
 
   onStatus(handler: (status: SpeechInputStatus) => void): () => void {
@@ -120,8 +120,8 @@ export class NativeSpeechInput implements SpeechInput {
     return this.bridge.listen<string>(ERROR_EVENT, handler);
   }
 
-  onWakeCandidate(handler: (text: string) => void): () => void {
-    return this.bridge.listen<string>(WAKE_EVENT, handler);
+  onWakeCandidate(handler: (text: string, final: boolean) => void): () => void {
+    return this.bridge.listen<{ text: string; final: boolean }>(WAKE_EVENT, ({ text, final }) => handler(text, final));
   }
 
   /** Hands-free on or off, and the learner's own wake words for the Rust side's quick first-word check. */

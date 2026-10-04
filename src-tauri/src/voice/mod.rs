@@ -156,11 +156,11 @@ pub fn set_hands_free(enabled: bool, wake_words: Vec<String>, voice: State<'_, V
     send_listen(&voice, ListenCommand::Refresh)
 }
 
-/// In a conversation, after Hodey speaks: listen briefly for the learner's reply.
+/// A conversation: keep the mic open across turns, even while Hodey talks, until voice_stop.
 #[tauri::command]
-pub fn voice_follow_up(voice: State<'_, Voice>) -> Result<(), String> {
+pub fn voice_converse(voice: State<'_, Voice>) -> Result<(), String> {
     asr_ready(&voice)?;
-    send_listen(&voice, ListenCommand::Start { mode: ListenMode::FollowUp })
+    send_listen(&voice, ListenCommand::Start { mode: ListenMode::Conversation })
 }
 
 #[tauri::command]
@@ -266,7 +266,7 @@ mod tests {
         }
         let mut engines = load_engines(&asr_files(&root).unwrap()).unwrap();
         let started = std::time::Instant::now();
-        let heard = super::standby::Overheard::default().push(&mut engines, &audio);
+        let heard: Vec<String> = super::standby::Overheard::default().push(&mut engines, &audio).into_iter().filter(|c| c.is_final).map(|c| c.text).collect();
         println!("overheard {heard:?} in {:?} ({:.1}s of audio)", started.elapsed(), audio.len() as f32 / ASR_RATE as f32);
         assert_eq!(heard.len(), 1, "heard {heard:?}");
         assert!(heard[0].to_lowercase().starts_with("hey"), "heard {heard:?}");

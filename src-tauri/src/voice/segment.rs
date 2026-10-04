@@ -118,12 +118,18 @@ fn join(a: &str, b: &str) -> String {
 /// sentences (split by pauses) build up into one utterance that's sent on release.
 pub struct Session {
     hold: bool,
+    /// A conversation: every sentence is sent as it ends, and the session carries on.
+    continuous: bool,
     said: String,
 }
 
 impl Session {
     pub fn new(hold: bool) -> Self {
-        Self { hold, said: String::new() }
+        Self { hold, continuous: false, said: String::new() }
+    }
+
+    pub fn continuous() -> Self {
+        Self { hold: false, continuous: true, said: String::new() }
     }
 
     /// What to send on for these events, and whether the session is over.
@@ -137,6 +143,7 @@ impl Session {
                     self.said = join(&self.said, &text);
                     out.push(SpeechEvent::Partial(self.said.clone()));
                 }
+                SpeechEvent::Final(text) if self.continuous => out.push(SpeechEvent::Final(text)),
                 SpeechEvent::Final(text) => {
                     out.push(SpeechEvent::Final(text));
                     return (out, true);
@@ -267,6 +274,15 @@ mod tests {
         assert_eq!(out, vec![SpeechEvent::Partial("teach me how to make a pivot".into())]);
         assert_eq!(session.finish(Some("a pivot table".into())), Some(SpeechEvent::Final("teach me how to make a pivot table".into())));
         assert_eq!(session.finish(None), None);
+    }
+
+    #[test]
+    fn conversations_send_each_sentence_and_keep_listening() {
+        let mut session = Session::continuous();
+        let (out, done) = session.on_events(vec![SpeechEvent::Final("give me a hint".into())]);
+        assert_eq!((out, done), (vec![SpeechEvent::Final("give me a hint".into())], false));
+        let (out, done) = session.on_events(vec![SpeechEvent::Partial("wait".into()), SpeechEvent::Final("wait what".into())]);
+        assert_eq!((out, done), (vec![SpeechEvent::Partial("wait".into()), SpeechEvent::Final("wait what".into())], false));
     }
 
     #[test]

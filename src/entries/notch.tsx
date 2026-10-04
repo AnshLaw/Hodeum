@@ -8,7 +8,7 @@ import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import { TauriShell } from "../lib/tauri-shell";
 import { Notch } from "../components/notch/Notch";
 import { connectHodeBridge } from "../features/hode/bridge";
-import { connectVoice } from "../features/voice/connect";
+import { connectVoice, withoutEcho } from "../features/voice/connect";
 import type { HodePhase } from "../features/hode/model";
 import { HodeRuntime } from "../features/hode/runtime";
 import { MemoryLearningStore } from "../data/memory-stores";
@@ -96,7 +96,7 @@ async function boot(): Promise<void> {
     packs: TASK_PACKS,
     openAllowed: () => vision.current().state === "ready",
   });
-  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={voice.speech} />);
+  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} />);
 }
 
 boot().catch((error) => console.error("Hodey failed to start", error));

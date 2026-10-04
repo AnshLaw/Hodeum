@@ -62,7 +62,7 @@ pub fn run() {
             voice::voice_status,
             voice::voice_start,
             voice::voice_stop,
-            voice::voice_follow_up,
+            voice::voice_converse,
             voice::set_speech_language,
             voice::set_hands_free,
             voice::tts_speak,

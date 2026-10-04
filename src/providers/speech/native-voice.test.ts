@@ -64,10 +64,11 @@ describe("NativeSpeechInput", () => {
     const { bridge, fire, invoke } = fakeBridge();
     const speech = new NativeSpeechInput(bridge);
     const overheard: string[] = [];
-    speech.onWakeCandidate((text) => overheard.push(text));
+    speech.onWakeCandidate((text, final) => final && overheard.push(text));
     await speech.setHandsFree(true, ["Hey Hodes"]);
     expect(invoke).toHaveBeenCalledWith("set_hands_free", { enabled: true, wakeWords: ["Hey Hodes"] });
-    fire("voice:wake-candidate", "Hey Hodey, give me a hint");
+    fire("voice:wake-candidate", { text: "Hey Hodey", final: false });
+    fire("voice:wake-candidate", { text: "Hey Hodey, give me a hint", final: true });
     expect(overheard).toEqual(["Hey Hodey, give me a hint"]);
   });
 

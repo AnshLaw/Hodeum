@@ -16,10 +16,10 @@ export interface SpeechInput {
   onTranscript(handler: (text: string, final: boolean) => void): () => void;
   /** The learner started talking (voice activity detected): Hodey stops speaking right away. */
   onSpeechStart(handler: () => void): () => void;
-  /** In a conversation, after Hodey speaks: listen briefly for a reply (ends quietly if none comes). */
-  followUp?(): Promise<void>;
+  /** A conversation: keep the mic open across turns, including while Hodey talks, until stop(). */
+  converse?(): Promise<void>;
   /** Hands-free: a sentence overheard while waiting for "Hey Hodey". Only for wake-word checks; never stored. */
-  onWakeCandidate?(handler: (text: string) => void): () => void;
+  onWakeCandidate?(handler: (text: string, final: boolean) => void): () => void;
   /** Problems worth telling the learner about, e.g. a muted microphone. */
   onError?(handler: (message: string) => void): () => void;
 }

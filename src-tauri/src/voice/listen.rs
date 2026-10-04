@@ -56,8 +56,8 @@ const NO_SPEECH_AFTER: Duration = Duration::from_secs(8);
 const NOTHING_HEARD: &str = "I didn't catch anything. Tap the mic and try again.";
 /// A held talk key is released eventually; this guards against a stuck key.
 const MAX_HOLD: Duration = Duration::from_secs(60);
-/// After Hodey speaks in a conversation, how long it waits for the learner to reply.
-const FOLLOW_UP_PATIENCE: Duration = Duration::from_secs(6);
+/// Backstop for a conversation nobody ended: the frontend normally closes it after a few quiet seconds.
+const CONVERSATION_IDLE_LIMIT: Duration = Duration::from_secs(60);
 const MIC_SILENT: &str = "Your microphone is sending silence. Check it isn't muted, or pick another input in Windows sound settings.";
 
 pub const SPEECH_START_EVENT: &str = "voice:speech-start";
@@ -92,8 +92,9 @@ pub enum ListenMode {
     Tap,
     /// Holding the talk key: everything until release.
     Hold,
-    /// Hodey just finished speaking in a conversation: wait briefly for a reply, quietly.
-    FollowUp,
+    /// A conversation: the mic stays open across turns, even while Hodey talks (so the learner can cut
+    /// in), until stopped or nobody speaks for a long while.
+    Conversation,
 }
 
 pub enum ListenCommand {
@@ -266,12 +267,15 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
     let resampler = LinearResampler::create(mic.rate as i32, SAMPLE_RATE).ok_or("Couldn't set up audio resampling.")?;
     set_listening(app, true);
     let started = Instant::now();
-    let mut session = Session::new(hold);
+    let mut session = if mode == ListenMode::Conversation { Session::continuous() } else { Session::new(hold) };
+    let mut last_speech = Instant::now();
     let (mut heard_sound, mut heard_speech, mut warned) = (false, false, false);
     let mut pending = Vec::new();
     loop {
         match commands.try_recv() {
             Ok(ListenCommand::Stop) | Err(TryRecvError::Disconnected) => break,
+            // The talk key during a conversation: the open mic is already hearing it.
+            Ok(ListenCommand::Finish) if mode == ListenMode::Conversation => {}
             Ok(ListenCommand::Finish) => {
                 let tail = engines.segmenter.flush();
                 emit_events(app, session.finish(tail).into_iter().collect());
@@ -283,7 +287,10 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
             Ok(chunk) => {
                 heard_sound |= chunk.iter().any(|s| s.abs() > SILENCE_LEVEL);
                 let events = process(engines, &resampler, &mut pending, &chunk);
-                heard_speech |= events.contains(&SpeechEvent::Start);
+                if events.contains(&SpeechEvent::Start) {
+                    heard_speech = true;
+                    last_speech = Instant::now();
+                }
                 let (out, done) = session.on_events(events);
                 emit_events(app, out);
                 if done {
@@ -300,10 +307,10 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
         let waited_out = match mode {
             ListenMode::Hold => started.elapsed() > MAX_HOLD,
             ListenMode::Tap => !heard_speech && started.elapsed() > NO_SPEECH_AFTER,
-            ListenMode::FollowUp => !heard_speech && started.elapsed() > FOLLOW_UP_PATIENCE,
+            ListenMode::Conversation => last_speech.elapsed() > CONVERSATION_IDLE_LIMIT,
         };
         if waited_out {
-            // A tap that heard nothing deserves a word; a quiet follow-up just means the chat is over.
+            // A tap that heard nothing deserves a word; a quiet conversation is just over.
             if mode == ListenMode::Tap && heard_sound && !heard_speech {
                 emit_error(app, NOTHING_HEARD);
             }

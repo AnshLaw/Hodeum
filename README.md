@@ -70,7 +70,8 @@ Hodey swallows these letter presses, so the app underneath never sees them, and 
   - when idle, a goal ("teach me how to make a pivot table") starts a Hode, and a what/where question asks about the screen;
   - during a Hode, "hint", "explain", "repeat", "I did it", "pause", "continue" and "stop" are controls, and anything else is a question.
 - **Conversation:** once you talk to Hodey, it's a back-and-forth.
-  - When Hodey finishes answering, the mic reopens for a few seconds, so you can just keep talking. Say "that's all" or stay quiet to end it.
+  - Like a voice chat, the mic stays open while Hodey answers: talk over it any time and it stops to listen. Its own voice through your speakers is filtered out. Say "that's all" or stay quiet for a few seconds to end it.
+  - Hands-free works the same way: "Hey Hodey" stops Hodey mid-sentence.
   - Hodey acknowledges a question right away ("Let me look.") and answers in a sentence or two.
   - The notch shows your question above Hodey's answer, so you can read along.
   - You can turn this off in Settings → Voice.

@@ -3,7 +3,7 @@ import { initialState, type HodeEvent, type HodeState } from "../hode/model";
 import { PACK } from "../hode/test-fixtures";
 import { TASK_PACKS } from "../../task-packs";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
-import { connectVoice, isEcho } from "./connect";
+import { CONVERSATION_PATIENCE_MS, connectVoice, isEcho, stripEcho } from "./connect";
 
 class FakeSpeech implements SpeechInput {
   statusHandlers = new Set<(status: SpeechInputStatus) => void>();
@@ -17,16 +17,16 @@ class FakeSpeech implements SpeechInput {
     return undefined;
   }
   start = vi.fn(async () => undefined);
-  async stop() {}
-  wake = new Set<(text: string) => void>();
-  onWakeCandidate(handler: (text: string) => void) {
+  stop = vi.fn(async () => undefined);
+  wake = new Set<(text: string, final: boolean) => void>();
+  onWakeCandidate(handler: (text: string, final: boolean) => void) {
     this.wake.add(handler);
     return () => this.wake.delete(handler);
   }
-  overheard(text: string) {
-    this.wake.forEach((h) => h(text));
+  overheard(text: string, final = true) {
+    this.wake.forEach((h) => h(text, final));
   }
-  followUp = vi.fn(async () => undefined);
+  converse = vi.fn(async () => undefined);
   setStatus(status: SpeechInputStatus) {
     this.current = status;
     this.statusHandlers.forEach((h) => h(status));
@@ -119,6 +119,11 @@ describe("echo of Hodey's own voice", () => {
     expect(interrupt).toHaveBeenCalledOnce();
   });
 
+  it("strips Hodey's words from the start of what the learner said over it", () => {
+    expect(stripEcho("click the insert tab wait what is this", SAID)).toBe("wait what is this");
+    expect(stripEcho("what is this", SAID)).toBe("what is this");
+  });
+
   it("drops a final transcript that just repeats Hodey", () => {
     const { speech, dispatched } = setup({ ...initialState, phase: "guiding", pack: PACK }, SAID);
     speech.say("click the insert tab at the top");
@@ -129,58 +134,111 @@ describe("echo of Hodey's own voice", () => {
 describe("conversation", () => {
   const guiding = { ...initialState, phase: "guiding" as const, pack: PACK };
 
-  /** One spoken turn: the mic opens, the learner says something, the mic closes. */
-  const turn = (speech: FakeSpeech, text?: string) => {
+  /** The learner taps to talk and says something; the tap session closes. */
+  const tap = (speech: FakeSpeech, text: string) => {
     speech.setStatus("listening");
-    if (text) speech.say(text);
+    speech.say(text);
     speech.setStatus("idle");
   };
 
-  it("listens for a reply once Hodey has answered", () => {
-    const { speech, hodeyFinishes } = setup(guiding);
-    turn(speech, "where is the insert tab");
-    hodeyFinishes();
-    expect(speech.followUp).toHaveBeenCalledOnce();
+  it("keeps the mic open as a conversation once the learner has spoken", () => {
+    const { speech } = setup(guiding);
+    tap(speech, "where is the insert tab");
+    expect(speech.converse).toHaveBeenCalledOnce();
   });
 
-  it("keeps going turn after turn, and ends when the learner goes quiet", () => {
+  it("opening the conversation doesn't cut off what Hodey is saying", () => {
+    const { speech, interrupt } = setup(guiding, "Let me look.");
+    tap(speech, "where is the insert tab");
+    interrupt.mockClear();
+    speech.setStatus("listening");
+    expect(interrupt).not.toHaveBeenCalled();
+  });
+
+  it("routes each reply in the same open session", () => {
+    const { speech, dispatched } = setup(guiding);
+    tap(speech, "give me a hint");
+    speech.setStatus("listening");
+    speech.say("say that again");
+    expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }, { type: "REPEAT" }]);
+    expect(speech.converse).toHaveBeenCalledOnce();
+  });
+
+  it("ends when the learner stays quiet after Hodey answers", () => {
+    vi.useFakeTimers();
     const { speech, hodeyFinishes } = setup(guiding);
-    turn(speech, "give me a hint");
+    tap(speech, "give me a hint");
+    speech.setStatus("listening");
     hodeyFinishes();
-    turn(speech, "say that again");
+    vi.advanceTimersByTime(CONVERSATION_PATIENCE_MS + 1);
+    expect(speech.stop).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it("keeps waiting while the learner is talking", () => {
+    vi.useFakeTimers();
+    const { speech, hodeyFinishes } = setup(guiding);
+    tap(speech, "give me a hint");
+    speech.setStatus("listening");
     hodeyFinishes();
-    expect(speech.followUp).toHaveBeenCalledTimes(2);
-    turn(speech);
-    hodeyFinishes();
-    expect(speech.followUp).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(CONVERSATION_PATIENCE_MS - 1000);
+    speech.speechStart.forEach((h) => h());
+    vi.advanceTimersByTime(2000);
+    expect(speech.stop).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it("ends when the learner says so, without sending it anywhere", () => {
-    const { speech, dispatched, hodeyFinishes } = setup(guiding);
-    turn(speech, "thanks, that's all");
-    hodeyFinishes();
-    expect(dispatched).toEqual([]);
-    expect(speech.followUp).not.toHaveBeenCalled();
+    const { speech, dispatched } = setup(guiding);
+    tap(speech, "give me a hint");
+    speech.setStatus("listening");
+    speech.say("thanks, that's all");
+    expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }]);
+    expect(speech.stop).toHaveBeenCalledOnce();
   });
 
-  it("never opens the mic on its own unless the learner started talking", () => {
-    const { speech, hodeyFinishes } = setup(guiding);
-    hodeyFinishes();
-    expect(speech.followUp).not.toHaveBeenCalled();
-  });
-
-  it("waits while Hodey is still working out the answer (its quick 'one sec' isn't the learner's turn)", () => {
+  it("doesn't wait out a quiet turn while Hodey is still working out the answer", () => {
+    vi.useFakeTimers();
     const { speech, hodeyFinishes } = setup({ ...guiding, phase: "reasoning" });
-    turn(speech, "what is this");
+    tap(speech, "what is this");
     hodeyFinishes();
-    expect(speech.followUp).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(CONVERSATION_PATIENCE_MS + 1);
+    expect(speech.stop).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it("respects the setting", () => {
-    const { speech, hodeyFinishes } = setup(guiding, undefined, false);
-    turn(speech, "give me a hint");
-    hodeyFinishes();
-    expect(speech.followUp).not.toHaveBeenCalled();
+    const { speech } = setup(guiding, undefined, false);
+    tap(speech, "give me a hint");
+    expect(speech.converse).not.toHaveBeenCalled();
+  });
+
+  describe("barge-in", () => {
+    const SAID = "Click the Insert tab at the top. I've highlighted it.";
+
+    it("stops Hodey mid-sentence when the learner talks over it, and hears the question", () => {
+      const { speech, interrupt, dispatched } = setup(guiding, SAID);
+      tap(speech, "give me a hint");
+      speech.setStatus("listening");
+      interrupt.mockClear();
+      speech.say("click the insert tab wait", false);
+      expect(interrupt).not.toHaveBeenCalled();
+      speech.say("click the insert tab wait what is a pivot", false);
+      expect(interrupt).toHaveBeenCalledOnce();
+      speech.say("click the insert tab wait what is a pivot table");
+      expect(dispatched.at(-1)).toEqual({ type: "VOICE_QUESTION", question: "wait what is a pivot table" });
+    });
+
+    it("ignores its own voice in the open mic", () => {
+      const { speech, interrupt, dispatched } = setup(guiding, SAID);
+      tap(speech, "give me a hint");
+      speech.setStatus("listening");
+      interrupt.mockClear();
+      speech.say("click the insert tab at the top", false);
+      speech.say("click the insert tab at the top");
+      expect(interrupt).not.toHaveBeenCalled();
+      expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }]);
+    });
   });
 
   describe("hands-free", () => {
@@ -200,13 +258,29 @@ describe("conversation", () => {
       expect(dispatched).toEqual([]);
     });
 
+    it("interrupts Hodey as soon as the wake word is heard over it", () => {
+      const { speech, interrupt, dispatched } = setup(guiding, "Click the Insert tab at the top.");
+      speech.overheard("Hey Hodey", false);
+      expect(interrupt).toHaveBeenCalledOnce();
+      speech.overheard("Hey Hodey, give me a hint");
+      expect(dispatched).toEqual([{ type: "HINT_REQUESTED" }]);
+    });
+
+    it("carries on as a conversation after a wake word", () => {
+      const { speech } = setup(guiding);
+      speech.overheard("Hey Hodey, give me a hint");
+      expect(speech.converse).toHaveBeenCalledOnce();
+    });
+
     it("ignores room speech, Hodey's own voice, and wake words during an active turn", () => {
       const { speech, dispatched } = setup(guiding);
       speech.overheard("I think it's lunch time");
       expect(dispatched).toEqual([]);
       const talking = setup(guiding, "Hey Hodey can help with that.");
+      talking.speech.overheard("Hey Hodey can help", false);
       talking.speech.overheard("Hey Hodey can help with that.");
       expect(talking.dispatched).toEqual([]);
+      expect(talking.interrupt).not.toHaveBeenCalled();
       speech.current = "listening";
       speech.overheard("Hey Hodey, give me a hint");
       expect(dispatched).toEqual([]);
