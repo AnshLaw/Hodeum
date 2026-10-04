@@ -23,7 +23,9 @@ export type NotchControl =
   /** Agent · Do it for me: carry on past a checkpoint. */
   | "approve"
   /** Agent · Do it for me: the learner does it from here, with guidance. */
-  | "take_over";
+  | "take_over"
+  /** Stop the app's web search and answer. */
+  | "stop_search";
 
 export interface NotchView {
   mode: NotchMode;

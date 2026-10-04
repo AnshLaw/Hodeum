@@ -39,14 +39,15 @@ function useAppPresence(bus: Bus): AppPresence {
 
 /**
  * Owns dock + visibility preferences and mirrors them onto the native window (stepping aside for the app).
- * `inHode` (see `holdsSpace`) decides whether an auto-hiding copilot sidebar reserves its strip.
+ * `inHode` (see `holdsSpace`) decides whether an auto-hiding copilot sidebar reserves its strip;
+ * `searchingWeb` brings the notch out over the app while it searches.
  */
-export function useDock(shell: NativeShell, inHode: boolean, bus: Bus): DockController {
+export function useDock(shell: NativeShell, inHode: boolean, bus: Bus, searchingWeb = false): DockController {
   const [prefs, setPrefs] = useState<DockPrefs>(() => {
     const storage = browserStorage();
     return storage ? loadPrefs(storage) : loadPrefs({ getItem: () => null });
   });
-  const { visible, reserve } = notchWindow(prefs, inHode, useAppPresence(bus));
+  const { visible, reserve } = notchWindow(prefs, inHode, useAppPresence(bus), searchingWeb);
 
   useEffect(() => {
     const storage = browserStorage();

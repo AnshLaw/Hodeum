@@ -137,11 +137,12 @@ export interface NotchWindow {
  * What the notch window should be, given the learner's prefs and the app. The prefs are never changed
  * while the app is open, so closing it restores exactly what the learner had. The notch reappears as the
  * app folds into it, but a copilot strip is reserved again only once the app is gone, so windows moved
- * aside never jump under the fold.
+ * aside never jump under the fold. While the app searches the web the notch comes out over it, so the
+ * learner sees exactly what leaves the PC.
  */
-export function notchWindow(prefs: DockPrefs, inHode: boolean, presence: AppPresence): NotchWindow {
+export function notchWindow(prefs: DockPrefs, inHode: boolean, presence: AppPresence, searchingWeb = false): NotchWindow {
   return {
-    visible: presence !== "open" && prefs.visibility !== "hidden",
+    visible: (presence !== "open" || searchingWeb) && prefs.visibility !== "hidden",
     reserve: presence === "closed" && reservesSpace(prefs, inHode),
   };
 }

@@ -14,3 +14,13 @@ export interface WebSearch {
 export interface WebSearchSource {
   search(query: string): Promise<WebSearch>;
 }
+
+/** How a web search from Ask Hodey is going: the app runs it, the notch shows it. */
+export type WebProgress =
+  | { state: "searching"; query: string }
+  /** Results are in and Hodey is answering; `hosts` are the sites shown as sources (none: nothing relevant). */
+  | { state: "found"; query: string; hosts: string[] }
+  /** The search failed or timed out; Hodey answers from what it knows. */
+  | { state: "failed"; query: string }
+  /** The answer is done, failed or was stopped. */
+  | { state: "finished" };

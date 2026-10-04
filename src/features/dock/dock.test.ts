@@ -141,6 +141,11 @@ describe("notchWindow while the Hodeum app is open", () => {
     expect(notchWindow(copilot, true, "closed")).toEqual({ visible: true, reserve: true });
   });
 
+  it("comes out over the app while the app searches the web, unless the learner hid it", () => {
+    expect(notchWindow(copilot, false, "open", true)).toEqual({ visible: true, reserve: false });
+    expect(notchWindow({ ...copilot, visibility: "hidden" }, false, "open", true)).toEqual({ visible: false, reserve: false });
+  });
+
   it("restores the learner's own choice afterwards, including a hidden notch", () => {
     expect(notchWindow({ ...copilot, visibility: "hidden" }, false, "closed")).toEqual({ visible: false, reserve: false });
     expect(notchWindow({ ...copilot, visibility: "hidden" }, false, "closing")).toEqual({ visible: false, reserve: false });
