@@ -163,7 +163,12 @@ pub fn set_notch_visible(app: AppHandle, visible: bool) -> Result<(), String> {
     let window = notch(&app)?;
     if visible { window.show() } else { window.hide() }.map_err(|e| e.to_string())?;
     keep_out_of_occlusion(&window)?;
-    if visible { reanchor(&app) } else { Ok(()) }
+    if !visible {
+        return Ok(());
+    }
+    // Another window may have come over its place while it was hidden.
+    crate::topmost::request_check();
+    reanchor(&app)
 }
 
 fn outer_rect(window: &WebviewWindow) -> Result<PxRect, String> {

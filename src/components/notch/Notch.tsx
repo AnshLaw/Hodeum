@@ -9,20 +9,24 @@ import type { InstalledApp, TaskPack } from "../../lib/types";
 import type { HodeRuntime } from "../../features/hode/runtime";
 import { goalEvents, startFromApp } from "../../features/hode/bridge";
 import { useHodeState } from "../../features/hode/use-hode";
-import { holdsSpace } from "../../features/dock/dock";
+import { holdsSpace, type Engagement } from "../../features/dock/dock";
+import type { HodePhase } from "../../features/hode/model";
+import type { Watchable } from "../../lib/flag";
+import { useFlag } from "../shared/use-flag";
 import { SurfaceMenu } from "./DockMenu";
 import { SkillsPanel, successExtra } from "./SkillsPanel";
 import { useNotchSkills, type SkillSource } from "./use-skills";
 import { GoalForm } from "./GoalForm";
-import { ANSWER_LINGER_MS, useOutsidePress, useAutoDismiss, useCardBottom, useControlHandler, useCoveringTarget, useHitRect, useNotchHover, useSettled } from "./hooks";
+import { ANSWER_LINGER_MS, useOutsidePress, useAutoDismiss, useCardBottom, useControlHandler, useCoveringTarget, useHitRect, useNotchHover, useSettled, useWaking } from "./hooks";
 import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
+import { TuckedOrb } from "./TuckedOrb";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
 import { EXPANDED_SIZES, NOTCH_WIDTHS, awaitingAnswer, inScript, islandSize, notchView, shouldPeek, stepItems, voiceNotice, type NotchControl, type NotchSize, type NotchView } from "./notch-view";
 import type { NativeVoiceStatus } from "../../providers/speech/native-voice";
 import { HodeyFace } from "../hodey/HodeyFace";
-import { hodeyMood, type HodeyMood } from "../hodey/mood";
+import { faceMood, type HodeyMood } from "../hodey/mood";
 import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
 import type { ActivityState, ActivityTracker } from "../../lib/activity";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
@@ -66,6 +70,10 @@ export interface NotchProps {
   cloudSetup?: CloudSetup;
   /** The installed apps, so a typed "open Excel" opens it; empty until the catalog loads. */
   apps?: () => InstalledApp[];
+  /** Hodey is saying something: the notch stays out while it talks, even with no Hode. */
+  speaking?: Watchable<boolean>;
+  /** A conversation is open: the notch stays out between turns while Hodey waits for the reply. */
+  conversation?: Watchable<boolean>;
 }
 
 const TOAST_MS = 4000;
@@ -110,6 +118,11 @@ function useActivity(tracker: ActivityTracker): ActivityState {
     return off;
   }, [tracker]);
   return state;
+}
+
+/** What Hodey is doing with the learner right now: the Hode's phase, and the spoken exchange around it. */
+function useEngagement(phase: HodePhase, micStatus: SpeechInputStatus, voice: Pick<NotchProps, "speaking" | "conversation">): Engagement {
+  return { phase, listening: micStatus === "listening", speaking: useFlag(voice.speaking), conversing: useFlag(voice.conversation) };
 }
 
 function useSpeechStatus(speech: SpeechInput): SpeechInputStatus {
@@ -174,43 +187,63 @@ function notchWidth(size: NotchSize, phoneScreen: Size | undefined): number {
   return size === "phone" && phoneScreen ? phoneNotchWidth(phoneScreen) : NOTCH_WIDTHS[size];
 }
 
+interface IslandProps {
+  surface: SurfaceProps;
+  /** The view as the island shows it (stepped aside, or titled for the skills panel). */
+  view: NotchView;
+  size: NotchSize;
+  peek: boolean;
+  phoneScreen?: Size;
+}
+
+/** The full notch: Hodey's bar, a toast or the words Hodey hears, then the card (beside the iPhone, when open). */
+function IslandCard({ surface: props, view, size, peek, phoneScreen }: IslandProps) {
+  return (
+    <>
+      <NotchBar view={view} mood={props.mood} expanded={EXPANDED_SIZES.includes(size)} muted={props.muted} menuOpen={props.menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={props.onControl} onGrip={props.onGrip} activity={props.activity} micStatus={props.micStatus} onToggleMic={props.onToggleMic} onOpenApp={props.onOpenApp} onVoiceMenu={props.voiceSetup ? props.onVoiceMenu : undefined} voiceMenu={props.voiceMenu} onCloudMenu={props.cloudSetup ? () => props.onVoiceMenu?.("cloud") : undefined} />
+      {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
+      {props.micStatus === "listening" && <HeardLine heard={props.heard} />}
+      <div aria-live="polite">
+        {size === "phone" && props.phone ? (
+          <PhonePanel mirror={props.phone} bus={props.bus} screen={phoneScreen}>
+            {topBody(props, view, size, peek)}
+          </PhonePanel>
+        ) : (
+          topBody(props, view, size, peek)
+        )}
+      </div>
+    </>
+  );
+}
+
+/** What fills the island: Hodey alone in an orb (busy, or tucked away by auto-hide), or the full bar and card. */
+function IslandContent(island: IslandProps) {
+  const { surface: props, view, size } = island;
+  if (size === "orb") return <Orb mood={props.mood} label={view.title} activity={props.activity} />;
+  if (size === "tucked") return <TuckedOrb mood={props.mood} activity={props.activity} paused={view.mode === "paused"} onReveal={props.onReveal} />;
+  return <IslandCard {...island} />;
+}
+
 /** The dynamic island: one surface that morphs between pill, orb, bar and card as Hodey works. */
 function TopNotch(props: SurfaceProps & { surfaceRef: RefObject<HTMLElement | null>; covering: boolean; onCardBottom: (bottom: number) => void }) {
   const { menuOpen, hovered, revealed } = props;
   const stageRef = useRef<HTMLDivElement>(null);
   const phoneScreen = usePhoneScreen(props.phone, stageRef, "beside");
   const settled = useSettled(props.view.size === "orb", ORB_DELAY_MS);
+  const waking = useWaking(revealed);
   // Step aside to a slim bar while the highlighted control sits under the card; hovering brings it back.
   const skillsOpen = props.skills?.open === true;
   const peek = shouldPeek({ mode: props.view.mode, covering: props.covering, hovered, menuOpen, skillsOpen });
   const listening = props.micStatus === "listening";
-  const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening, phone: props.phoneOpen === true, skills: skillsOpen });
+  const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening, phone: props.phoneOpen === true, skills: skillsOpen, tucked: !revealed });
   useCardBottom(props.surfaceRef, size === "guidance", props.onCardBottom);
   const view = skillsOpen ? { ...props.view, eyebrow: COPY.yourSkills, progress: undefined, controls: [] } : peek ? { ...props.view, controls: [] } : props.view;
   const style = { "--notch-width": `${notchWidth(size, phoneScreen)}px` } as CSSProperties;
-  const classes = ["notch", `notch--${size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
+  const classes = ["notch", `notch--${size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", peek ? "notch--peek" : "", waking ? "notch--waking" : ""];
   return (
     <div ref={stageRef} className="notch-stage">
       <section ref={props.surfaceRef} className={classes.filter(Boolean).join(" ")} style={style} aria-label={COPY.idleTitle}>
-        {size === "orb" ? (
-          <Orb mood={props.mood} label={view.title} activity={props.activity} />
-        ) : (
-          <>
-            <NotchBar view={view} mood={props.mood} expanded={EXPANDED_SIZES.includes(size)} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={props.onControl} onGrip={props.onGrip} activity={props.activity} micStatus={props.micStatus} onToggleMic={props.onToggleMic} onOpenApp={props.onOpenApp} onVoiceMenu={props.voiceSetup ? props.onVoiceMenu : undefined} voiceMenu={props.voiceMenu} onCloudMenu={props.cloudSetup ? () => props.onVoiceMenu?.("cloud") : undefined} />
-            {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
-            {listening && <HeardLine heard={props.heard} />}
-            <div aria-live="polite">
-              {size === "phone" && props.phone ? (
-                <PhonePanel mirror={props.phone} bus={props.bus} screen={phoneScreen}>
-                  {topBody(props, view, size, peek)}
-                </PhonePanel>
-              ) : (
-                topBody(props, view, size, peek)
-              )}
-            </div>
-          </>
-        )}
-        {!revealed && <PrivacyDots activity={props.activity} className="privacy-dots--sliver" />}
+        <IslandContent surface={props} view={view} size={size} peek={peek} phoneScreen={phoneScreen} />
       </section>
     </div>
   );
@@ -253,7 +286,7 @@ function useNaturalVoices(source?: Pick<NativeVoiceStatus, "current" | "subscrib
   return voices;
 }
 
-export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource, voiceSetup, cloudSetup, apps }: NotchProps) {
+export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource, voiceSetup, cloudSetup, apps, speaking, conversation }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
   const notice = bootNotice ?? voiceNotice(useTtsState(voiceStatus));
@@ -278,8 +311,10 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
     setVoiceMenu(undefined);
     skills?.setOpen(false);
   });
-  // Hodey stays out while the learner is in its menu or reading their skills.
-  const revealed = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true || web !== undefined, state.phase);
+  const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
+  const engagement = useEngagement(state.phase, micStatus, { speaking, conversation });
+  // Hodey stays out while the learner is in its menu or reading their skills, and while it's engaged with them.
+  const [revealed, reveal] = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true || web !== undefined, engagement);
   const handleControl = useControlHandler(runtime, bus);
   const onControl = (control: NotchControl) => (web && control === "dismiss" ? closeWeb() : handleControl(control));
   useHitRect(surfaceRef, shell, bus, `${layoutKey}:${revealed}`);
@@ -290,7 +325,6 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   useEffect(() => setCardBottom(undefined), [view.title, view.mode]);
   const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top", cardBottom);
   const activity = useActivity(tracker);
-  const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
   // A said answer folds back to what the learner was doing, unless they're reading it, in the menu, or replying.
   const answerDone = view.mode === "answer" && state.answerSaid === true && !hovered && !menuOpen && micStatus !== "listening";
   useAutoDismiss(answerDone, runtime, ANSWER_LINGER_MS);
@@ -299,10 +333,11 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
 
   const props: SurfaceProps = {
     view,
-    mood: micStatus === "listening" ? "listening" : hodeyMood(state, hovered),
+    mood: faceMood(state, hovered, engagement),
     steps: stepItems(state).map((item) => ({ ...item, objective: show(item.objective) })),
     hovered,
     revealed,
+    onReveal: reveal,
     muted,
     menuOpen,
     dock,
@@ -346,7 +381,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
       if (state.phase === "goal_entry") runtime.dispatch({ type: "DISMISS" });
     },
     // Classified like a spoken goal: "open Excel" opens it, and a greeting or noise gets a nudge instead of an open Hode.
-    onSubmitGoal: (goal, mode, agentStyle) => goalEvents(goal, { packs, openAllowed: visionStatus?.state === "ready", apps: apps?.() ?? [], mode, agentStyle }).forEach(runtime.dispatch),
+    onSubmitGoal: (goal, mode, agentStyle) => goalEvents(goal, { packs, openAllowed: visionStatus?.state === "ready", visionStarting: visionStatus?.state === "starting", apps: apps?.() ?? [], mode, agentStyle }).forEach(runtime.dispatch),
     hodeMode: state.mode,
     hodeAgentStyle: state.agentStyle,
     defaultMode: runtime.getDefaultMode(),

@@ -99,15 +99,35 @@ export function hodeActive(phase: HodePhase): boolean {
   return phase !== "idle";
 }
 
-export function shouldReveal(visibility: Visibility, hovered: boolean, phase: HodePhase): boolean {
+/** What Hodey is doing with the learner: the Hode's phase, and the spoken exchange, which can run with no Hode at all. */
+export interface Engagement {
+  phase: HodePhase;
+  /** The mic is open for the learner: a tap or held key, after the wake word, or a conversation's open mic. */
+  listening: boolean;
+  /** Hodey is saying something. */
+  speaking: boolean;
+  /** A conversation is open: the mic stays, or reopens, for the learner's reply between turns. */
+  conversing: boolean;
+}
+
+/**
+ * Hodey is busy with the learner: listening, thinking, answering, speaking or guiding, or a Hode or a conversation
+ * is under way. A greeting, an app opened by voice and a conversation's follow-up all happen while the phase is idle.
+ * A paused Hode isn't: it rests like a sleeping Hodey.
+ */
+export function engaged(e: Engagement): boolean {
+  return e.listening || e.speaking || e.conversing || (hodeActive(e.phase) && e.phase !== "paused");
+}
+
+/** Auto-hide shows the whole notch while the learner reaches for it or Hodey is engaged; otherwise it rests as the orb. */
+export function shouldReveal(visibility: Visibility, hovered: boolean, engagement: Engagement): boolean {
   switch (visibility) {
     case "pinned":
       return true;
     case "hidden":
       return false;
     case "auto":
-      // A paused Hode rests like a sleeping Hodey: tucked away until the learner hovers.
-      return hovered || (hodeActive(phase) && phase !== "paused");
+      return hovered || engaged(engagement);
   }
 }
 

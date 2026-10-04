@@ -21,7 +21,10 @@ export interface SurfaceProps {
   mood: HodeyMood;
   steps: StepItem[];
   hovered: boolean;
+  /** Out in full; otherwise auto-hide has tucked it into a small orb at the screen edge. */
   revealed: boolean;
+  /** Brings the notch out of the orb, as hovering does (a click on the orb). */
+  onReveal: () => void;
   muted: boolean;
   menuOpen: boolean;
   dock: DockController;

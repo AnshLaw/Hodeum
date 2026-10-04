@@ -1,13 +1,15 @@
 import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
-import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Point, Rect, StepOutcome, TeachingContext } from "../../lib/types";
-import type { LearningMemory, MemoryProvider, PerceptionAdapter, PlannerProvider, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
+import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Point, Rect, ScreenObservation, StepOutcome, TeachingContext } from "../../lib/types";
+import type { AppSwitch, LearningMemory, MemoryProvider, PerceptionAdapter, PlannerProvider, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
+import { sameApp } from "./flow";
 import { reasonWithFallback } from "../../providers/router";
 import { observeShellTargets } from "./shell";
 import { rememberedLevel } from "../memory/tracker";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState } from "./model";
 import { step } from "./reducer";
+import { wantedNames } from "./wanted";
 
 export interface RuntimeDeps {
   perception: PerceptionAdapter;
@@ -43,6 +45,11 @@ const ECHO_WINDOW_MS = 3500;
 const ECHO_LINES = 2;
 /** The native side waits up to ~45 s for a slow app (Excel cold-starts in ~21 s); this only catches a hung call. */
 const OPEN_APP_TIMEOUT_MS = 60_000;
+/**
+ * Once an app Hodey opened is up, how long the window watcher gets to report it coming forward (it lets a new
+ * front window settle first) before Hodey reports the switch itself.
+ */
+export const NATIVE_SWITCH_GRACE_MS = 1500;
 /** After Hodey presses a control, the app gets this long to respond (a menu or dialog opening) before it's read. */
 export const PRESS_SETTLE_MS = 450;
 const CANT_PRESS = "Hodey can't click in this app, so this step is yours.";
@@ -97,14 +104,25 @@ export class HodeRuntime {
   private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
   /** The reasoning in flight, called off as soon as the Hode's request id moves past it. */
   private reasoning: { requestId: number; controller: AbortController } | undefined;
+  /** The app an open goal turned out to be about (a pack or a named app sets `state.app` instead). */
+  private hodeApp: string | undefined;
+  /** The learner is in another app while the Hode's app waits behind it. */
+  private away = false;
+  /** Window switches the watcher has reported, so an app being opened can tell whether one came meanwhile. */
+  private watchedSwitches = 0;
+  /** Hodey's own report that an app it opened is up, waiting out the watcher's grace period. */
+  private openedSwitch: ReturnType<typeof setTimeout> | undefined;
+  /** The step's controls perception was last told, for its reads after the learner's own actions. */
+  private wanted: string[] = [];
 
   constructor(private readonly deps: RuntimeDeps) {
     this.disposers = [
-      deps.perception.onLearnerAction((observation) => this.dispatch({ type: "LEARNER_ACTED", observation })),
+      // What the learner does in another app (while the Hode's app waits behind it) isn't part of the Hode.
+      deps.perception.onLearnerAction((observation) => (this.away ? undefined : this.dispatch({ type: "LEARNER_ACTED", observation }))),
       deps.bus.on("annotate:start", () => this.dispatch({ type: "ANNOTATE_START" })),
       deps.bus.on("annotate:cancel", () => this.dispatch({ type: "ANNOTATE_CANCEL" })),
       deps.bus.on("annotation:submitted", ({ annotation }) => this.dispatch({ type: "ANNOTATION_SUBMITTED", annotation })),
-      deps.perception.onAppSwitched?.(() => this.appSwitched()) ?? (() => undefined),
+      deps.perception.onAppSwitched?.((window) => this.watcherSawSwitch(window)) ?? (() => undefined),
     ];
   }
 
@@ -134,7 +152,9 @@ export class HodeRuntime {
     if (event.type === "GOAL_SUBMITTED" && prev.phase === "goal_entry" && state.pack) this.recall(state);
     if (state !== prev) {
       this.state = state;
+      if (state.phase === "idle") this.forgetHodeApp();
       this.abandonStaleReasoning();
+      this.shareWanted();
       this.listeners.forEach((listener) => listener());
     }
     this.transitionListeners.forEach((listener) => listener(event, prev, state));
@@ -193,8 +213,19 @@ export class HodeRuntime {
     this.disposers.forEach((dispose) => dispose());
     this.clearStuckTimer();
     this.clearPressTimer();
+    this.clearOpenedSwitch();
     this.stopPointerWatch();
     this.stopSpeech();
+    this.wanted = [];
+    this.deps.perception.setWanted?.([]);
+  }
+
+  /** Reads after the learner's own actions look for the current step's controls too (see `wantedNames`). */
+  private shareWanted(): void {
+    const names = wantedNames(this.state);
+    if (sameNames(names, this.wanted)) return;
+    this.wanted = names;
+    this.deps.perception.setWanted?.(names);
   }
 
   private run(effect: HodeEffect): void {
@@ -311,9 +342,63 @@ export class HodeRuntime {
     }
   }
 
-  /** Another window came forward: the reducer decides what it means (the awaited app, progress in an open Hode). */
-  private appSwitched(): void {
-    this.dispatch({ type: "APP_SWITCHED" });
+  /** Whether the learner stepped into another app while the Hode's app waits behind it. */
+  isAway(): boolean {
+    return this.away;
+  }
+
+  /**
+   * Another window came forward: the reducer decides what it means. During a Hode it's told whether that's
+   * another app than the one being taught (`away`), so the Hode waits quietly instead of asking them back.
+   */
+  private appSwitched(window: AppSwitch = {}): void {
+    const away = this.awayFrom(window);
+    this.away = away === true;
+    this.dispatch(away === undefined ? { type: "APP_SWITCHED" } : { type: "APP_SWITCHED", away });
+  }
+
+  /** Another app than the Hode's (undefined outside a Hode, or when either app is unknown). */
+  private awayFrom(window: AppSwitch): boolean | undefined {
+    const app = this.state.app ?? this.hodeApp;
+    if (this.state.phase === "idle" || app === undefined || !window.app) return undefined;
+    return !sameApp(window.app, app);
+  }
+
+  private forgetHodeApp(): void {
+    this.hodeApp = undefined;
+    this.away = false;
+  }
+
+  /** An open goal may name no app: the first app read during the Hode is the one it teaches. */
+  private pin(observation: ScreenObservation): void {
+    if (this.state.phase !== "idle" && this.state.app === undefined && this.hodeApp === undefined && observation.app) this.hodeApp = observation.app;
+  }
+
+  /** The window watcher saw another window come forward, which covers an app Hodey has just opened too. */
+  private watcherSawSwitch(window: AppSwitch = {}): void {
+    this.watchedSwitches += 1;
+    this.clearOpenedSwitch();
+    this.appSwitched(window);
+  }
+
+  /**
+   * An app Hodey opened is up. The window watcher usually reports its window coming forward, while it opened or
+   * just after; Hodey reports the switch itself only when the watcher said nothing by the end of the grace period
+   * (or nothing watches), so the reducer hears of it once.
+   */
+  private openedAppIsUp(watchedAtStart: number, app: string): void {
+    if (!this.deps.perception.onAppSwitched) return this.appSwitched({ app });
+    if (this.watchedSwitches !== watchedAtStart) return;
+    this.clearOpenedSwitch();
+    this.openedSwitch = setTimeout(() => {
+      this.openedSwitch = undefined;
+      this.appSwitched({ app });
+    }, NATIVE_SWITCH_GRACE_MS);
+  }
+
+  private clearOpenedSwitch(): void {
+    if (this.openedSwitch !== undefined) clearTimeout(this.openedSwitch);
+    this.openedSwitch = undefined;
   }
 
   /** The taskbar's Start button and search box, for a Hode waiting on an app; always answered, empty when unreadable. */
@@ -324,11 +409,12 @@ export class HodeRuntime {
   /** Opens an installed app the learner asked for; a Hode waiting for it carries on as soon as it's up. */
   private openApp(app: InstalledApp): void {
     const failed = (reason: string) => this.dispatch({ type: "APP_OPEN_FAILED", app, reason });
+    const watchedAtStart = this.watchedSwitches;
     const open = this.deps.perception.openInstalledApp?.(app.id) ?? Promise.reject(new Error("Opening apps isn't available here"));
     withTimeout(open, OPEN_APP_TIMEOUT_MS, `${app.name} didn't open in time`).then(
       (appeared) => {
         if (!appeared) return failed(`No ${app.name} window appeared`);
-        this.appSwitched();
+        this.openedAppIsUp(watchedAtStart, app.name);
       },
       (error) => {
         console.error(`Couldn't open ${app.name}`, error);
@@ -376,9 +462,14 @@ export class HodeRuntime {
     );
   }
 
+  /** A read for the state that asked for it, looking for that step's controls. */
   private observe(region?: Rect): void {
-    this.focusing.then(() => this.deps.perception.observe(region)).then(
-      (observation) => this.dispatch({ type: "OBSERVED", observation }),
+    const want = wantedNames(this.state);
+    this.focusing.then(() => this.deps.perception.observe(region, want)).then(
+      (observation) => {
+        this.pin(observation);
+        this.dispatch({ type: "OBSERVED", observation });
+      },
       (error) => this.fail("Couldn't read the screen", error),
     );
   }
@@ -453,7 +544,7 @@ export class HodeRuntime {
     perception
       .perform(request)
       .then(() => wait(PRESS_SETTLE_MS))
-      .then(() => perception.observe())
+      .then(() => perception.observe(undefined, wantedNames(this.state)))
       .then(
         (observation) => this.dispatch({ type: "HODEY_ACTED", requestId, observation }),
         (error) => {
@@ -562,6 +653,10 @@ function withDefaults(event: HodeEvent, mode: HodeMode, agentStyle: AgentStyle):
   if (event.type === "GOAL_SUBMITTED") return { ...event, mode: event.mode ?? mode, agentStyle: event.agentStyle ?? agentStyle };
   if (event.type === "OPEN_APP") return { ...event, mode: event.mode ?? mode };
   return event;
+}
+
+function sameNames(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((name, i) => name === b[i]);
 }
 
 /** Rejects with `message` if `work` hasn't settled in `ms`. */

@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use regex::Regex;
 use tauri::async_runtime;
 
+use super::body::{content_type, is_html, read_capped};
 use super::guard::{page_client, readable, shareable};
 use super::limits::memory;
 use super::source::{failure, SourceError, SourceId};
@@ -21,7 +22,7 @@ pub const PAGE_CHARS: usize = 1_200;
 const ENOUGH_BODY_CHARS: usize = 400;
 /// Less than this from a direct fetch means the page is built by JavaScript.
 const MIN_DIRECT_CHARS: usize = 300;
-/// The WhatsApp FAQ page is 1.2 MB of HTML; anything far beyond that isn't a help article.
+/// The WhatsApp FAQ page is 1.2 MB of HTML; anything far beyond that isn't a help article and isn't read.
 const MAX_PAGE_BYTES: usize = 3_000_000;
 const JINA_URL: &str = "https://r.jina.ai/";
 const JINA_REMOVE: &str = "nav, header, footer, aside";
@@ -73,14 +74,21 @@ pub fn jina_text(markdown: &str) -> String {
         .join("\n")
 }
 
-/// The response text, capped; `id` names a service whose limits apply (none for a plain page).
+/// The response text, refused past `MAX_PAGE_BYTES`; `id` names a service whose limits apply (none for a plain page).
 async fn body_of(response: reqwest::Response, id: Option<SourceId>) -> Result<String, SourceError> {
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(id.map_or(SourceError::Http(status), |id| SourceError::from_status(id, status)));
     }
-    let bytes = response.bytes().await.map_err(|e| SourceError::from_reqwest(&e))?;
-    Ok(String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_PAGE_BYTES)]).into_owned())
+    read_capped(response, MAX_PAGE_BYTES).await
+}
+
+/// A help site's own answer as HTML: a download or anything else that isn't a web page is never read.
+async fn page_html(response: reqwest::Response) -> Result<String, SourceError> {
+    if response.status().is_success() && !is_html(content_type(&response)) {
+        return Err(SourceError::NotHtml);
+    }
+    body_of(response, None).await
 }
 
 /// Pages are fetched with their own client: https only, public addresses only, redirects re-checked.
@@ -92,8 +100,8 @@ fn reader() -> Result<&'static reqwest::Client, String> {
 /// Only official help sites are fetched directly; any other result is read through its own text or Jina.
 async fn fetch_direct(url: &reqwest::Url) -> Result<String, SourceError> {
     let client = reader().map_err(SourceError::Parse)?;
-    let response = client.get(url.clone()).header("Accept", "text/html").send().await.map_err(|e| SourceError::from_reqwest(&e))?;
-    Ok(page_text(&body_of(response, None).await?).1)
+    let response = client.get(url.clone()).header("Accept", "text/html").send().await.map_err(SourceError::from_reqwest)?;
+    Ok(page_text(&page_html(response).await?).1)
 }
 
 async fn fetch_jina(client: &reqwest::Client, url: &reqwest::Url) -> Result<String, SourceError> {
@@ -103,7 +111,7 @@ async fn fetch_jina(client: &reqwest::Client, url: &reqwest::Url) -> Result<Stri
     let request = client.get(format!("{JINA_URL}{url}")).header("X-Retain-Images", "none").header("X-Remove-Selector", JINA_REMOVE);
     let outcome = match request.send().await {
         Ok(response) => body_of(response, Some(SourceId::Jina)).await,
-        Err(e) => Err(SourceError::from_reqwest(&e)),
+        Err(e) => Err(SourceError::from_reqwest(e)),
     };
     if let Some(rest) = outcome.as_ref().err().and_then(SourceError::rest) {
         memory().cooldowns.rest(SourceId::Jina, Instant::now(), rest);
@@ -175,6 +183,27 @@ mod tests {
     fn reads_official_help_first_and_never_videos() {
         let results = [result("https://www.youtube.com/watch?v=1"), result("https://blog.example.com/pin"), result("https://faq.whatsapp.com/645907560577342/"), result("https://other.example.com")];
         assert_eq!(reading_order(&results), vec![2, 1]);
+    }
+
+    fn answer(status: u16, content_type: &str, body: impl Into<reqwest::Body>) -> reqwest::Response {
+        let built = tauri::http::Response::builder().status(status).header("Content-Type", content_type).body(body.into());
+        reqwest::Response::from(built.expect("a valid test response"))
+    }
+
+    #[test]
+    fn reads_a_help_page_only_when_it_is_html() {
+        let html = async_runtime::block_on(page_html(answer(200, "text/html; charset=utf-8", "<p>Select View</p>")));
+        assert_eq!(html, Ok("<p>Select View</p>".into()));
+        let pdf = async_runtime::block_on(page_html(answer(200, "application/pdf", "%PDF-1.7")));
+        assert_eq!(pdf, Err(SourceError::NotHtml));
+        let missing = async_runtime::block_on(page_html(answer(404, "text/html", "<p>Not found</p>")));
+        assert_eq!(missing, Err(SourceError::Http(404)));
+    }
+
+    #[test]
+    fn refuses_a_page_bigger_than_any_help_article() {
+        let read = async_runtime::block_on(page_html(answer(200, "text/html", "x".repeat(MAX_PAGE_BYTES + 1))));
+        assert_eq!(read, Err(SourceError::TooLarge(MAX_PAGE_BYTES)));
     }
 
     #[test]

@@ -48,20 +48,36 @@ const KNOWN: KnownApp[] = [
 
 const LEADING = /^(?:the |my |microsoft |ms |google )+/;
 const TRAILING = /(?: app| application| program| browser| classic)+$/;
+/** `TRAILING` without a variant's qualifier: "Outlook (classic)" keeps its "classic" here. */
+const GENERIC = /(?: app| application| program| browser)+$/;
 /** Devanagari's nukta (ज़ vs ज): speech recognition writes it inconsistently. */
 const NUKTA = /़/g;
 
-/** Lowercase words without "Microsoft", "the", "app" and the like, on both the query and the names. */
-export function normalizeName(text: string): string {
-  const words = text
+/** Lowercase words, without punctuation ("Outlook (classic)" → "outlook classic"). */
+function plainWords(text: string): string {
+  return text
     .normalize("NFC")
     .replace(NUKTA, "")
     .toLowerCase()
     .replace(/[^\p{L}\p{M}\p{N} ]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return words.replace(LEADING, "").replace(TRAILING, "").trim();
 }
+
+/** Lowercase words without "Microsoft", "the", "app" and the like, on both the query and the names. */
+export function normalizeName(text: string): string {
+  return plainWords(text).replace(LEADING, "").replace(TRAILING, "").trim();
+}
+
+/** `normalizeName`, keeping the qualifier that tells an app's variants apart. */
+function variantName(text: string): string {
+  return plainWords(text).replace(LEADING, "").replace(GENERIC, "").trim();
+}
+
+const wordsOf = (name: string) => name.split(" ").filter((word) => word !== "");
+
+/** The same words, in any order ("classic outlook", "Outlook (classic)"). */
+const sameWords = (a: string[], b: string[]) => [...a].sort().join(" ") === [...b].sort().join(" ");
 
 const ALIASES = new Map(KNOWN.flatMap((known) => known.aliases.map((alias) => [normalizeName(alias), known] as const)));
 
@@ -126,9 +142,24 @@ function scoreApp(query: string, app: InstalledApp, known: KnownApp | undefined)
   return nameScore(query, normalizeName(app.name));
 }
 
+/**
+ * The app whose whole name the query is, variant qualifier and all ("Outlook classic"), when no other app's name
+ * holds every word of it: "outlook" alone also fits "Outlook (classic)", so it is left to the scoring (and a question).
+ */
+function variantMatch(query: string, catalog: InstalledApp[]): InstalledApp | undefined {
+  const words = wordsOf(variantName(query));
+  const names = catalog.map((app) => wordsOf(variantName(app.name)));
+  const named = catalog.filter((_, i) => sameWords(names[i], words));
+  if (named.length !== 1) return undefined;
+  const alsoFits = catalog.some((app, i) => app !== named[0] && words.every((word) => names[i].includes(word)));
+  return alsoFits ? undefined : named[0];
+}
+
 export function resolveApp(query: string, catalog: InstalledApp[]): AppMatch {
   const normal = normalizeName(query);
   if (normal === "") return { kind: "none" };
+  const variant = variantMatch(query, catalog);
+  if (variant) return { kind: "match", app: variant };
   const known = knownFor(normal);
   const scored = catalog
     .map((app) => ({ app, score: scoreApp(normal, app, known) }))
@@ -139,5 +170,52 @@ export function resolveApp(query: string, catalog: InstalledApp[]): AppMatch {
   if (!next || best.score - next.score >= MIN_MARGIN - SCORE_EPSILON) return { kind: "match", app: best.app };
   const close = scored.filter(({ score }) => best.score - score < MIN_MARGIN - SCORE_EPSILON);
   return { kind: "ambiguous", options: close.slice(0, MAX_OPTIONS).map(({ app }) => app) };
+}
+
+/** Stands for the last option offered, however many there were. */
+const LAST = -1;
+/** Picking an offered app by its place, in English, Hinglish and Hindi (written without the nukta). */
+const PLACES = new Map<string, number>(
+  (
+    [
+      [0, "first 1st 1 pehla pehle pehli pahla pahle pahli पहला पहले पहली"],
+      [1, "second 2nd 2 two doosra doosre doosri dusra dusre dusri दूसरा दूसरे दूसरी"],
+      [2, "third 3rd 3 three teesra teesre teesri tisra tisre tisri तीसरा तीसरे तीसरी"],
+      [LAST, "last aakhri akhri aakhiri आखिरी"],
+    ] as const
+  ).flatMap(([place, words]) => words.split(" ").map((word) => [word, place] as const)),
+);
+/** "Number one": "one" alone is too common a word to be a place. */
+const NUMBER_ONE = /\b(?:number|option) one\b/g;
+/** Words around a pick that don't say which: "the classic one", "doosra wala", "open the first please". */
+const PICK_FILLER = new Set(
+  "the one option number no yes yeah ok okay i mean meant want that this it is open launch start please wala wali wale vala vali vale haan han ji wo woh ye yeh वाला वाली वाले हाँ हां जी वो वह ये यह".split(" "),
+);
+
+function placeOf(word: string, count: number): number | undefined {
+  const place = PLACES.get(word);
+  if (place === undefined) return undefined;
+  const index = place === LAST ? count - 1 : place;
+  return index < count ? index : undefined;
+}
+
+/** The one option the words name in full, else the one option holding every word ("classic"). */
+function namedOption(words: string[], options: string[]): number | undefined {
+  const names = options.map((option) => wordsOf(variantName(option)));
+  const exact = names.flatMap((name, i) => (sameWords(name, words) ? [i] : []));
+  if (exact.length === 1) return exact[0];
+  const holding = names.flatMap((name, i) => (words.every((word) => name.includes(word)) ? [i] : []));
+  return holding.length === 1 ? holding[0] : undefined;
+}
+
+/**
+ * Which of the offered apps a reply picks, as its index: by place ("the second one", "doosra wala", "दूसरा")
+ * or by name ("Outlook classic", "classic wala"). Undefined when it picks none of them.
+ */
+export function pickOption(reply: string, options: string[]): number | undefined {
+  const words = wordsOf(variantName(reply).replace(NUMBER_ONE, "first")).filter((word) => !PICK_FILLER.has(word));
+  if (words.length === 0) return undefined;
+  const place = words.length === 1 ? placeOf(words[0], options.length) : undefined;
+  return place ?? namedOption(words, options);
 }
 

@@ -30,6 +30,10 @@ const MAX_REQUEST_CHARS: usize = 16_000;
 const MAX_ERROR_CHARS: usize = 200;
 /// Must match `visionReplySchema` kinds in src/providers/vision/schema.ts.
 const KINDS: [&str; 4] = ["guide", "answer", "clarify", "complete"];
+/// Must match `MAX_MORE_TARGETS` in src/providers/vision/schema.ts.
+const MAX_MORE_TARGETS: usize = 3;
+/// A later control's keys: named, then numbered, then the words in the speech that name it. No box: Gemini sees no image.
+const MORE_TARGET_KEYS: [&str; 3] = ["label", "target_index", "mention"];
 
 /// Mirrors `GeminiRequest` in src/providers/cloud/gemini-reasoner.ts. Unknown fields (an image) are refused.
 #[derive(Deserialize, Debug)]
@@ -59,6 +63,24 @@ pub fn endpoint(model: &str) -> String {
     format!("{API_BASE}/{model}:generateContent")
 }
 
+/// The step's later controls, in the order the learner uses them; Gemini leaves the list out for a one-control step.
+fn more_targets_schema() -> Value {
+    json!({
+        "type": "ARRAY",
+        "maxItems": MAX_MORE_TARGETS,
+        "items": {
+            "type": "OBJECT",
+            "properties": {
+                "label": { "type": "STRING" },
+                "target_index": { "type": "INTEGER" },
+                "mention": { "type": "STRING" }
+            },
+            "required": MORE_TARGET_KEYS,
+            "propertyOrdering": MORE_TARGET_KEYS
+        }
+    })
+}
+
 fn response_schema() -> Value {
     json!({
         "type": "OBJECT",
@@ -67,11 +89,12 @@ fn response_schema() -> Value {
             "speech": { "type": "STRING" },
             "target_label": { "type": "STRING" },
             "target_index": { "type": "INTEGER" },
-            "confidence": { "type": "NUMBER" }
+            "confidence": { "type": "NUMBER" },
+            "more_targets": more_targets_schema()
         },
         // Keys come out in this order, so the model names the control before it numbers it.
         "required": ["kind", "speech", "target_label", "target_index", "confidence"],
-        "propertyOrdering": ["kind", "speech", "target_label", "target_index", "confidence"]
+        "propertyOrdering": ["kind", "speech", "target_label", "target_index", "confidence", "more_targets"]
     })
 }
 
@@ -252,6 +275,18 @@ mod tests {
         let at = |key: &str| order.iter().position(|k| k == key).expect(key);
         assert!(at("target_label") < at("target_index"), "names the control, then numbers it");
         assert!(schema["required"].as_array().expect("required keys").contains(&json!("target_label")));
+    }
+
+    #[test]
+    fn may_name_later_controls_each_before_its_number() {
+        let schema = response_schema();
+        assert!(schema["propertyOrdering"].as_array().expect("an ordering").contains(&json!("more_targets")));
+        assert!(!schema["required"].as_array().expect("required keys").contains(&json!("more_targets")), "a one-control step leaves it out");
+        let list = &schema["properties"]["more_targets"];
+        assert_eq!(list["maxItems"], json!(MAX_MORE_TARGETS));
+        assert_eq!(list["items"]["propertyOrdering"], json!(["label", "target_index", "mention"]));
+        assert_eq!(list["items"]["required"], json!(["label", "target_index", "mention"]));
+        assert!(list["items"]["properties"].get("bbox").is_none(), "Gemini sees no image, so it gives no boxes");
     }
 
     #[test]

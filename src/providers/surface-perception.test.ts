@@ -39,4 +39,18 @@ describe("SurfacePerception", () => {
     expect(seen).toHaveBeenCalledTimes(1);
     expect(seen.mock.calls[0][0].app).toBe("iPhone");
   });
+
+  it("passes the step's controls to the active surface's read, and tells every surface that listens", async () => {
+    const windows = fake("Excel");
+    const phone = fake("iPhone");
+    const observe = vi.spyOn(windows, "observe");
+    const setWanted = vi.fn();
+    Object.assign(windows, { setWanted });
+    const s = new SurfacePerception({ windows, phone });
+    const region = { x: 1, y: 2, width: 3, height: 4 };
+    await s.observe(region, ["Insert"]);
+    expect(observe).toHaveBeenCalledWith(region, ["Insert"]);
+    s.setWanted(["PivotTable"]);
+    expect(setWanted).toHaveBeenCalledWith(["PivotTable"]);
+  });
 });

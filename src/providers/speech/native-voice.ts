@@ -1,8 +1,10 @@
 import { speakable } from "../../lib/hinglish";
 import { DEFAULT_HINDI_VOICE } from "../../data/settings";
+import type { BusEvents } from "../../lib/bus";
 import { hasDevanagari } from "../../lib/language";
 import type { SpokenCopy } from "../../lib/spoken";
-import type { TTSProvider } from "../interfaces";
+import type { SpokenSegment, TTSProvider } from "../interfaces";
+import { SegmentRelay } from "./segment-relay";
 import type { SpeechInput, SpeechInputStatus } from "./speech-input";
 
 /** Mirrors `VoiceStatus` in src-tauri/src/voice/mod.rs. */
@@ -42,6 +44,7 @@ const SPEECH_START_EVENT = "voice:speech-start";
 const ERROR_EVENT = "voice:error";
 const WAKE_EVENT = "voice:wake-candidate";
 const DONE_EVENT = "tts:done";
+const SEGMENT_EVENT = "tts:segment";
 const NOT_READY = "Hodey's voice is still starting.";
 
 /** The slice of Tauri the voice adapters need, injectable for tests. */
@@ -182,6 +185,8 @@ export class NativeTTSProvider implements TTSProvider {
   voiceId = "";
   /** The voice for Hindi sentences (Devanagari text). */
   hindiVoiceId = DEFAULT_HINDI_VOICE;
+  /** The `tts_speak` ids of the lines this voice is saying: asked for, not yet done, failed or stopped. */
+  private readonly saying = new Set<string>();
 
   constructor(private readonly bridge: VoiceBridge, private readonly voice?: NativeVoiceStatus) {}
 
@@ -193,24 +198,48 @@ export class NativeTTSProvider implements TTSProvider {
     const content = speakable(await collect(text, signal));
     if (content === "" || signal.aborted) return;
     const id = crypto.randomUUID();
-    const finished = new Promise<void>((resolve, reject) => {
+    this.saying.add(id);
+    try {
+      const finished = this.finished(id, signal);
+      await this.bridge.invoke<void>("tts_speak", { id, text: content, voiceId: this.voiceFor(content), speed: this.rate });
+      await finished;
+    } finally {
+      this.saying.delete(id);
+    }
+  }
+
+  /**
+   * Settles when line `id` is done (rejecting if it failed), or at once with a stop when `signal` aborts first.
+   * Aborting after the line is done stops nothing: the next line may be playing by then.
+   */
+  private finished(id: string, signal: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        off();
+        this.stop().then(resolve, reject);
+      };
       const off = this.bridge.listen<{ id: string; error: string | null }>(DONE_EVENT, (done) => {
         if (done.id !== id) return;
         off();
+        signal.removeEventListener("abort", abort);
         if (done.error) reject(new Error(done.error));
         else resolve();
       });
-      signal.addEventListener("abort", () => {
-        off();
-        this.stop().then(resolve, reject);
-      }, { once: true });
+      signal.addEventListener("abort", abort, { once: true });
     });
-    await this.bridge.invoke<void>("tts_speak", { id, text: content, voiceId: this.voiceFor(content), speed: this.rate });
-    await finished;
   }
 
+  /** A stop cancels every line asked for so far, so their segments are stale from now on. */
   stop(): Promise<void> {
+    this.saying.clear();
     return this.bridge.invoke<void>("tts_stop");
+  }
+
+  /** Each part of a line this voice is saying, as it starts playing (`tts:segment`, filtered to its own lines). */
+  onSegment(listener: (segment: SpokenSegment) => void): () => void {
+    return this.bridge.listen<BusEvents["tts:segment"]>(SEGMENT_EVENT, ({ id, index, text }) => {
+      if (this.saying.has(id)) listener({ index, text });
+    });
   }
 
   /** Synthesizes likely lines ahead of time (silently) so they start instantly when needed. */
@@ -232,18 +261,22 @@ export class NativeTTSProvider implements TTSProvider {
  * and Windows voices for any single utterance Supertonic fails on.
  */
 export class RoutedTTS implements TTSProvider {
+  private readonly naturalSegments: SegmentRelay;
+
   constructor(
     private readonly natural: TTSProvider,
     private readonly windows: TTSProvider,
     private readonly useNatural: () => boolean,
-  ) {}
+  ) {
+    this.naturalSegments = new SegmentRelay(natural);
+  }
 
   async speak(text: AsyncIterable<string>, signal: AbortSignal): Promise<void> {
     const content = await collect(text, signal);
     // Windows' English voices can't read Hindi; Hindi always goes to Hodey's Hindi voice.
     if (!this.useNatural() && !hasDevanagari(content)) return this.windows.speak(once(content), signal);
     try {
-      await this.natural.speak(once(content), signal);
+      await this.naturalSegments.speak(once(content), signal);
     } catch (error) {
       if (signal.aborted) return;
       console.error("Hodey's natural voice failed; using a Windows voice", error);
@@ -258,6 +291,11 @@ export class RoutedTTS implements TTSProvider {
 
   async healthCheck(): Promise<boolean> {
     return (await this.natural.healthCheck()) || this.windows.healthCheck();
+  }
+
+  /** The natural voice's segments while it says a line; Windows voices have none. */
+  onSegment(listener: (segment: SpokenSegment) => void): () => void {
+    return this.naturalSegments.onSegment(listener);
   }
 }
 

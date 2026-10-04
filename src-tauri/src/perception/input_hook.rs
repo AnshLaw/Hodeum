@@ -214,8 +214,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     if code >= 0 {
         // SAFETY: for WH_MOUSE_LL, lparam points to an MSLLHOOKSTRUCT for the duration of the call.
         let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
-        // Synthesized clicks (Hodey's own, in Agent · Do it for me) are not the learner's actions.
-        if info.flags & LLMHF_INJECTED != 0 {
+        if !counts_as_learner(info.flags & LLMHF_INJECTED != 0) {
             // SAFETY: forwarding the unmodified hook arguments, as required.
             return unsafe { CallNextHookEx(None, code, wparam, lparam) };
         }
@@ -232,6 +231,20 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     }
     // SAFETY: forwarding the unmodified hook arguments, as required.
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
+}
+
+/// Debug builds only: set to 1, the test harness's SendInput clicks and keys stand in for the learner's.
+const E2E_INPUT_VAR: &str = "HODEUM_E2E_INPUT";
+static E2E_INPUT: OnceLock<bool> = OnceLock::new();
+
+fn e2e_input_allowed(debug_build: bool, value: Option<&str>) -> bool {
+    debug_build && value == Some("1")
+}
+
+/// Synthesized input (Hodey's own presses in Agent · Do it for me) is not the learner's, except for the
+/// e2e harness in a debug build.
+fn counts_as_learner(injected: bool) -> bool {
+    !injected || *E2E_INPUT.get_or_init(|| e2e_input_allowed(cfg!(debug_assertions), std::env::var(E2E_INPUT_VAR).ok().as_deref()))
 }
 
 /// Returned instead of passing a key on: the Hodey key's letter commands never reach the app.
@@ -258,7 +271,8 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
         let vk_code = info.vkCode;
         let down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
         let up = message == WM_KEYUP || message == WM_SYSKEYUP;
-        if (down || up) && info.flags.0 & LLKHF_INJECTED.0 == 0 {
+        let learners = counts_as_learner(info.flags.0 & LLKHF_INJECTED.0 != 0);
+        if (down || up) && learners {
             note_key(vk_code, down);
         }
         if (down || up) && crate::hodey_key::on_key(vk_code, down) {
@@ -266,11 +280,10 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
         }
         let alt = info.flags.0 & LLKHF_ALTDOWN.0 != 0;
         let report = if down {
-            let typed = (info.flags.0 & LLKHF_INJECTED.0 == 0 && edits_text(vk_code)).then_some(Signal::Typed);
+            let typed = (learners && edits_text(vk_code)).then_some(Signal::Typed);
             shortcut_input(vk_code, ctrl_down(), alt).map(|input| Signal::Action(Some(input))).or(typed)
         } else {
-            let injected = info.flags.0 & LLKHF_INJECTED.0 != 0;
-            (message == WM_KEYUP).then(|| key_up_signal(vk_code, shift_down(), injected, since_typed())).flatten()
+            (message == WM_KEYUP).then(|| key_up_signal(vk_code, shift_down(), !learners, since_typed())).flatten()
         };
         // SAFETY: GetForegroundWindow has no preconditions.
         if let Some(report) = report.filter(|_| !is_own(unsafe { GetForegroundWindow() })) {
@@ -475,6 +488,14 @@ mod tests {
         assert_eq!(serde_json::to_string(&click).unwrap(), r#"{"kind":"click","at":{"x":1.0,"y":2.0},"button":"right"}"#);
         assert_eq!(serde_json::to_string(&LearnerInput::Undo).unwrap(), r#"{"kind":"undo"}"#);
         assert_eq!(serde_json::to_string(&LearnerInput::Submit).unwrap(), r#"{"kind":"submit"}"#);
+    }
+
+    #[test]
+    fn only_a_debug_build_with_the_e2e_switch_counts_injected_input() {
+        assert!(e2e_input_allowed(true, Some("1")));
+        assert!(!e2e_input_allowed(false, Some("1")), "release builds never do");
+        assert!(!e2e_input_allowed(true, None));
+        assert!(!e2e_input_allowed(true, Some("0")));
     }
 
     #[test]

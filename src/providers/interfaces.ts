@@ -50,10 +50,23 @@ export interface ReasoningProvider {
   healthCheck(): Promise<boolean>;
 }
 
+/** One part of a line Hodey is saying (a sentence, or a long first sentence's opening clause), as it starts playing. */
+export interface SpokenSegment {
+  /** From 0, in the order the parts are said. */
+  index: number;
+  /** The words of this part, as spoken (after respelling for the voice). */
+  text: string;
+}
+
 export interface TTSProvider {
   speak(text: AsyncIterable<string>, signal: AbortSignal): Promise<void>;
   stop(): Promise<void>;
   healthCheck(): Promise<boolean>;
+  /**
+   * Each part of the line this voice is saying, as it starts playing; nothing for a stopped line or another
+   * voice's. Only Hodey's local voice can tell; the cloud and Windows voices leave this out.
+   */
+  onSegment?(listener: (segment: SpokenSegment) => void): () => void;
 }
 
 export interface MemoryQuery {
@@ -96,8 +109,14 @@ export interface AppSwitch {
 
 /** UI Automation, the detector, and the practice stage's mock all sit behind this. */
 export interface PerceptionAdapter {
-  observe(region?: Rect): Promise<ScreenObservation>;
+  /**
+   * `want`: names of the controls the current lesson step needs. A read whose time-boxed walk misses them
+   * (a dialog that has only just opened answers slowly) searches them out by name.
+   */
+  observe(region?: Rect, want?: string[]): Promise<ScreenObservation>;
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void;
+  /** The current step's controls (`observe`'s `want`) for the reads that follow the learner's own actions; [] for none. */
+  setWanted?(names: string[]): void;
   /** Brings an open window of `app` (e.g. "Excel") to the front. False when none is open. */
   focusApp?(app: string): Promise<boolean>;
   /** Opens `app` (with the pack's practice file) and brings it to the front. False when it didn't appear in time. */

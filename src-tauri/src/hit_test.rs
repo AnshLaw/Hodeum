@@ -123,4 +123,14 @@ mod tests {
         assert!(!rect.contains(380.0, 10.0, 1.25));
         assert!(!rect.contains(150.0, 51.0, 1.25));
     }
+
+    #[test]
+    fn reads_a_side_docks_tucked_orb_in_its_own_window_like_the_top_notch() {
+        // A right dock's window is a 360 CSS px strip; the tucked orb shows 36 px of itself at the screen edge.
+        let orb = HitRect { x: 324.0, y: 496.0, width: 36.0, height: 40.0 };
+        let scale = 1.5;
+        assert!(orb.contains(359.0 * scale, 516.0 * scale, scale));
+        assert!(!orb.contains(322.0 * scale, 516.0 * scale, scale));
+        assert!(!orb.contains(340.0 * scale, 540.0 * scale, scale));
+    }
 }

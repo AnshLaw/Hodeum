@@ -27,8 +27,11 @@ export interface BusEvents {
   "cloud:keys-changed": Empty;
   /** Live Hode status from the notch (where the runtime lives) for the app window. */
   "hode:summary": HodeSummary;
-  /** Ask the notch to start a Hode, e.g. from the app's chat or learning paths. Mode and style default to Settings. */
-  "hode:start": { goal: string; mode?: HodeMode; agentStyle?: AgentStyle };
+  /**
+   * Ask the notch to start a Hode, e.g. from the app's chat or learning paths. Mode and style default to Settings.
+   * `source: "web"`: sent from the web dashboard (DeviceLink); it may start a Hode but never opens an app on this PC.
+   */
+  "hode:start": { goal: string; mode?: HodeMode; agentStyle?: AgentStyle; source?: "web" };
   "hode:end": Empty;
   /** Ask the notch to broadcast a fresh summary (an app window just opened). */
   "hode:summary-request": Empty;
@@ -57,6 +60,11 @@ export interface BusEvents {
   "account:retry": Empty;
   /** A row was deleted locally; sync deletes it in the cloud too instead of pulling it back. */
   "sync:deleted": { table: "skills" | "chats"; id: string };
+  /**
+   * Emitted by Rust (src-tauri/src/voice/speak.rs) as each part of a line in Hodey's local voice starts playing:
+   * `id` is the line's `tts_speak` id, `index` counts from 0. Never for a stopped line.
+   */
+  "tts:segment": { id: string; index: number; text: string };
 }
 
 export interface HodeSummary {

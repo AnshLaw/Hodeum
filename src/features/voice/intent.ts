@@ -9,6 +9,8 @@ export interface IntentOptions {
   isCommand?: (text: string) => boolean;
   /** Whether a name is an installed app. Without it, any short "open X" counts as an app request. */
   isApp?: (name: string) => boolean;
+  /** A Hode is running: "is this on?" is about what's on screen, not a mic check. */
+  inHode?: boolean;
 }
 
 /** Shorter than this (after cleanup) is noise: "um", "uh". */
@@ -19,25 +21,49 @@ const MIN_HOW_TO_WORDS = 3;
 const MIN_TASK_WORDS = 2;
 /** An app's name is at most this many words; longer is a task about the app ("open a new tab in Brave"). */
 const MAX_APP_NAME_WORDS = 4;
+/** Real words it takes to be worth asking about the screen ("explain this screen"), unlike a fragment ("the tab"). */
+const MIN_CONTENT_WORDS = 2;
 
 /** Thanks and okays: they close an answer, and with nothing running they need no reply at all. */
 const ACK_WORDS = new Set(["ok", "okay", "great", "perfect", "nice", "cool", "awesome", "alright", "understood", "thanks", "thank", "got"]);
 const ACK_FILLER = new Set(["you", "it", "so", "much", "a", "lot", "all", "right", "that", "very"]);
 const FILLER = new Set(["um", "uh", "uhh", "umm", "hmm", "hm", "mm", "mmm", "ah", "er", "erm", "huh", "oh", "eh", "so", "like", "okay", "ok", "yeah", "yes", "no", "yep", "nope", "right", "well", "and", "the", "a", "हाँ", "हां", "हम्म", "अच्छा"]);
 const NUMBER_WORDS = new Set(["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred", "thousand"]);
+/** Words that ask for nothing on their own (pronouns, helpers, linking words, filler phrases), in English, Hinglish and Hindi. */
+const FUNCTION_WORDS = new Set(
+  [
+    "i me my mine you your we us our they them their he him his she her it its this that these those there here",
+    "a an the is are was were be been being am do does did done have has had will would can could should shall may might must",
+    "to of in on at by for with from into onto about as up down out over off than then too very just not never",
+    "don't doesn't didn't isn't aren't wasn't can't won't i'm i've i'll you're it's that's there's what's let let's",
+    "what which who whom whose why how when where if or but because some any all each every much many more most",
+    "something anything nothing everything else also again maybe really actually now think know mean guess sure please",
+    "good fine sounds looks seems first second third last next minute moment sec",
+    "hai hain tha thi ho ka ki ke ko mein se par pe ye yeh wo woh aur to bhi hi na nahi nahin ji theek thik main mujhe mera meri mere aap tum hum kya kuch is us ise use bas",
+    "है हैं था थी थे हो का की के को में से पर पे ये यह वो वह और तो भी ही ना न नहीं जी ठीक मैं मुझे मेरा मेरी मेरे आप तुम हम क्या कुछ इस उस इसे उसे कि बस",
+  ].flatMap((words) => words.split(" ")),
+);
 /** What speech recognition writes for silence, music and room noise. */
 const HALLUCINATIONS = /^(?:thanks? (?:you )?for watching|thank you\.?|you|bye\.?|subtitles? by.*|\[?(?:music|blank_audio|silence|noise|applause|laughter)\]?|\(.*\))$/i;
 /** Leading filler that doesn't change what follows ("um hello", "so hi"). */
 const LEADING_FILLER = /^(?:(?:um|uh|so|okay|ok|well|oh) )+/;
 
-/** One greeting, check-in or bit of small talk; an utterance of only these is a greeting. */
-const GREETING_PART =
+/** One greeting or bit of small talk. */
+const SOCIAL_PART =
   "(?:hi|hello|hey|hiya|yo|namaste|namaskar|good (?:morning|afternoon|evening|night))(?: there| hodey| hodi| body| everyone| buddy)?" +
-  "|how are you(?: doing)?(?: today)?|how(?:'s| is) it going|what'?s up|sup|(?:can|do) you hear me|can you listen(?: to)?(?: me)?" +
-  "|are you (?:there|listening|awake|working)|testing(?: one two(?: three)?)?|mic (?:check|test)|is this (?:working|on)" +
+  "|how are you(?: doing)?(?: today)?|how(?:'s| is) it going|what'?s up|sup" +
   "|who are you|what(?:'s| is) your name|nice to meet you|bye|goodbye|see you|good job|well done" +
   "|नमस्ते|नमस्कार|हेलो|हैलो|हाय|कैसे हो|आप कैसे हैं";
-const GREETING = new RegExp(`^(?:${GREETING_PART})(?: (?:${GREETING_PART}))*$`, "u");
+/** Checking that Hodey hears: small talk in any phase. */
+const MIC_CHECK_PART =
+  "(?:can|do) you hear me|can you listen(?: to)?(?: me)?|are you (?:there|listening|awake|working)" +
+  "|testing(?: one two(?: three)?)?|mic (?:check|test)(?: one two(?: three)?)?|is (?:the |my )?(?:mic|microphone) (?:on|working)";
+/** Naming nothing: a mic check with nothing running, but during a Hode a question about the control on screen. */
+const SCREEN_CHECK_PART = "is (?:this|it) (?:working|on)";
+/** An utterance of only these parts is a greeting. */
+const greetingOf = (...parts: string[]) => new RegExp(`^(?:${parts.join("|")})(?: (?:${parts.join("|")}))*$`, "u");
+const GREETING = greetingOf(SOCIAL_PART, MIC_CHECK_PART, SCREEN_CHECK_PART);
+const GREETING_IN_HODE = greetingOf(SOCIAL_PART, MIC_CHECK_PART);
 
 /** "Open Excel", "launch the calculator app", "switch to WhatsApp please". */
 const OPEN_EN = /^(?:please )?(?:open|launch|start|run|bring up|switch to|go to)(?: up)? (?:the |my )?(.+?)(?: app| application| program| window)?(?: please)?$/;
@@ -47,9 +73,11 @@ const OPEN_HI = /^(?:please )?(.+?) (?:kholo|khol do|kholiye|kholna|open karo|op
 const CONNECTORS = /\b(?:and|then|to|in|on|with|for|from|and then)\b/;
 
 /** How-to openers: what follows is something to learn. */
-const HOW_TO = /^(?:how (?:do|can|could|would|should|to) (?:i |we |you )?|teach me|show me how|help me|i (?:want|need|would like) to|i'?d like to|let'?s|guide me|walk me through|can you (?:teach|show|help) me)/;
-const HOW_TO_HI = /(?:\bkaise\b|कैसे|sikhao|सिखाओ|सिखाइए|बताओ कैसे)/u;
-const QUESTION_START = /^(?:what|where|which|why|who|whose|when|is|are|does|did|was|were|can i see|what's|where's)\b/;
+const HOW_TO =
+  /^(?:please )?(?:how (?:do|can|could|would|should|to) (?:i |we |you )?|teach me|show me how|help me|i (?:want|need|would like) to|i'?d like to|let'?s|guide me|walk me through|(?:can|could|would|will) you (?:please )?(?:teach|show|help) me)/;
+/** "How do I", and asking to be taught or to learn, wherever it falls: "क्या आप मुझे … सिखा सकते हैं", "mujhe … sikhna hai". */
+const HOW_TO_HI = /(?:\bkaise\b|कैसे|सिखा|सीखना|सीखनी|\bsikha|\bsikhn|\bseekhn|बताओ कैसे)/u;
+const QUESTION_START = /^(?:what|where|which|why|who|whose|when|is|are|does|did|was|were|can i see|what's|where's|how (?:many|much|long|often|big|far|old))\b/;
 const QUESTION_HI = /(?:क्या|कहाँ|कहां|कौन|क्यों|किधर|\bkya\b|\bkahan\b|\bkaun\b|\bkyun\b)/u;
 const TASK_VERB =
   /\b(?:make|create|add|insert|build|send|share|attach|open|launch|start|close|change|turn (?:on|off)|switch|enable|disable|set ?up|setup|install|uninstall|zip|unzip|compress|extract|rename|delete|remove|move|copy|paste|find|search|look up|google|download|upload|save|print|format|sort|filter|merge|split|convert|export|import|edit|write|type|draw|record|connect|pair|join|book|order|pay|play|watch|message|call|email|reply|forward|schedule|update|fix|clean|resize|crop|bold|highlight|sum|calculate|chart|graph|pivot|bookmark|pin|mute|unmute)\b/;
@@ -90,9 +118,21 @@ function isNoise(raw: string, text: string, words: string[]): boolean {
   return words.length >= 2 && new Set(words).size === 1;
 }
 
-function isGreeting(words: string[]): boolean {
+function isGreeting(words: string[], greeting: RegExp): boolean {
   const deduped = words.filter((w, i) => i === 0 || w !== words[i - 1]).join(" ");
-  return GREETING.test(deduped) || GREETING.test(deduped.replace(LEADING_FILLER, ""));
+  return greeting.test(deduped) || greeting.test(deduped.replace(LEADING_FILLER, ""));
+}
+
+const isContentWord = (word: string) => ![FILLER, FUNCTION_WORDS, ACK_WORDS, ACK_FILLER, NUMBER_WORDS].some((words) => words.has(word));
+
+/** Two or more real words: worth asking about the screen ("explain this screen"), unlike a fragment or filler ("let me think"). */
+export function isSubstantive(text: string): boolean {
+  return wordsIn(text).filter(isContentWord).length >= MIN_CONTENT_WORDS;
+}
+
+/** Opens with a question word or helper verb ("what is…", "is dark mode on", "how many…"), so it's a question, not a request. */
+export function opensWithQuestion(text: string): boolean {
+  return QUESTION_START.test(normalize(text));
 }
 
 function isTask(text: string, words: string[]): boolean {
@@ -104,13 +144,13 @@ export function classify(raw: string, options: IntentOptions = {}): Intent {
   const text = normalize(raw);
   const words = text.split(" ").filter(Boolean);
   if (isNoise(raw, text, words)) return "noise";
-  if (isGreeting(words)) return "greeting";
+  if (isGreeting(words, options.inHode ? GREETING_IN_HODE : GREETING)) return "greeting";
   if (isAcknowledgement(text)) return "ack";
   if (options.isCommand?.(text)) return "control";
   const app = appQuery(text);
   if (app !== undefined && (options.isApp?.(app) ?? true)) return "open_app";
   if (isTask(text, words)) return "task";
-  if (QUESTION_START.test(text) || QUESTION_HI.test(text)) return "question";
+  if (opensWithQuestion(text) || QUESTION_HI.test(text)) return "question";
   if ((TASK_VERB.test(text) || TASK_VERB_HI.test(text)) && words.length >= MIN_TASK_WORDS) return "task";
   return "unclear";
 }

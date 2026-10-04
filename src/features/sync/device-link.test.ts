@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LocalBus } from "../../lib/bus";
+import { LocalBus, type BusEvents } from "../../lib/bus";
 import { COMMAND_TTL_MS, DeviceLink, MAX_GOAL_LENGTH, judgeCommand } from "./device-link";
 import { FakeCloud } from "./fake-cloud";
 import type { PcCommand } from "./types";
@@ -56,6 +56,16 @@ describe("DeviceLink", () => {
     cloud.commands.push(command({ id: "c7", goal: "zip a folder" }));
     await link.start();
     expect(started).toEqual(["zip a folder"]);
+    link.stop();
+  });
+
+  it("marks a Hode it starts as sent from the web, so it can't open apps on this PC", async () => {
+    const { bus, cloud, link } = setup();
+    const payloads: BusEvents["hode:start"][] = [];
+    bus.on("hode:start", (payload) => payloads.push(payload));
+    cloud.commands.push(command({ id: "c8", goal: "open command prompt" }));
+    await link.start();
+    expect(payloads).toEqual([{ goal: "open command prompt", source: "web" }]);
     link.stop();
   });
 

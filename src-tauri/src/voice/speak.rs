@@ -21,6 +21,7 @@ use super::models::{kokoro_files, tts_files, voice_root, KokoroFiles, TtsFiles};
 use super::voices::{catalog, pick, Engine};
 use super::cache::{key, PhraseCache};
 use super::devices::chosen_output_device;
+use super::playhead::{self, Chunks};
 use super::segment::{script_runs, speech_chunks, speech_chunks_with};
 use super::set_tts_voices;
 
@@ -43,6 +44,8 @@ const PLAYBACK_POLL: Duration = Duration::from_millis(20);
 /// Phrases kept as audio: the acknowledgements plus a lesson's worth of lines.
 const PHRASE_CACHE_SIZE: usize = 64;
 pub const DONE_EVENT: &str = "tts:done";
+/// Each chunk of a spoken line as it starts playing; the frontend's bus has the same name.
+pub const SEGMENT_EVENT: &str = "tts:segment";
 const NO_SPEAKER: &str = "Hodey's speaker isn't ready yet.";
 
 pub struct SpeakJob {
@@ -69,6 +72,31 @@ struct Done {
     id: String,
     interrupted: bool,
     error: Option<String>,
+}
+
+/// `tts:segment`: chunk `index` (from 0) of utterance `id` just started playing; `text` is what it says.
+#[derive(Clone, Serialize)]
+struct Segment<'a> {
+    id: &'a str,
+    index: usize,
+    text: &'a str,
+}
+
+/// Runs `emit` unless a stop came after `generation`. Under the player's lock, which a stop takes too: once
+/// `tts_stop` has returned, nothing of the stopped speech goes out.
+fn emit_unless_stopped(stop: &StopSwitch, generation: u64, emit: impl FnOnce()) {
+    if let Err(reason) = stop.with_current_player(generation, |_| emit()) {
+        log::warn!("couldn't check for a stop before reporting what Hodey is saying: {reason}");
+    }
+}
+
+/// Tells every window that chunk `index` of `job` just started playing.
+fn announce_segment(app: &AppHandle, stop: &StopSwitch, job: &SpeakJob, index: usize, text: &str) {
+    emit_unless_stopped(stop, job.generation, || {
+        if let Err(e) = app.emit(SEGMENT_EVENT, Segment { id: &job.id, index, text }) {
+            log::warn!("couldn't report which sentence Hodey is saying: {e}");
+        }
+    });
 }
 
 /// Shared with the `tts_stop` command so speech can be cut off while the worker is busy synthesizing.
@@ -238,7 +266,6 @@ fn cancelled(stop: &StopSwitch, job: &SpeakJob) -> bool {
     stop.generation.load(Ordering::SeqCst) != job.generation
 }
 
-/// Speaks one job; returns whether it was interrupted.
 /// One chunk's audio: from the cache, or synthesized now (and cached). None if a stop arrived.
 /// Mixed Hindi and English is said a script run at a time, each with its own pronunciation.
 fn chunk_audio(engines: &Engines, cache: &mut PhraseCache, chunk: &str, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<Option<(Vec<f32>, u32)>, String> {
@@ -292,23 +319,32 @@ fn is_prepared(engines: &Engines, cache: &PhraseCache, job: &SpeakJob, chunk: &s
     script_runs(chunk).iter().all(|(run, _)| cache.contains(&key(engine, sid, job.speed, run)))
 }
 
-fn speak(engines: &Engines, cache: &mut PhraseCache, player: &Player, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<bool, String> {
+/// Speaks one job, announcing each chunk (`tts:segment`) as it starts playing; returns whether it was interrupted.
+fn speak(app: &AppHandle, engines: &Engines, cache: &mut PhraseCache, player: &Player, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<bool, String> {
     // Anything left from an interrupted utterance must never play before this one.
     player.clear();
     player.play();
+    let announce = |index: usize, text: &str| announce_segment(app, stop, job, index, text);
+    playhead::watching(|| player.len(), announce, |chunks| play_chunks(engines, cache, player, job, stop, chunks))
+}
+
+/// Appends each chunk as soon as its audio is ready (prepared or synthesized now), telling `chunks` right after,
+/// then waits for the player to finish. Returns whether a stop cut it short.
+fn play_chunks(engines: &Engines, cache: &mut PhraseCache, player: &Player, job: &SpeakJob, stop: &Arc<StopSwitch>, chunks: &Chunks) -> Result<bool, String> {
     // A prepared acknowledgement ("Exactly right.") plays from the cache while the rest is synthesized.
-    let chunks = speech_chunks_with(&job.text, |chunk| is_prepared(engines, cache, job, chunk));
-    for chunk in chunks {
+    let texts = speech_chunks_with(&job.text, |chunk| is_prepared(engines, cache, job, chunk));
+    for text in texts {
         if cancelled(stop, job) {
             return Ok(true);
         }
-        let Some((samples, rate)) = chunk_audio(engines, cache, &chunk, job, stop)? else { return Ok(true) };
+        let Some((samples, rate)) = chunk_audio(engines, cache, &text, job, stop)? else { return Ok(true) };
         // Synthesis only checks for a stop between steps; a chunk finished after the stop is dropped.
         if cancelled(stop, job) {
             return Ok(true);
         }
         let rate = NonZero::new(rate).ok_or("The voice produced no audio.")?;
         player.append(SamplesBuffer::new(NonZero::<u16>::MIN, rate, samples));
+        chunks.appended(&text);
     }
     while !player.empty() && !cancelled(stop, job) {
         thread::sleep(PLAYBACK_POLL);
@@ -378,7 +414,7 @@ fn say(app: &AppHandle, engines: &Engines, cache: &mut PhraseCache, player: &Pla
     if !job.play {
         return prepare(engines, cache, &job, stop);
     }
-    let result = if cancelled(stop, &job) { Ok(true) } else { speak(engines, cache, player, &job, stop) };
+    let result = if cancelled(stop, &job) { Ok(true) } else { speak(app, engines, cache, player, &job, stop) };
     match result {
         Ok(interrupted) => report(app, job.id, interrupted, None),
         Err(reason) => report(app, job.id, false, Some(reason)),
@@ -455,6 +491,25 @@ mod tests {
             Some(Next::Command(SpeakerCommand::SwitchOutput)) => "switch".into(),
             None => "closed".into(),
         }
+    }
+
+    #[test]
+    fn segments_serialize_the_way_the_frontend_reads_them() {
+        let segment = Segment { id: "line-7", index: 1, text: "now click Insert." };
+        assert_eq!(serde_json::to_string(&segment).unwrap(), r#"{"id":"line-7","index":1,"text":"now click Insert."}"#);
+    }
+
+    #[test]
+    fn no_segment_goes_out_once_a_stop_has_returned() {
+        let stop = StopSwitch::default();
+        let (player, _output) = Player::new();
+        *stop.player.lock().unwrap() = Some(Arc::new(player));
+        let generation = stop.current();
+        let mut announced = Vec::new();
+        emit_unless_stopped(&stop, generation, || announced.push("Nice work so far,"));
+        stop.stop().unwrap();
+        emit_unless_stopped(&stop, generation, || announced.push("now click Insert."));
+        assert_eq!(announced, ["Nice work so far,"]);
     }
 
     #[test]

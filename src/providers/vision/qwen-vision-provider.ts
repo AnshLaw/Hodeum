@@ -1,15 +1,17 @@
 import type { ActionTarget, Rect, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
 import type { ReasoningHooks, ReasoningProvider } from "../interfaces";
-import { agreementConfidence, quotedLabels, resolveTarget } from "./grounding";
-import { buildMessages, fromImageBox, insideFrame, pointable, selectCandidates, windowBoundsOf } from "./prompt";
-import { parseVisionReply, replySchemaFor, type VisionReply } from "./schema";
+import { agreementConfidence, quotedLabels, type Resolution } from "./grounding";
+import { buildMessages, fromImageBox, insideFrame, selectCandidates } from "./prompt";
+import { parseVisionReply, replySchemaFor, type MoreTarget, type VisionReply } from "./schema";
+import { laterTargets, namesOf, resolveNamed, targetsField, withMention } from "./targets";
 import type { CapturedFrame, VisionConnection } from "./types";
 
 /** A slow answer is worse than the deterministic fallback; the notch shows "looking" meanwhile. */
 export const VISION_TIMEOUT_MS = 20_000;
 /** Boxes from pixels alone never earn a precise arrow (PRD §37): they draw a broad highlight at most. */
 export const VISUAL_CONFIDENCE_CAP = 0.8;
-const MAX_TOKENS = 200;
+/** Room for a full reply with three later controls; the schema closes a typical one well before. */
+const MAX_TOKENS = 320;
 /** A "target" covering most of the window points at nothing; better to draw no highlight at all. */
 const MAX_BOX_SHARE = 0.5;
 const TEMPERATURE = 0.2;
@@ -146,9 +148,9 @@ export async function collectStream(body: ReadableStream<Uint8Array>): Promise<s
 }
 
 /** The model's box in screen px, unless it's off the window or covers most of it (pointing at nothing). */
-function boxOf(reply: VisionReply, frame: CapturedFrame): Rect | undefined {
-  if (!reply.bbox) return undefined;
-  const bounds = fromImageBox(reply.bbox, frame.rect);
+function boxOf(bbox: number[] | undefined, frame: CapturedFrame): Rect | undefined {
+  if (!bbox) return undefined;
+  const bounds = fromImageBox(bbox, frame.rect);
   const share = (bounds.width * bounds.height) / (frame.rect.width * frame.rect.height);
   return insideFrame(bounds, frame.rect) && share <= MAX_BOX_SHARE ? bounds : undefined;
 }
@@ -161,28 +163,35 @@ function labelsOf(reply: VisionReply): string[] {
 
 /** A control from the screen read, settled by the name the model gave it and checked against its index and box; else the bare box. */
 function targetFrom(reply: VisionReply, candidates: UiElement[], frame: CapturedFrame, context: TeachingContext): ActionTarget | undefined {
-  const box = boxOf(reply, frame);
+  const box = boxOf(reply.bbox, frame);
   const chosen = reply.target_index >= 0 ? candidates[reply.target_index] : undefined;
   const labels = labelsOf(reply);
-  // In an open Hode with no question, the goal is what the learner asked for ("close the browser").
-  const utterance = context.utterance ?? (context.openGoal ? context.goal : undefined);
-  const elements = context.observation.elements;
-  const resolution = resolveTarget({ chosen, box, elements, utterance, labels, window: windowBoundsOf(context), pointable: (e) => pointable(e, context) });
+  const resolution = resolveNamed(context, { chosen, box, labels });
   console.debug("Vision grounding", { label: labels[0], index: chosen?.name, agreement: resolution.agreement, target: resolution.element?.name });
   // The model's own confidence is near-constant (0.95), so it only ever caps what grounding found.
   const confidence = Math.min(reply.confidence, agreementConfidence(resolution));
   const { element } = resolution;
-  if (element) return { elementId: element.id, bounds: element.bounds, confidence, label: element.name };
+  if (element) return withMention({ elementId: element.id, bounds: element.bounds, confidence, label: element.name }, reply.speech, [reply.target_label, element.name]);
   if (!resolution.box) return undefined;
-  return { elementId: "vision-box", bounds: resolution.box, confidence: Math.min(confidence, VISUAL_CONFIDENCE_CAP), label: "Here" };
+  return withMention({ elementId: "vision-box", bounds: resolution.box, confidence: Math.min(confidence, VISUAL_CONFIDENCE_CAP), label: "Here" }, reply.speech, [reply.target_label]);
+}
+
+/** A later control of the step, settled like the target: its own name first, then its number and box. */
+function settleLater(item: MoreTarget, candidates: UiElement[], frame: CapturedFrame, context: TeachingContext): Resolution {
+  const chosen = item.target_index >= 0 ? candidates[item.target_index] : undefined;
+  return resolveNamed(context, { chosen, box: boxOf(item.bbox, frame), labels: namesOf(item) });
 }
 
 export function toAction(reply: VisionReply, candidates: UiElement[], frame: CapturedFrame, context: TeachingContext): TeachingAction {
   const kind = context.correction && reply.kind === "guide" ? "correct" : reply.kind;
+  const target = kind === "clarify" || kind === "complete" ? undefined : targetFrom(reply, candidates, frame, context);
+  const settle = (item: MoreTarget) => settleLater(item, candidates, frame, context);
+  const targets = laterTargets({ items: reply.more_targets ?? [], first: target, speech: reply.speech, confidence: reply.confidence, settle });
   return {
     kind,
     speech: reply.speech.trim(),
-    target: kind === "clarify" || kind === "complete" ? undefined : targetFrom(reply, candidates, frame, context),
+    target,
+    ...targetsField(targets),
     skill: context.step?.skill ?? GENERAL_SKILL,
     assistanceLevel: context.assistanceLevel,
   };

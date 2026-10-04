@@ -161,5 +161,8 @@ export const COPY = {
   privacyScreen: "Hodey is reading your screen",
   privacyMic: "Microphone is on",
   privacyCloud: "A cloud service is receiving data",
+  /** Auto-hide's resting orb at the screen edge: Hodeum is still running. */
+  tuckedOrb: "Hodey is here — hover to open",
+  tuckedOrbPaused: "Your Hode is paused — hover to continue",
   progressNotSaved: "Progress won't be saved this session — the local database didn't open.",
 } as const;

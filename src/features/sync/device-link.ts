@@ -133,7 +133,8 @@ export class DeviceLink {
       console.error(`Couldn't claim web command ${command.id}; will retry`, error);
       return;
     }
-    if (verdict.status === "started" && verdict.goal) this.deps.bus.emit("hode:start", { goal: verdict.goal });
+    // Tagged so the notch never turns a web goal ("open Command Prompt") into opening an app here.
+    if (verdict.status === "started" && verdict.goal) this.deps.bus.emit("hode:start", { goal: verdict.goal, source: "web" });
     if (verdict.status === "ended") this.deps.bus.emit("hode:end", {});
   }
 }

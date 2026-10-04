@@ -138,3 +138,25 @@ describe("hode:start", () => {
     expect(runtime.getState()).toMatchObject({ phase: "idle", open: false });
   });
 });
+
+describe("hode:start from the web dashboard", () => {
+  const COMMAND_PROMPT: InstalledApp = { id: "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\cmd.exe", name: "Command Prompt", kind: "desktop" };
+  const WITH_SHELL = [...APPS, COMMAND_PROMPT];
+
+  it("starts a Hode for the goal but never opens an app on this PC", async () => {
+    const { bus, runtime } = setup(undefined, WITH_SHELL);
+    const dispatch = vi.spyOn(runtime, "dispatch");
+    bus.emit("hode:start", { goal: "open command prompt", source: "web" });
+    await settle();
+    const types = dispatch.mock.calls.map(([event]) => event.type);
+    expect(types).not.toContain("OPEN_APP");
+    expect(types.slice(0, 2)).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
+  });
+
+  it("still opens the app when the same goal comes from this PC", () => {
+    const { bus, runtime } = setup(undefined, WITH_SHELL);
+    const dispatch = vi.spyOn(runtime, "dispatch");
+    bus.emit("hode:start", { goal: "open command prompt" });
+    expect(dispatch.mock.calls.map(([event]) => event)).toMatchObject([{ type: "OPEN_APP", app: { name: "Command Prompt" } }]);
+  });
+});

@@ -24,6 +24,8 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $out = Join-Path $logs "launch-$stamp.out.log"; $err = Join-Path $logs "launch-$stamp.err.log"
 # Inherited by npm -> tauri CLI -> cargo -> hodeum.exe -> WebView2. Appended to tauri.conf.json's additionalBrowserArgs.
 if ($CdpPort) { $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$CdpPort" }
+# Debug builds only: the harness's SendInput clicks and keys count as the learner's (release builds ignore it).
+$env:HODEUM_E2E_INPUT = '1'
 $env:RUST_BACKTRACE = '1'
 try {
     if ($Standalone) {

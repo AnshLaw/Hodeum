@@ -2,15 +2,17 @@ import { useRef, type Ref } from "react";
 import type { Size } from "../../lib/types";
 import { COPY } from "../../lib/copy";
 import { HodeyFace } from "../hodey/HodeyFace";
-import { CheckIcon, CrosshairIcon, ExpandIcon, IconButton, MoreIcon, MutedIcon, VolumeIcon } from "../shared/icons";
+import { CrosshairIcon, ExpandIcon, IconButton, MoreIcon, MutedIcon, VolumeIcon } from "../shared/icons";
 import { SurfaceMenu } from "./DockMenu";
 import { SkillsPanel, successExtra } from "./SkillsPanel";
 import { GoalForm } from "./GoalForm";
+import { useWaking } from "./hooks";
 import { Grip, LocalBadge, MenuCaret, MicButton, NotchContent, PrivacyDots, StepList } from "./NotchParts";
 import { openVoiceMenu } from "./VoiceMenu";
 import type { SurfaceProps } from "./surface";
 import { PhonePanel } from "./PhonePanel";
-import { sidebarPanelOpen } from "./sidebar-view";
+import { sidebarPanelOpen, sidebarShape } from "./sidebar-view";
+import { TuckedOrb } from "./TuckedOrb";
 import { usePhoneScreen } from "./use-phone";
 
 const HODEY_TAB_SIZE = 42;
@@ -72,67 +74,93 @@ function SidebarBody(props: SurfaceProps) {
   );
 }
 
+/** The slim tab at the screen edge: Hodey, its name down the edge, and the privacy dots. Drag it to re-dock. */
+function SidebarTab({ mood, activity, onGrip }: Pick<SurfaceProps, "mood" | "activity" | "onGrip">) {
+  return (
+    <Grip onGrip={onGrip}>
+      <span className="sidebar__tab">
+        <HodeyFace mood={mood} size={HODEY_TAB_SIZE} />
+        <span className="sidebar__tab-label">{COPY.idleTitle}</span>
+        <PrivacyDots activity={activity} />
+        <span className="sidebar__tab-dot" aria-label={COPY.local} />
+      </span>
+    </Grip>
+  );
+}
+
+/** The panel's header: Hodey (the drag grip) and what's showing, then the voice, app and menu controls. */
+function SidebarHeader(props: SurfaceProps) {
+  const { view, menuOpen, muted } = props;
+  const title = menuOpen ? COPY.hodeySettings : props.skills?.open === true ? COPY.yourSkills : (view.eyebrow ?? COPY.idleTitle);
+  return (
+    <header className="notch__bar sidebar__bar">
+      {view.busy && <span className="notch__scan" aria-hidden="true" />}
+      <Grip onGrip={props.onGrip}>
+        <HodeyFace mood={props.mood} size={HODEY_BAR_SIZE} />
+        <span className="notch__bar-title">{title}</span>
+      </Grip>
+      <span className="notch__spacer" />
+      <MicButton status={props.micStatus} onToggle={props.onToggleMic} />
+      {props.voiceSetup && <MenuCaret label={COPY.micMenu} open={props.voiceMenu === "mic"} onClick={() => props.onVoiceMenu?.("mic")} />}
+      {view.mode !== "idle" && (
+        <>
+          <IconButton label={muted ? COPY.unmute : COPY.mute} onClick={props.onToggleMute}>
+            {muted ? <MutedIcon /> : <VolumeIcon />}
+          </IconButton>
+          {props.voiceSetup && <MenuCaret label={COPY.speakerMenu} open={props.voiceMenu === "speaker"} onClick={() => props.onVoiceMenu?.("speaker")} />}
+        </>
+      )}
+      <IconButton label={COPY.openApp} onClick={props.onOpenApp}>
+        <ExpandIcon />
+      </IconButton>
+      <IconButton label={COPY.hodeySettings} onClick={props.onToggleMenu} pressed={menuOpen}>
+        <MoreIcon />
+      </IconButton>
+      <PrivacyDots activity={props.activity} />
+      <LocalBadge onOpen={props.cloudSetup ? () => props.onVoiceMenu?.("cloud") : undefined} open={props.voiceMenu === "cloud"} />
+    </header>
+  );
+}
+
+/** The open panel: its header, a toast or the words Hodey hears, then the body. */
+function SidebarPanel(props: SurfaceProps & { phoneScreen?: Size }) {
+  return (
+    <>
+      <SidebarHeader {...props} />
+      {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
+      {props.micStatus === "listening" && (
+        <p className="notch__heard" aria-live="polite">
+          {props.heard ? `“${props.heard}”` : COPY.listening}
+        </p>
+      )}
+      <div className="sidebar__body" aria-live="polite">
+        <SidebarContent {...props} />
+      </div>
+    </>
+  );
+}
+
+/** What fills the side dock: the tucked orb (auto-hide), the slim tab, or the open panel. */
+function SidebarSurface(props: SurfaceProps & { collapsed: boolean; phoneScreen?: Size }) {
+  if (!props.revealed) return <TuckedOrb mood={props.mood} activity={props.activity} paused={props.view.mode === "paused"} onReveal={props.onReveal} />;
+  if (props.collapsed) return <SidebarTab mood={props.mood} activity={props.activity} onGrip={props.onGrip} />;
+  return <SidebarPanel {...props} />;
+}
+
 /** Side dock: a slim tab when idle, a full-height panel while a Hode runs (or always, as a pinned copilot). */
 export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceRef: Ref<HTMLElement> }) {
-  const { side, view, hovered, menuOpen, revealed, muted, surfaceRef } = props;
+  const { side, view, hovered, menuOpen, revealed, surfaceRef } = props;
   const stageRef = useRef<HTMLDivElement>(null);
   const phoneScreen = usePhoneScreen(props.phone, stageRef, "stacked");
+  const waking = useWaking(revealed);
   const { sidebar: style, visibility } = props.dock.prefs;
   const panelOpen = sidebarPanelOpen({ mode: view.mode, listening: props.micStatus === "listening", style, visibility, phoneOpen: props.phoneOpen === true });
-  const skillsOpen = props.skills?.open === true;
-  const collapsed = !panelOpen && !hovered && !menuOpen && !skillsOpen;
-  const classes = ["sidebar", `sidebar--${side}`, `sidebar--${style}`, collapsed ? "sidebar--collapsed" : "", panelOpen ? "sidebar--active" : "", revealed ? "" : "sidebar--tucked"];
+  const collapsed = !panelOpen && !hovered && !menuOpen && props.skills?.open !== true;
+  const classes = ["sidebar", `sidebar--${side}`, `sidebar--${style}`, ...sidebarShape({ revealed, collapsed, panelOpen }), waking ? "sidebar--waking" : ""];
   return (
     <div ref={stageRef} className={`sidebar-stage sidebar-stage--${side}`}>
       <aside ref={surfaceRef} className={classes.filter(Boolean).join(" ")} aria-label={COPY.idleTitle}>
-        {collapsed ? (
-          <Grip onGrip={props.onGrip}>
-            <span className="sidebar__tab">
-              <HodeyFace mood={props.mood} size={HODEY_TAB_SIZE} />
-              <span className="sidebar__tab-label">{COPY.idleTitle}</span>
-              <PrivacyDots activity={props.activity} />
-              <span className="sidebar__tab-dot" aria-label={COPY.local} />
-            </span>
-          </Grip>
-        ) : (
-          <>
-            <header className="notch__bar sidebar__bar">
-              {view.busy && <span className="notch__scan" aria-hidden="true" />}
-              <Grip onGrip={props.onGrip}>
-                <HodeyFace mood={props.mood} size={HODEY_BAR_SIZE} />
-                <span className="notch__bar-title">{menuOpen ? COPY.hodeySettings : skillsOpen ? COPY.yourSkills : (view.eyebrow ?? COPY.idleTitle)}</span>
-              </Grip>
-              <span className="notch__spacer" />
-              <MicButton status={props.micStatus} onToggle={props.onToggleMic} />
-              {props.voiceSetup && <MenuCaret label={COPY.micMenu} open={props.voiceMenu === "mic"} onClick={() => props.onVoiceMenu?.("mic")} />}
-              {view.mode !== "idle" && (
-                <>
-                  <IconButton label={muted ? COPY.unmute : COPY.mute} onClick={props.onToggleMute}>
-                    {muted ? <MutedIcon /> : <VolumeIcon />}
-                  </IconButton>
-                  {props.voiceSetup && <MenuCaret label={COPY.speakerMenu} open={props.voiceMenu === "speaker"} onClick={() => props.onVoiceMenu?.("speaker")} />}
-                </>
-              )}
-              <IconButton label={COPY.openApp} onClick={props.onOpenApp}>
-                <ExpandIcon />
-              </IconButton>
-              <IconButton label={COPY.hodeySettings} onClick={props.onToggleMenu} pressed={menuOpen}>
-                <MoreIcon />
-              </IconButton>
-              <PrivacyDots activity={props.activity} />
-              <LocalBadge onOpen={props.cloudSetup ? () => props.onVoiceMenu?.("cloud") : undefined} open={props.voiceMenu === "cloud"} />
-            </header>
-            {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
-            {props.micStatus === "listening" && (
-              <p className="notch__heard" aria-live="polite">
-                {props.heard ? `“${props.heard}”` : COPY.listening}
-              </p>
-            )}
-            <div className="sidebar__body" aria-live="polite">
-              <SidebarContent {...props} phoneScreen={phoneScreen} />
-            </div>
-          </>
-        )}
+        <SidebarSurface {...props} collapsed={collapsed} phoneScreen={phoneScreen} />
       </aside>
     </div>
   );

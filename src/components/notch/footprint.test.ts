@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { GUIDANCE_CARD_HEIGHT, TARGET_RING_REACH_PX, coversTarget, guidanceFootprint, notchScreenRect } from "./footprint";
+import { GUIDANCE_CARD_HEIGHT, TARGET_RING_REACH_PX, coversTarget, guidanceFootprint, notchScreenRect, withinWindow } from "./footprint";
 import { NOTCH_WIDTHS } from "./notch-view";
+
+describe("withinWindow", () => {
+  it("keeps only the part of the tucked orb that shows, where it sinks into the top edge", () => {
+    expect(withinWindow({ x: 280, y: -4, width: 40, height: 40 }, { width: 600, height: 620 })).toEqual({ x: 280, y: 0, width: 40, height: 36 });
+  });
+
+  it("does the same at a side dock's screen edge, left or right", () => {
+    const strip = { width: 360, height: 1032 };
+    expect(withinWindow({ x: -4, y: 496, width: 40, height: 40 }, strip)).toEqual({ x: 0, y: 496, width: 36, height: 40 });
+    expect(withinWindow({ x: 324, y: 496, width: 40, height: 40 }, strip)).toEqual({ x: 324, y: 496, width: 36, height: 40 });
+  });
+
+  it("leaves a surface inside the window as it is, and gives nothing for one outside it", () => {
+    expect(withinWindow({ x: 52, y: 0, width: 496, height: 120 }, { width: 600, height: 620 })).toEqual({ x: 52, y: 0, width: 496, height: 120 });
+    expect(withinWindow({ x: 0, y: -200, width: 100, height: 50 }, { width: 600, height: 620 })).toEqual({ x: 0, y: 0, width: 100, height: 0 });
+  });
+});
 
 describe("guidanceFootprint", () => {
   const origin = { x: 1000, y: 0, scale: 1.25 };

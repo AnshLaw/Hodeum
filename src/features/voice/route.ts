@@ -1,8 +1,8 @@
 import type { InstalledApp, TaskPack } from "../../lib/types";
 import { goalEvent, goalEvents } from "../hode/bridge";
 import type { HodeEvent, HodeState } from "../hode/model";
-import { idleOpenAppEvent, openAppEvent } from "../hode/open-app";
-import { classify, isAcknowledgement } from "./intent";
+import { appChoiceEvent, idleOpenAppEvent, openAppEvent } from "../hode/open-app";
+import { classify, isAcknowledgement, isSubstantive, opensWithQuestion, type Intent } from "./intent";
 
 export { isAcknowledgement } from "./intent";
 
@@ -175,33 +175,50 @@ const tooShort = (text: string) => wordsIn(text).length < MIN_WORDS;
 
 const isCommand = (text: string) => asCommand(text) !== undefined;
 
-/** During a Hode: a control, an app to open, or else a question. Noise and greetings are dropped. */
+/** During a Hode: a control, an app to open, or else a question ("is this on?" too). Noise and greetings are dropped. */
 function routeInHode(s: HodeState, text: string, apps: InstalledApp[]): HodeEvent[] {
   const acknowledged = isAcknowledgement(text);
   if (acknowledged && s.phase === "answering") return [{ type: "DISMISS" }];
   const command = asCommand(text);
   if (command) return [command];
   if (acknowledged || tooShort(text)) return [];
-  const intent = classify(text, { isCommand });
+  const intent = classify(text, { isCommand, inHode: true });
   if (intent === "noise" || intent === "greeting") return [];
   // "Open the insert tab" names no installed app, so it stays a question about the screen.
   const open = intent === "open_app" ? openAppEvent(text, apps) : undefined;
   return [open ?? question(text)];
 }
 
-/** Idle: only a real task (or a pack's own words) starts a Hode; a greeting gets a reply, noise nothing. */
-function routeIdle(text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[]): HodeEvent[] {
-  const open = idleOpenAppEvent(text, apps, openAllowed);
+/** "How do I…", "teach me…", "help me…": a request to be taught, planned into a Hode rather than answered once. */
+const TEACH_ME =
+  /^(?:how (?:do|can|would|should|could) (?:i|we|you)|how to|where do i|teach me|show me how|help me|i want to|i need to|i'd like to|(?:can|could|will|would) you (?:teach|show|help))|(?:kaise|sikhao|sikha do)|कैसे|सिखाओ|सिखा दो/i;
+
+/**
+ * Idle, once it's neither small talk nor noise: a pack's lesson, a task or a request to be taught (planned into a
+ * Hode, which says so while vision loads), or a question about the screen. A pack's words start its lesson even
+ * around a Hindi question word ("क्या आप मुझे डार्क मोड चालू करना सिखा सकते हैं"); one that opens with a question
+ * word ("what is a pivot table?") is answered instead. Anything else with a few real words in it ("explain this
+ * screen") is asked about the screen.
+ */
+function askOrStart(text: string, intent: Intent, packs: TaskPack[], openAllowed: boolean, visionStarting: boolean): HodeEvent[] {
+  const goal = goalEvent(text, packs, openAllowed, undefined, undefined, visionStarting);
+  if (goal.type === "GOAL_SUBMITTED" && goal.pack && !opensWithQuestion(text)) return [{ type: "START_HODE" }, goal];
+  if (intent === "task" || TEACH_ME.test(text)) return [{ type: "START_HODE" }, goal];
+  return intent === "question" || isSubstantive(text) ? [question(text)] : [];
+}
+
+/**
+ * Idle: a task, a pack's own words or a how-to request starts a Hode; a greeting or mic check gets a reply, noise and
+ * fragments nothing. A reply to "Did you mean Outlook or Outlook (classic)?" that picks one opens it.
+ */
+function routeIdle(s: HodeState, text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[], visionStarting: boolean): HodeEvent[] {
+  const open = appChoiceEvent(s, text, apps) ?? idleOpenAppEvent(text, apps, openAllowed);
   if (open) return [open];
   // App requests are settled above: one that names no app is judged by its words ("open a new tab").
   const intent = classify(text, { isCommand, isApp: () => false });
   if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];
   if (intent === "noise" || intent === "ack" || intent === "control" || tooShort(text)) return [];
-  if (intent === "question") return [question(text)];
-  const goal = goalEvent(text, packs, openAllowed);
-  if (goal.type === "GOAL_SUBMITTED" && goal.pack) return [{ type: "START_HODE" }, goal];
-  if (intent !== "task") return [];
-  return openAllowed ? [{ type: "START_HODE" }, goal] : [question(text)];
+  return askOrStart(text, intent, packs, openAllowed, visionStarting);
 }
 
 /**
@@ -209,7 +226,7 @@ function routeIdle(text: string, packs: TaskPack[], openAllowed: boolean, apps: 
  * screen, a greeting gets a reply, "open Excel" opens it. Goal entry: it's the goal. During a Hode: a control
  * word, an app to open, or else a question. `apps`: the installed apps, for "open X" (none: no app requests).
  */
-export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], openAllowed: boolean, wakeWords: string[] = [], apps: InstalledApp[] = []): HodeEvent[] {
+export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], openAllowed: boolean, wakeWords: string[] = [], apps: InstalledApp[] = [], visionStarting = false): HodeEvent[] {
   const text = clean(raw, wakeWords);
   if (text.length < MIN_CHARS) return [];
   if (s.phase === "annotating") return [];
@@ -219,5 +236,5 @@ export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], ope
   if (answering && !isAcknowledgement(text)) return [asCommand(text) ?? { type: "REVIEW_ANSWERED", said: text }];
   const lookUp = lookUpRequest(s, text);
   if (lookUp) return [lookUp];
-  return s.phase === "idle" ? routeIdle(text, packs, openAllowed, apps) : routeInHode(s, text, apps);
+  return s.phase === "idle" ? routeIdle(s, text, packs, openAllowed, apps, visionStarting) : routeInHode(s, text, apps);
 }

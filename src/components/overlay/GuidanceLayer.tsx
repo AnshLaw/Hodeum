@@ -5,7 +5,7 @@ import { GUIDANCE_CARD_HEIGHT } from "../notch/footprint";
 import { NOTCH_WIDTHS } from "../notch/notch-view";
 import { BeamRing } from "./BeamRing";
 import { roundedRectPath } from "./geometry";
-import { type ArrowGeometry, arrowBounds, arrowGeometry, labelPosition } from "./placement";
+import { type ArrowGeometry, BADGE_RADIUS_PX, arrowBounds, arrowGeometry, badgeBounds, badgeCenter, labelPosition } from "./placement";
 
 const HIGHLIGHT_OUTSET_PX = 4;
 const HIGHLIGHT_RADIUS_PX = 8;
@@ -13,6 +13,10 @@ const SPOTLIGHT_PADDING_PX = 10;
 const PIN_RADIUS_PX = 6;
 const LABEL_HEIGHT_PX = 26;
 const ARROW_PATH_LENGTH = 100;
+/** The first control in a numbered flow. */
+const FIRST_ORDER = 1;
+
+type HighlightPrimitive = Extract<OverlayPrimitive, { kind: "highlight" }>;
 
 function keyOf(primitive: OverlayPrimitive): string {
   const r = primitive.kind === "arrow" ? primitive.to : primitive.bounds;
@@ -23,10 +27,31 @@ function rectProps(r: Rect, rx: number) {
   return { x: r.x, y: r.y, width: r.width, height: r.height, rx };
 }
 
-/** Consecutive highlights share a channel, so each new target's ring glides over from the last one. */
-function Highlight({ bounds, emphasis }: { bounds: Rect; emphasis: "precise" | "broad" }) {
-  return <BeamRing ring={padRect(bounds, HIGHLIGHT_OUTSET_PX)} radius={HIGHLIGHT_RADIUS_PX} emphasis={emphasis} channel="guidance" />;
+const ringOf = (bounds: Rect) => padRect(bounds, HIGHLIGHT_OUTSET_PX);
+
+/**
+ * Consecutive highlights share a channel, so each new target's ring glides over from the last one. Only
+ * the first of several numbered rings does: the later ones draw themselves in where they are.
+ */
+function Highlight({ bounds, emphasis, order }: { bounds: Rect; emphasis: "precise" | "broad"; order?: number }) {
+  const channel = order === undefined || order === FIRST_ORDER ? "guidance" : undefined;
+  return <BeamRing ring={ringOf(bounds)} radius={HIGHLIGHT_RADIUS_PX} emphasis={emphasis} channel={channel} />;
 }
+
+/** The control's place in the flow, on its ring's top-left corner; the notch says it aloud, so it's hidden from readers with the rest. */
+function OrderBadge({ highlight, size }: { highlight: HighlightPrimitive & { order: number }; size: Size }) {
+  const { x, y } = badgeCenter(ringOf(highlight.bounds), size);
+  return (
+    <g className="order-badge">
+      <circle cx={x} cy={y} r={BADGE_RADIUS_PX} />
+      <text x={x} y={y} textAnchor="middle" dominantBaseline="central">
+        {highlight.order}
+      </text>
+    </g>
+  );
+}
+
+const isNumbered = (p: OverlayPrimitive): p is HighlightPrimitive & { order: number } => p.kind === "highlight" && p.order !== undefined;
 
 function Arrow({ geometry }: { geometry: ArrowGeometry }) {
   const { start, control, end, shaftEnd, angle } = geometry;
@@ -48,7 +73,7 @@ function Shape({ primitive, size, arrow }: { primitive: OverlayPrimitive; size: 
       return <path className="spotlight" d={`M0 0H${size.width}V${size.height}H0Z${hole}`} />;
     }
     case "highlight":
-      return <Highlight bounds={primitive.bounds} emphasis={primitive.emphasis} />;
+      return <Highlight bounds={primitive.bounds} emphasis={primitive.emphasis} order={primitive.order} />;
     case "arrow":
       // No arrow when the target is off this monitor or has no room around it: the highlight carries it.
       return arrow ? <Arrow geometry={arrow} /> : null;
@@ -106,10 +131,12 @@ interface LabelScene {
   keepOut: Rect[];
 }
 
-function labelPlacer(label: OverlayPrimitive & { kind: "highlight" }, { primitives, arrows, size, keepOut }: LabelScene) {
+function labelPlacer(label: HighlightPrimitive, { primitives, arrows, size, keepOut }: LabelScene) {
   const pointing = primitives.find((p) => p.kind === "arrow" && sameRect(p.to, label.bounds));
   const marks = primitives.filter((p) => p !== label).flatMap((p) => footprint(p, arrows.get(p)) ?? []);
-  const avoid = [...marks, ...(label.keepClear ?? [])];
+  // Every numbered disc, the label's own included: a chip over a number hides it.
+  const badges = primitives.filter(isNumbered).map((p) => badgeBounds(ringOf(p.bounds), size));
+  const avoid = [...marks, ...badges, ...(label.keepClear ?? [])];
   return (chip: Size) => labelPosition({ target: label.bounds, chip, viewport: size, avoid, keepOut, arrow: pointing && arrows.get(pointing) });
 }
 
@@ -126,6 +153,9 @@ export function GuidanceLayer({ primitives, size, keepOut }: { primitives: Overl
       <svg className="guidance" width={size.width} height={size.height} aria-hidden="true">
         {primitives.map((p) => (
           <Shape key={keyOf(p)} primitive={p} size={size} arrow={arrows.get(p)} />
+        ))}
+        {primitives.filter(isNumbered).map((p) => (
+          <OrderBadge key={`badge-${keyOf(p)}`} highlight={p} size={size} />
         ))}
       </svg>
       {primitives.map((p) =>

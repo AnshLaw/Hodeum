@@ -57,6 +57,7 @@ does it with checkpoints. Only Teach orients, asks first, explains on success, r
 
 - A lesson step that UI Automation can ground is answered by the local planner at once, before any cloud or vision call.
 - A step's first screen read reuses the read that finished the previous step when that read already shows the step's control.
+- A screen read walks the app for at most 400 ms. In a lesson, each read also names the step's controls (its target and the controls its success signal names); when the walk runs out of time before reaching them, as it can in a dialog that has only just opened, they are searched out by name, with no new search started after another 400 ms. So "I did it" right after Save as opens still sees "File name:".
 - Clicks made while a step is being prepared still count.
 - Reasoning for a request the Hode has moved past is aborted.
 - A second look at an unchanged screen asks the learner instead of re-sending the identical prompt to the model.

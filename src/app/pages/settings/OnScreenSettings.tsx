@@ -49,7 +49,7 @@ export function OnScreenSettings({ bus }: { bus: Bus }) {
           <Row label="Sidebar style" detail={sidebarDetail(prefs)}>
             <Segmented label="Sidebar style" options={STYLES} value={prefs.sidebar} disabled={prefs.dock === "top"} onSelect={(sidebar) => change({ sidebar })} />
           </Row>
-          <Row label="When idle" detail="Auto-hide tucks Hodey into a sliver until you hover it or a Hode starts.">
+          <Row label="When idle" detail="Auto-hide folds Hodey into a small orb at the screen edge until you hover it, talk with it, or a Hode starts.">
             <Segmented label="When idle" options={IDLE} value={prefs.visibility === "hidden" ? "pinned" : prefs.visibility} onSelect={(visibility) => change({ visibility })} />
           </Row>
         </>
