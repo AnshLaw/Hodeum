@@ -29,6 +29,7 @@ const AUTOSTART_NAME: &str = "Hodeum";
 
 fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     surfaces::setup(app)?;
+    dock::keep_top_anchored(app)?;
     app_window::keep_alive(app)?;
     tray::install(app)?;
     hit_test::spawn(app.clone());
