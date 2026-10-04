@@ -42,7 +42,7 @@ describe("notchView", () => {
 
 describe("islandSize", () => {
   const looking = notchView({ ...initialState, phase: "reasoning" });
-  const quiet = { settled: true, hovered: false, menuOpen: false, peek: false };
+  const quiet = { settled: true, hovered: false, menuOpen: false, peek: false, listening: false };
 
   it("shrinks to an orb while Hodey looks, keeping the status as its label", () => {
     expect(looking).toMatchObject({ size: "orb", busy: true, title: COPY.looking });
@@ -53,6 +53,12 @@ describe("islandSize", () => {
     expect(islandSize(looking, { ...quiet, settled: false })).toBe("compact");
     expect(islandSize(looking, { ...quiet, hovered: true })).toBe("compact");
     expect(islandSize(looking, { ...quiet, menuOpen: true })).toBe("lesson");
+  });
+
+  it("opens into a bar while listening, so the learner sees what Hodey hears", () => {
+    expect(islandSize(notchView(initialState), { ...quiet, listening: true })).toBe("compact");
+    expect(islandSize(looking, { ...quiet, listening: true })).toBe("compact");
+    expect(islandSize(notchView(guiding()), { ...quiet, listening: true })).toBe("guidance");
   });
 
   it("steps aside to a bar while guidance covers the target", () => {

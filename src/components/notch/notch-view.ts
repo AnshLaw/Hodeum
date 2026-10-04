@@ -119,11 +119,14 @@ export interface IslandContext {
   menuOpen: boolean;
   /** The highlighted control sits under the card. */
   peek: boolean;
+  /** The microphone is on: the pill and orb open into a bar showing what Hodey hears. */
+  listening: boolean;
 }
 
 /** The shape the top notch takes right now: the view's size, adjusted for hover, menu and peek. */
 export function islandSize(view: NotchView, context: IslandContext): NotchSize {
   if (context.menuOpen) return "lesson";
+  if (context.listening && (view.size === "idle" || view.size === "orb")) return "compact";
   if (view.size === "orb") return context.settled && !context.hovered ? "orb" : "compact";
   if (context.peek) return "compact";
   return view.size;

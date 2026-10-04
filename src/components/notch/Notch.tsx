@@ -38,6 +38,38 @@ export interface NotchProps {
 }
 
 const TOAST_MS = 4000;
+/** How long a finished sentence stays on screen after the learner stops talking. */
+const HEARD_LINGER_MS = 1500;
+
+/** What Hodey is hearing right now: live words while the learner talks, then the final sentence briefly. */
+function useHeard(speech: SpeechInput, listening: boolean): string | undefined {
+  const [heard, setHeard] = useState<string>();
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const off = speech.onTranscript((text, final) => {
+      clearTimeout(timer);
+      setHeard(text);
+      if (final) timer = setTimeout(() => setHeard(undefined), HEARD_LINGER_MS);
+    });
+    return () => {
+      clearTimeout(timer);
+      off();
+    };
+  }, [speech]);
+  useEffect(() => {
+    if (!listening) setHeard(undefined);
+  }, [listening]);
+  return heard;
+}
+
+/** While listening, a line under the bar shows the words as Hodey hears them. */
+function HeardLine({ heard }: { heard?: string }) {
+  return (
+    <p className="notch__heard" aria-live="polite">
+      {heard ? `“${heard}”` : COPY.listening}
+    </p>
+  );
+}
 
 function useActivity(tracker: ActivityTracker): ActivityState {
   const [state, setState] = useState(tracker.current());
@@ -101,7 +133,8 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
   const settled = useSettled(props.view.size === "orb", ORB_DELAY_MS);
   // Step aside to a slim bar while the highlighted control sits under the card; hovering brings it back.
   const peek = props.covering && !hovered && !menuOpen && props.view.mode === "guidance";
-  const size = islandSize(props.view, { settled, hovered, menuOpen, peek });
+  const listening = props.micStatus === "listening";
+  const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening });
   const view = peek ? { ...props.view, controls: [] } : props.view;
   const style = { "--notch-width": `${NOTCH_WIDTHS[size]}px`, "--notch-hover-width": `${NOTCH_IDLE_HOVER_WIDTH}px` } as CSSProperties;
   const classes = ["notch", `notch--${size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
@@ -114,6 +147,7 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
           <>
             <NotchBar view={view} mood={props.mood} expanded={EXPANDED_SIZES.includes(size)} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={props.onControl} onGrip={props.onGrip} activity={props.activity} micStatus={props.micStatus} onToggleMic={props.onToggleMic} onOpenApp={props.onOpenApp} />
             {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
+            {listening && <HeardLine heard={props.heard} />}
             <div aria-live="polite">{topBody(props, view, size, peek)}</div>
           </>
         )}
@@ -127,6 +161,8 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
 function useNotchActions(speech: SpeechInput, shell: NativeShell, surfaceRef: RefObject<HTMLElement | null>) {
   const micStatus = useSpeechStatus(speech);
   const [toast, showToast] = useToast();
+  const heard = useHeard(speech, micStatus === "listening");
+  useEffect(() => speech.onError?.(showToast), [speech, showToast]);
   const toggleMic = () => {
     if (micStatus === "unavailable") return showToast(speech.unavailableReason() ?? COPY.voiceNotInstalled);
     const change = micStatus === "listening" ? speech.stop() : speech.start();
@@ -140,7 +176,7 @@ function useNotchActions(speech: SpeechInput, shell: NativeShell, surfaceRef: Re
     const from = box ? { x: box.x, y: box.y, width: box.width, height: box.height } : { x: 0, y: 0, width: 0, height: 0 };
     shell.openApp(from).catch(reportError("Couldn't open the Hodeum app"));
   };
-  return { micStatus, toast, toggleMic, openApp };
+  return { micStatus, toast, heard, toggleMic, openApp };
 }
 
 /** Hodey's surface: a top-centre notch or a side sidebar, draggable between them, with auto-hide. */
@@ -160,7 +196,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
   useAutoDismiss(view.mode === "success", runtime);
   const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top");
   const activity = useActivity(tracker);
-  const { micStatus, toast, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
+  const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
 
   const props: SurfaceProps = {
     view,
@@ -187,6 +223,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
     activity,
     micStatus,
     toast,
+    heard,
     onToggleMic: toggleMic,
     onOpenApp: () => {
       // The notch grows into the app, then gets out of its way: goal entry continues on the app's home page.

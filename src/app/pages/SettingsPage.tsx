@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { HELP_PRESETS, SETTINGS_LIMITS, type HelpPreset, type Settings } from "../../data/settings";
 import type { VisionStatus } from "../../providers/vision/types";
-import type { AppServices } from "../services";
+import type { AppServices, VoicePreview } from "../services";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { Row } from "./settings/controls";
 import { OnScreenSettings } from "./settings/OnScreenSettings";
@@ -27,11 +27,11 @@ function useVision(services: AppServices): VisionStatus | undefined {
   return status;
 }
 
-function HodeySettings({ settings, update }: { settings: Settings; update: (next: Settings) => void }) {
+function HodeySettings({ settings, natural, update }: { settings: Settings; natural?: VoicePreview; update: (next: Settings) => void }) {
   return (
     <section className="hcard">
       <h2>Hodey</h2>
-      <VoiceSettings voice={settings.voice} onChange={(voice) => update({ ...settings, voice })} />
+      <VoiceSettings voice={settings.voice} natural={natural} onChange={(voice) => update({ ...settings, voice })} />
       <Row label="Wait before offering help" detail={`${settings.stuckSeconds} seconds without progress`}>
         <input type="range" min={SETTINGS_LIMITS.MIN_STUCK_SECONDS} max={SETTINGS_LIMITS.MAX_STUCK_SECONDS} step={1} value={settings.stuckSeconds} onChange={(e) => update({ ...settings, stuckSeconds: Number(e.target.value) })} aria-label="Wait before offering help" />
       </Row>
@@ -75,6 +75,7 @@ function AboutSettings({ vision, webSearch }: { vision?: VisionStatus; webSearch
           <li><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>H</kbd> Point &amp; Ask</li>
           <li><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>N</kbd> Show or hide Hodey</li>
           <li><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>J</kbd> Open this app</li>
+          <li><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Space</kbd> Talk to Hodey</li>
         </ul>
       </section>
       <section className="hcard">
@@ -101,7 +102,7 @@ export function SettingsPage({ services }: { services: AppServices }) {
       {saveError && <p className="hchat__error" role="alert">Couldn't save: {saveError}</p>}
       {settings && (
         <>
-          <HodeySettings settings={settings} update={update} />
+          <HodeySettings settings={settings} natural={services.voice} update={update} />
           <AppearanceSettings appearance={settings.appearance} onChange={(appearance) => update({ ...settings, appearance })} />
         </>
       )}

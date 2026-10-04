@@ -3,7 +3,7 @@ import { COPY } from "../../lib/copy";
 export type SpeechInputStatus = "unavailable" | "idle" | "listening";
 
 /**
- * Local speech-to-text (Nemotron via NeMo-Speech.cpp, faster-whisper as fallback — sub-project 4).
+ * Local speech-to-text. While listening, voice activity detection runs on this PC.
  * While listening, the orange privacy dot is on.
  */
 export interface SpeechInput {
@@ -14,6 +14,10 @@ export interface SpeechInput {
   stop(): Promise<void>;
   onStatus(handler: (status: SpeechInputStatus) => void): () => void;
   onTranscript(handler: (text: string, final: boolean) => void): () => void;
+  /** The learner started talking (voice activity detected): Hodey stops speaking right away. */
+  onSpeechStart(handler: () => void): () => void;
+  /** Problems worth telling the learner about, e.g. a muted microphone. */
+  onError?(handler: (message: string) => void): () => void;
 }
 
 /**
@@ -40,6 +44,10 @@ export class UnavailableSpeechInput implements SpeechInput {
   }
 
   onTranscript(): () => void {
+    return () => undefined;
+  }
+
+  onSpeechStart(): () => void {
     return () => undefined;
   }
 }

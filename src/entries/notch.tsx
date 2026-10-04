@@ -2,11 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { ActivityTracker, mirrorRemoteActivity, withScreenActivity } from "../lib/activity";
 import { connectAppearance } from "../lib/appearance";
 import { COPY } from "../lib/copy";
-import { UnavailableSpeechInput } from "../providers/speech/speech-input";
+import { createLocalVoice, showMicDot } from "../providers/speech/local-voice";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import { TauriShell } from "../lib/tauri-shell";
 import { Notch } from "../components/notch/Notch";
 import { connectHodeBridge } from "../features/hode/bridge";
+import { connectVoice } from "../features/voice/connect";
 import type { HodePhase } from "../features/hode/model";
 import { HodeRuntime } from "../features/hode/runtime";
 import { MemoryLearningStore } from "../data/memory-stores";
@@ -19,7 +20,6 @@ import { TaskPackReasoningProvider } from "../providers/task-pack-reasoner";
 import { QwenVisionProvider } from "../providers/vision/qwen-vision-provider";
 import { TauriVisionStatus } from "../providers/vision/tauri-vision-status";
 import { connectionOf, type CapturedFrame } from "../providers/vision/types";
-import { WebSpeechTTSProvider } from "../providers/web-speech-tts";
 import { TASK_PACKS } from "../task-packs";
 import { mount } from "./mount";
 
@@ -56,8 +56,9 @@ async function boot(): Promise<void> {
     capture: () => activity.track("screen", () => invoke<CapturedFrame>("capture_active_window")),
   });
   const local = new LocalReasoningProvider(new TaskPackReasoningProvider(), qwen, () => vision.current().state === "ready");
-  const tts = new WebSpeechTTSProvider();
-  const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts });
+  const voice = createLocalVoice({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
+  showMicDot(voice.speech, activity);
+  const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts: voice.tts });
   runtime.subscribe(() => native.setWatching(WATCHING_PHASES.includes(runtime.getState().phase)));
   connectHodeBridge({
     runtime,
@@ -66,12 +67,18 @@ async function boot(): Promise<void> {
     settings,
     packs: TASK_PACKS,
     openGoalsAllowed: () => vision.current().state === "ready",
-    applyVoice: (voice) => {
-      tts.rate = voice.rate;
-      tts.voiceName = voice.name;
-    },
+    applyVoice: (settings) => voice.apply(settings),
   });
-  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={new UnavailableSpeechInput()} />);
+  connectVoice({
+    speech: voice.speech,
+    getState: () => runtime.getState(),
+    dispatch: runtime.dispatch,
+    interrupt: () => runtime.interruptSpeech(),
+    hodeySaying: () => runtime.hodeySaying(),
+    packs: TASK_PACKS,
+    openAllowed: () => vision.current().state === "ready",
+  });
+  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={voice.speech} />);
 }
 
 boot().catch((error) => console.error("Hodey failed to start", error));

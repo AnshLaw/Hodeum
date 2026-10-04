@@ -30,6 +30,8 @@ export interface SurfaceProps {
   micStatus: SpeechInputStatus;
   /** A short message (e.g. why the mic can't start) shown for a few seconds. */
   toast?: string;
+  /** Live words while the learner talks. */
+  heard?: string;
   onToggleMic: () => void;
   onOpenApp: () => void;
 }

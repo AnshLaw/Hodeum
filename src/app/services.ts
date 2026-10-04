@@ -1,7 +1,7 @@
 import type { Bus } from "../lib/bus";
 import type { TaskPack } from "../lib/types";
 import type { ChatMessage, ChatStore, LearningStore } from "../data/types";
-import type { SettingsStore } from "../data/settings";
+import type { Settings, SettingsStore } from "../data/settings";
 import type { CapturedFrame, VisionStatusSource } from "../providers/vision/types";
 import type { WebSearch, WebSearchSource } from "../providers/web/types";
 
@@ -26,6 +26,14 @@ export interface ChatProvider {
   searchQuery?(history: ChatMessage[], signal: AbortSignal): Promise<string | undefined>;
 }
 
+/** Hodey's natural (Supertonic) voices on this PC, for choosing and previewing in Settings. */
+export interface VoicePreview {
+  /** How many natural voices there are; 0 when not installed or still loading. */
+  naturalVoices(): number;
+  subscribe(listener: () => void): () => void;
+  preview(voice: Settings["voice"], text: string): Promise<void>;
+}
+
 export interface AppWindowControls {
   minimize(): void;
   toggleMaximize(): void;
@@ -42,6 +50,8 @@ export interface AppServices {
   chat?: ChatProvider;
   windows?: WindowSource;
   vision?: VisionStatusSource;
+  /** Absent in the browser stage, which previews with Windows voices only. */
+  voice?: VoicePreview;
   /** Opt-in (Settings > webSearch); only scrubbed queries leave the PC. */
   web?: WebSearchSource;
   window: AppWindowControls;

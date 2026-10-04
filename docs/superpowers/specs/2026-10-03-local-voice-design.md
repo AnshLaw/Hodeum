@@ -33,8 +33,8 @@ One native dependency, `sherpa-onnx` (official Rust crate, `shared` feature so i
 - `connectVoice` (done) routes final transcripts through `routeUtterance` (done) and calls `runtime.interruptSpeech()` on speech start.
 - Notch:
   - while listening, the bar reads "Hodey is listening…" with the live partial transcript;
-  - the mic button toggles listening;
-  - the mic stays on until you turn it off, so you can talk through a Hode.
+  - **Tap-to-talk** (changed after testing in a real room): the mic button or Ctrl+Alt+Space listens for one utterance and stops by itself, or gives up after 8 s of no speech. Always-on listening acted on room audio.
+  - Tapping interrupts Hodey at once. While Hodey is speaking, its own voice coming back through the speakers is recognised and ignored (word overlap with what it is saying).
 - Settings: Supertonic voices are listed first ("Hodey voices, on this PC"), then Windows voices.
 
 ## Testing

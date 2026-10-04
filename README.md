@@ -51,7 +51,17 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
   - **Hodey on screen**: position, sidebar style and idle behaviour.
   - Everything applies to the notch and overlay right away.
 
-**Local by default**: no cloud keys needed. Windows voices handle speech for now. SQLite (`hodeum.db` in the app config folder) stores skills, Hode history, chats and settings, never screenshots or audio. The local model server runs inside a Windows job object, so it stops with Hodeum even after a crash.
+**Voice, on this PC** (CPU, so the GPU stays free for vision):
+- **Talking to Hodey:** tap the mic (or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd>) and talk. NVIDIA Nemotron speech recognition, with Silero voice detection, turns it into text, and the notch shows the words as Hodey hears them.
+- **What you can say:**
+  - when idle, a goal ("teach me how to make a pivot table") starts a Hode, and a what/where question asks about the screen;
+  - during a Hode, "hint", "explain", "repeat", "I did it", "pause", "continue" and "stop" are controls, and anything else is a question.
+- **Tap-to-talk:** listening stops after one sentence, so room noise can't steer Hodey. Tapping also interrupts Hodey mid-sentence. If Hodey hears its own voice coming back through the speakers, it ignores it.
+- **Hodey's voice:** Supertonic, with 10 natural voices in Settings, plus Windows voices as a fallback.
+- **Privacy:** the orange dot shows while the mic is on. Audio and transcripts are never saved.
+- **Setup:** `scripts/setup-local-ai.ps1` downloads the voice models (about 600 MB) into `models/voice`.
+
+**Local by default**: no cloud keys needed. SQLite (`hodeum.db` in the app config folder) stores skills, Hode history, chats and settings, never screenshots or audio. The local model server runs inside a Windows job object, so it stops with Hodeum even after a crash.
 
 Next: the OmniParser detector and open-ended goals (rest of sub-project 3), Nemotron and MagpieTTS voice (4), and the opt-in Gemini, ElevenLabs and Backboard providers (5).
 

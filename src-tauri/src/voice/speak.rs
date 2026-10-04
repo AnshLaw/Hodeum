@@ -100,6 +100,8 @@ fn cancelled(stop: &StopSwitch, job: &SpeakJob) -> bool {
 
 /// Speaks one job; returns whether it was interrupted.
 fn speak(tts: &OfflineTts, player: &Player, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<bool, String> {
+    // Anything left from an interrupted utterance must never play before this one.
+    player.clear();
     player.play();
     for sentence in sentences(&job.text) {
         if cancelled(stop, job) {
@@ -108,6 +110,10 @@ fn speak(tts: &OfflineTts, player: &Player, job: &SpeakJob, stop: &Arc<StopSwitc
         let Some((samples, rate)) = synthesize(tts, &sentence, job, stop) else {
             return if cancelled(stop, job) { Ok(true) } else { Err("The voice couldn't say that.".into()) };
         };
+        // Synthesis only checks for a stop between steps; a sentence finished after the stop is dropped.
+        if cancelled(stop, job) {
+            return Ok(true);
+        }
         let rate = NonZero::new(rate).ok_or("The voice produced no audio.")?;
         player.append(SamplesBuffer::new(NonZero::<u16>::MIN, rate, samples));
     }

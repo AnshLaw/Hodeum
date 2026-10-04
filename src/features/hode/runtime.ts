@@ -20,6 +20,9 @@ async function* once(text: string): AsyncIterable<string> {
 }
 
 /** Runs the pure reducer and executes its effects against the adapters. */
+/** Room echo and audio latency: Hodey's last words can reach the mic this long after playback ends. */
+const ECHO_WINDOW_MS = 1500;
+
 export class HodeRuntime {
   private state: HodeState = initialState;
   private readonly listeners = new Set<() => void>();
@@ -28,6 +31,7 @@ export class HodeRuntime {
   private speech: AbortController | undefined;
   /** Skill writes are chained so the next step's read sees the previous step's outcome. */
   private pendingWrite: Promise<void> = Promise.resolve();
+  private saying: { text: string; endedAt: number | undefined } | undefined;
   private focusing: Promise<void> = Promise.resolve();
   private muted = false;
   private fallbackLevel: AssistanceLevel = "demonstrate";
@@ -75,6 +79,11 @@ export class HodeRuntime {
   configure(options: { fallbackLevel: AssistanceLevel; stuckMs: number }): void {
     this.fallbackLevel = options.fallbackLevel;
     this.stuckMs = options.stuckMs;
+  }
+
+  /** Barge-in: the learner started talking, so Hodey stops mid-sentence. */
+  interruptSpeech(): void {
+    this.stopSpeech();
   }
 
   setMuted(muted: boolean): void {
@@ -163,9 +172,21 @@ export class HodeRuntime {
     this.speech?.abort();
     const controller = new AbortController();
     this.speech = controller;
-    this.deps.tts.speak(once(text), controller.signal).catch((error) => {
-      if (!controller.signal.aborted) console.error("Speech failed", error);
-    });
+    const saying = { text, endedAt: undefined as number | undefined };
+    this.saying = saying;
+    this.deps.tts
+      .speak(once(text), controller.signal)
+      .catch((error) => {
+        if (!controller.signal.aborted) console.error("Speech failed", error);
+      })
+      .finally(() => (saying.endedAt = Date.now()));
+  }
+
+  /** What Hodey is saying, or said moments ago (its voice can still be echoing back through the mic). */
+  hodeySaying(): string | undefined {
+    const saying = this.saying;
+    if (!saying) return undefined;
+    return saying.endedAt === undefined || Date.now() - saying.endedAt < ECHO_WINDOW_MS ? saying.text : undefined;
   }
 
   private stopSpeech(): void {

@@ -76,7 +76,8 @@ export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceR
   const { side, view, hovered, menuOpen, revealed, muted, surfaceRef } = props;
   const { sidebar: style, visibility } = props.dock.prefs;
   // A pinned copilot keeps its panel open: Windows has already given it the space.
-  const panelOpen = view.mode !== "idle" || (style === "copilot" && visibility === "pinned");
+  // Listening opens the panel too, so the learner sees what Hodey hears.
+  const panelOpen = view.mode !== "idle" || props.micStatus === "listening" || (style === "copilot" && visibility === "pinned");
   const collapsed = !panelOpen && !hovered && !menuOpen;
   const classes = ["sidebar", `sidebar--${side}`, `sidebar--${style}`, collapsed ? "sidebar--collapsed" : "", panelOpen ? "sidebar--active" : "", revealed ? "" : "sidebar--tucked"];
   return (
@@ -116,6 +117,11 @@ export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceR
               <LocalBadge />
             </header>
             {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
+            {props.micStatus === "listening" && (
+              <p className="notch__heard" aria-live="polite">
+                {props.heard ? `“${props.heard}”` : COPY.listening}
+              </p>
+            )}
             <div className="sidebar__body" aria-live="polite">
               <SidebarBody {...props} />
             </div>

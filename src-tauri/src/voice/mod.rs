@@ -103,6 +103,19 @@ fn send_listen(voice: &Voice, command: ListenCommand) -> Result<(), String> {
     voice.listen.lock().map_err(|e| e.to_string())?.send(command).map_err(|_| "Hodey's listener has stopped; restart Hodeum.".to_string())
 }
 
+/// Ctrl+Alt+Space: start listening, or stop if already listening.
+pub fn toggle(app: &AppHandle) {
+    let voice = app.state::<Voice>();
+    let listening = match voice.status.lock() {
+        Ok(status) => status.listening,
+        Err(e) => return eprintln!("voice status lock poisoned: {e}"),
+    };
+    let result = if listening { send_listen(&voice, ListenCommand::Stop) } else { voice_start(voice.clone()) };
+    if let Err(reason) = result {
+        listen::emit_error(app, &reason);
+    }
+}
+
 #[tauri::command]
 pub fn voice_start(voice: State<'_, Voice>) -> Result<(), String> {
     let status = voice.status.lock().map_err(|e| e.to_string())?.clone();

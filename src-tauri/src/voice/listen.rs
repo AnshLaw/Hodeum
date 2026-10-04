@@ -33,6 +33,9 @@ const AUDIO_POLL: Duration = Duration::from_millis(50);
 /// A microphone that delivers pure digital silence this long is muted or misconfigured.
 const SILENT_MIC_AFTER: Duration = Duration::from_secs(4);
 const SILENCE_LEVEL: f32 = 1e-7;
+/// Tap-to-talk: a tap that hears no speech at all gives up after this long.
+const NO_SPEECH_AFTER: Duration = Duration::from_secs(8);
+const NOTHING_HEARD: &str = "I didn't catch anything. Tap the mic and try again.";
 const MIC_SILENT: &str = "Your microphone is sending silence. Check it isn't muted, or pick another input in Windows sound settings.";
 
 pub const SPEECH_START_EVENT: &str = "voice:speech-start";
@@ -148,7 +151,10 @@ fn open_mic(tx: Sender<Vec<f32>>) -> Result<Mic, String> {
     Ok(Mic { _stream: stream, rate })
 }
 
-fn emit_events(app: &AppHandle, events: Vec<SpeechEvent>) {
+/// Sends the events; returns what this window held: (speech started, utterance finished).
+fn emit_events(app: &AppHandle, events: Vec<SpeechEvent>) -> (bool, bool) {
+    let started = events.iter().any(|e| *e == SpeechEvent::Start);
+    let finished = events.iter().any(|e| matches!(e, SpeechEvent::Final(_)));
     for event in events {
         let result = match event {
             SpeechEvent::Start => app.emit(SPEECH_START_EVENT, ()),
@@ -159,6 +165,7 @@ fn emit_events(app: &AppHandle, events: Vec<SpeechEvent>) {
             eprintln!("couldn't send a voice event: {error}");
         }
     }
+    (started, finished)
 }
 
 /// Runs 16 kHz audio through VAD and recognition, returning the final transcripts.
@@ -185,7 +192,9 @@ pub(crate) fn transcribe(engines: &mut Engines, audio: &[f32]) -> Vec<String> {
 }
 
 /// Resamples a device chunk to 16 kHz and runs every full VAD window through the segmenter.
-fn process(app: &AppHandle, engines: &mut Engines, resampler: &LinearResampler, pending: &mut Vec<f32>, chunk: &[f32]) {
+/// Returns (speech started, utterance finished) across the chunk.
+fn process(app: &AppHandle, engines: &mut Engines, resampler: &LinearResampler, pending: &mut Vec<f32>, chunk: &[f32]) -> (bool, bool) {
+    let mut seen = (false, false);
     pending.extend(resampler.resample(chunk, false));
     while pending.len() >= VAD_WINDOW {
         let window: Vec<f32> = pending.drain(..VAD_WINDOW).collect();
@@ -194,11 +203,17 @@ fn process(app: &AppHandle, engines: &mut Engines, resampler: &LinearResampler, 
         while !engines.vad.is_empty() {
             engines.vad.pop();
         }
-        emit_events(app, engines.segmenter.push(&window, speech));
+        let (started, finished) = emit_events(app, engines.segmenter.push(&window, speech));
+        seen = (seen.0 || started, seen.1 || finished);
+        if finished {
+            break;
+        }
     }
+    seen
 }
 
-/// One listening session: runs until Stop, or until the command channel closes.
+/// One tap-to-talk session: listens for a single utterance, then stops by itself. Also ends on Stop,
+/// when nothing is said for a while, or when the command channel closes.
 fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>) -> Result<(), String> {
     let (tx, audio) = mpsc::channel::<Vec<f32>>();
     let mic = open_mic(tx)?;
@@ -206,6 +221,7 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
     set_listening(app, true);
     let started = Instant::now();
     let mut heard_sound = false;
+    let mut heard_speech = false;
     let mut warned = false;
     let mut pending = Vec::new();
     loop {
@@ -216,7 +232,11 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
         match audio.recv_timeout(AUDIO_POLL) {
             Ok(chunk) => {
                 heard_sound |= chunk.iter().any(|s| s.abs() > SILENCE_LEVEL);
-                process(app, engines, &resampler, &mut pending, &chunk);
+                let (started, finished) = process(app, engines, &resampler, &mut pending, &chunk);
+                heard_speech |= started;
+                if finished {
+                    break;
+                }
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return Err("The microphone stopped.".into()),
@@ -224,6 +244,12 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
         if !heard_sound && !warned && started.elapsed() > SILENT_MIC_AFTER {
             warned = true;
             emit_error(app, MIC_SILENT);
+        }
+        if !heard_speech && started.elapsed() > NO_SPEECH_AFTER {
+            if heard_sound {
+                emit_error(app, NOTHING_HEARD);
+            }
+            break;
         }
     }
     Ok(())

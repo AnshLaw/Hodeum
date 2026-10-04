@@ -169,3 +169,14 @@ describe("bringing the pack's app forward", () => {
     expect(runtime.getState().phase).toBe("guiding");
   });
 });
+
+describe("what Hodey is saying", () => {
+  it("is known while speaking and for a moment after, then forgotten", async () => {
+    vi.useFakeTimers();
+    const { start, runtime } = setup();
+    await start();
+    expect(runtime.hodeySaying()).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(runtime.hodeySaying()).toBeUndefined();
+  });
+});

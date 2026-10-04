@@ -70,6 +70,7 @@ export const COPY = {
   openApp: "Open Hodeum",
   mic: "Talk to Hodey",
   micStop: "Stop listening",
+  listening: "Hodey is listening…",
   voiceNotInstalled: "Voice input needs local speech recognition, which isn't installed yet.",
   privacyScreen: "Hodey is reading your screen",
   privacyMic: "Microphone is on",
