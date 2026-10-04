@@ -49,12 +49,15 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - **Your Hodes**: every Hode as a timeline of steps, corrections, hints and questions.
 - **Learning paths**: task packs and every skill's mastery. Change how much help a skill gets, or reset it.
 - **Web search** (off by default; turn it on with the globe in Ask Hodey or in Settings):
-  - On this PC, Hodey decides whether a question needs the web and writes a short, generic query from what you typed. The screen, window titles and earlier replies are never used for it, so nothing on screen or on a web page can steer what gets sent.
-  - Rust then removes emails, links, file paths and names, long numbers and your Windows user name, so only that query is sent.
+  - Hodey checks its offline help first (Excel, File Explorer, Settings, Notepad, Calculator, Brave, Chrome and WhatsApp); that never leaves the PC. Only a question it doesn't cover can go to the web.
+  - In Ask Hodey, Hodey decides on this PC whether a question needs the web and writes a short, generic query from what you typed. The screen, window titles and earlier replies are never used for it, so nothing on screen or on a web page can steer what gets sent.
+  - A spoken question goes to the web only when you ask Hodey to look it up ("look it up", "search the web for…", "google karo"), or when the screen couldn't answer a how, where or which question.
+  - Rust then removes emails, links, file paths and names, numbers of four or more digits (card, phone and ID numbers, however they're spaced) and your Windows user name, and caps the query at 120 characters, so only that query is sent.
   - Your screen, chat and files never leave the PC.
   - While it searches, the notch comes out over the app with the exact query ("Searching the web for “…”"), then the sites it found, with **Stop** (the app's Stop does the same). The blue privacy dot shows the whole time, and each answer shows the exact query and its sources.
-  - One search per question, never retried. If the web doesn't answer within 12 seconds, Hodey says "Couldn't reach the web. Answering from what I know." and answers locally.
-  - Without a key, results come from Stack Exchange (Super User) and Microsoft Learn, which welcome programs; general search engines block them. Set the `HODEUM_BRAVE_API_KEY` environment variable to use Brave Search for full web results.
+  - One search per question, never retried. If the web doesn't answer in time (8 seconds in Ask Hodey, 6 for a spoken question), Hodey says "Couldn't reach the web. Answering from what I know." and answers locally.
+  - The query goes to your own Tavily, Exa or Brave Search key if you've set one (`HODEUM_TAVILY_API_KEY`, `HODEUM_EXA_API_KEY` or `HODEUM_BRAVE_API_KEY`, or the same key in Windows Credential Manager), then to Exa's free search, DuckDuckGo and Stack Exchange (Super User), each asked only if the one before finds nothing, fails or is slow.
+  - Hodey then reads the top one or two pages: from the search service's own text, straight from known help sites (Microsoft, Google, Brave and Mozilla support, Super User), or through Jina Reader, which receives only the page's public address. Answers are remembered in memory for a day.
 - **Ask Hodey**: chat with the local Qwen3-VL. It attaches the app you were last in (or any window you pick), streams the answer, and can turn a question into a Hode. The screenshot stays in memory; the notch's green dot shows while it's taken.
 - **Settings**:
   - **Hodey**: choose an on-device voice and preview it (online voices aren't offered, since they'd send Hodey's words to the cloud), set the speaking speed, how long Hodey waits before helping, and the help preset for new skills.
