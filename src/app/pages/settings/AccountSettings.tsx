@@ -41,6 +41,13 @@ function SignedIn({ status, bus }: { status: AccountStatus; bus: Bus }) {
       <Row label={ACCOUNT_COPY.syncLabel} detail={syncDetail(status, new Date())}>
         <input type="checkbox" className="hswitch" checked={!status.paused} onChange={(e) => bus.emit("account:pause", { paused: !e.target.checked })} aria-label={ACCOUNT_COPY.syncLabel} />
       </Row>
+      {status.sync.state === "error" && !status.paused && (
+        <Row label={ACCOUNT_COPY.syncFailedLabel} detail={ACCOUNT_COPY.syncFailedDetail}>
+          <button type="button" className="btn btn--primary" onClick={() => bus.emit("account:retry", {})}>
+            {ACCOUNT_COPY.retry}
+          </button>
+        </Row>
+      )}
       {status.error && (
         <p className="hchat__error" role="alert">
           {status.error}

@@ -1,10 +1,11 @@
 import { LocalBus, type Bus, type BusEventName, type BusEvents, type BusHandler, type HodeSummary } from "../lib/bus";
+import { HEARTBEAT_MS } from "../features/sync/device-link";
 import type { CommandKind, DeviceRow, PcCommand } from "../features/sync/types";
 
 /** How often the dashboard checks whether the PC picked a command up. */
 const POLL_MS = 1_500;
-/** After this, the PC is probably off or signed out; the command itself expires on the PC's side. */
-export const ANSWER_TIMEOUT_MS = 20_000;
+/** Covers the PC's fallback check (each heartbeat) when Realtime misses a command; the command itself expires on the PC's side. */
+export const ANSWER_TIMEOUT_MS = HEARTBEAT_MS + 15_000;
 
 const IDLE: HodeSummary = { phase: "idle", goal: "", title: "" };
 
@@ -33,6 +34,8 @@ export class WebBus implements Bus {
     private readonly sender: CommandSender,
     private readonly target: () => DeviceRow | undefined,
     private readonly feedback: (feedback: CommandFeedback) => void,
+    /** Why there's no PC right now: still loading, couldn't load, or none linked. */
+    private readonly noPc: () => string,
   ) {}
 
   emit<K extends BusEventName>(name: K, payload: BusEvents[K]): void {
@@ -48,7 +51,7 @@ export class WebBus implements Bus {
 
   private async command(kind: CommandKind, goal?: string): Promise<void> {
     const pc = this.target();
-    if (!pc) return this.feedback({ tone: "error", text: "No PC yet. Open Hodeum on your PC and sign in there first." });
+    if (!pc) return this.feedback({ tone: "error", text: this.noPc() });
     const verb = kind === "start_hode" ? "Starting" : "Ending";
     this.feedback({ tone: "pending", text: `${verb} on ${pc.name}…` });
     try {

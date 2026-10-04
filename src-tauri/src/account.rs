@@ -84,7 +84,8 @@ fn escape_html(text: &str) -> String {
 
 fn page(callback: &Callback) -> String {
     let (title, body) = match &callback.error {
-        None => ("You're signed in".to_string(), "Go back to Hodeum. Your skills and Hodes now sync to your account.".to_string()),
+        // Hodeum still has to check this token with Supabase, so the tab can't promise sign-in or sync yet.
+        None => ("Almost done".to_string(), "Go back to Hodeum to finish signing in. Settings › Account shows when you're signed in and syncing, or why it didn't work.".to_string()),
         Some(error) => ("Sign-in didn't finish".to_string(), format!("{} You can close this tab and try again from Hodeum.", escape_html(error))),
     };
     format!(
@@ -225,6 +226,15 @@ mod tests {
     fn a_token_without_its_state_is_an_error() {
         assert!(parse_callback("GET /auth/callback?id_token=eyJ.a.b HTTP/1.1").is_some_and(|c| c.id_token.is_none() && c.error.is_some()));
         assert!(parse_callback("GET /auth/callback HTTP/1.1").is_some_and(|c| c.id_token.is_none() && c.error.is_some()));
+    }
+
+    #[test]
+    fn does_not_claim_success_before_hodeum_checks_the_token() {
+        let ours = parse_callback("GET /auth/callback?id_token=eyJ.a.b&state=s-1 HTTP/1.1").unwrap();
+        let shown = page(&ours);
+        assert!(!shown.contains("You're signed in"));
+        assert!(!shown.contains("now sync"));
+        assert!(shown.contains("Settings"));
     }
 
     #[test]

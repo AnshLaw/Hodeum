@@ -80,3 +80,34 @@ describe("DeviceLink", () => {
     link.stop();
   });
 });
+
+describe("DeviceLink presence", () => {
+  afterEach(() => vi.useRealTimers());
+
+  function setup() {
+    vi.useFakeTimers({ now: NOW });
+    const cloud = new FakeCloud();
+    const problems: (string | undefined)[] = [];
+    const link = new DeviceLink({ cloud, bus: new LocalBus(), device: DEVICE, onPresence: (problem) => problems.push(problem) });
+    return { cloud, link, problems };
+  }
+
+  it("reports when the dashboard can't be told this PC is online, instead of only logging it", async () => {
+    const { cloud, link, problems } = setup();
+    cloud.failNext = new Error("permission denied for table devices");
+    await link.start();
+    expect(cloud.devices.size).toBe(0);
+    expect(problems.at(-1)).toContain("permission denied for table devices");
+    link.stop();
+  });
+
+  it("clears the problem once a retry gets through", async () => {
+    const { cloud, link, problems } = setup();
+    cloud.failNext = new Error("Failed to fetch");
+    await link.start();
+    await link.refresh();
+    expect(cloud.devices.get(DEVICE.id)).toMatchObject({ name: "ANSH-PC" });
+    expect(problems.at(-1)).toBeUndefined();
+    link.stop();
+  });
+});

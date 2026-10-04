@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HodeSummary } from "../lib/bus";
 import type { CommandKind, DeviceRow, PcCommand } from "../features/sync/types";
+import { HEARTBEAT_MS } from "../features/sync/device-link";
 import { ANSWER_TIMEOUT_MS, WebBus, type CommandFeedback, type CommandSender } from "./command-bus";
 
 const NOW = Date.parse("2026-10-03T10:00:00.000Z");
@@ -22,7 +23,7 @@ function setup(target: DeviceRow | null = PC) {
   vi.useFakeTimers({ now: NOW });
   const sender = new FakeSender();
   const feedback: CommandFeedback[] = [];
-  const bus = new WebBus(sender, () => target ?? undefined, (f) => feedback.push(f));
+  const bus = new WebBus(sender, () => target ?? undefined, (f) => feedback.push(f), () => "No PC is linked to learner@example.com yet.");
   return { sender, feedback, bus };
 }
 
@@ -60,7 +61,11 @@ describe("WebBus", () => {
     bus.emit("hode:start", { goal: "pivot" });
     await vi.advanceTimersByTimeAsync(0);
     expect(sender.sent).toEqual([]);
-    expect(feedback.at(-1)?.tone).toBe("error");
+    expect(feedback.at(-1)).toEqual({ tone: "error", text: "No PC is linked to learner@example.com yet." });
+  });
+
+  it("waits longer than the PC's fallback check before saying it never answered", () => {
+    expect(ANSWER_TIMEOUT_MS).toBeGreaterThan(HEARTBEAT_MS);
   });
 
   it("answers summary requests with the chosen PC's live Hode", () => {

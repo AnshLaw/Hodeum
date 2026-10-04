@@ -41,6 +41,8 @@ export interface BusEvents {
   "account:cancel": Empty;
   "account:sign-out": Empty;
   "account:pause": { paused: boolean };
+  /** Sync now and re-announce this PC to the web dashboard, after a failure. */
+  "account:retry": Empty;
   /** A row was deleted locally; sync deletes it in the cloud too instead of pulling it back. */
   "sync:deleted": { table: "skills" | "chats"; id: string };
 }

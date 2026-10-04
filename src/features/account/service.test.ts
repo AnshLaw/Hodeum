@@ -52,7 +52,11 @@ class FakeLoopback implements Loopback {
 
 class FakeSession implements SyncSession {
   running = false;
+  retries = 0;
   private listener: ((status: SyncStatus) => void) | undefined;
+  async retry() {
+    this.retries++;
+  }
   start() {
     this.running = true;
     this.listener?.({ state: "idle", lastSyncedAt: "2026-10-03T10:00:00.000Z" });
@@ -185,5 +189,21 @@ describe("AccountService", () => {
     await service.start();
     expect(service.status().phase).toBe("signed-in");
     expect(sessions[0].running).toBe(true);
+  });
+
+  it("retries sync when the learner asks, after a failure", async () => {
+    const { bus, service, sessions } = setup();
+    await service.start();
+    bus.emit("account:sign-in", {});
+    await settle();
+    bus.emit("account:retry", {});
+    expect(sessions[0].retries).toBe(1);
+  });
+
+  it("ignores a retry while signed out", async () => {
+    const { bus, service, sessions } = setup();
+    await service.start();
+    bus.emit("account:retry", {});
+    expect(sessions).toEqual([]);
   });
 });

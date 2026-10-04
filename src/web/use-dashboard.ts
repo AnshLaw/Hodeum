@@ -6,7 +6,8 @@ import { connectAppearance } from "../lib/appearance";
 import type { DeviceRow } from "../features/sync/types";
 import { TASK_PACKS } from "../task-packs";
 import { WebBus, type CommandFeedback } from "./command-bus";
-import { pickDevice } from "./devices";
+import type { Loadable } from "../app/hooks";
+import { noPcMessage, pickDevice } from "./devices";
 import { SupabaseCommandSender, SupabaseLearningStore, SupabaseSettingsStore, listDevices, watchAccount } from "./supabase-web";
 
 const CHOSEN_PC_KEY = "hodeum.web.pc";
@@ -15,7 +16,7 @@ const DEVICE_REFRESH_MS = 30_000;
 /** Coalesces a burst of Realtime row changes into one reload. */
 const PROGRESS_DEBOUNCE_MS = 500;
 
-export type Loadable<T> = { state: "loading" } | { state: "ready"; value: T } | { state: "error"; message: string };
+export type { Loadable };
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -78,15 +79,17 @@ function useDevices(client: SupabaseClient): [Loadable<DeviceRow[]>, () => void]
 }
 
 /** Everything the dashboard pages need, over the learner's account. */
-export function useDashboard(client: SupabaseClient): Dashboard {
+export function useDashboard(client: SupabaseClient, email: string | undefined): Dashboard {
   const [devices, reloadDevices] = useDevices(client);
   const [chosen, setChosen] = useState(readChosen);
   const [feedback, setFeedback] = useState<CommandFeedback>();
   const target = devices.state === "ready" ? pickDevice(devices.value, chosen) : undefined;
   const targetRef = useRef(target);
   targetRef.current = target;
+  const noPcRef = useRef("");
+  noPcRef.current = noPcMessage(devices, email);
   const services = useMemo(() => {
-    const bus = new WebBus(new SupabaseCommandSender(client), () => targetRef.current, setFeedback);
+    const bus = new WebBus(new SupabaseCommandSender(client), () => targetRef.current, setFeedback, () => noPcRef.current);
     return { learning: new SupabaseLearningStore(client), chats: new MemoryChatStore(), settings: new SupabaseSettingsStore(client), bus, packs: TASK_PACKS };
   }, [client]);
   useEffect(() => connectAppearance(services.settings, services.bus, document.documentElement), [services]);

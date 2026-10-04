@@ -34,7 +34,15 @@ export interface DeviceLinkDeps {
   device: DeviceIdentity;
   /** Lights the notch's blue cloud dot while a request is out. */
   track?: <T>(work: () => Promise<T>) => Promise<T>;
+  /** Why the dashboard can't see this PC right now, or undefined once it can. */
+  onPresence?: (problem?: string) => void;
 }
+
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** Starts every presence problem, so Settings can tell it from a sync failure. */
+export const PRESENCE_PREFIX = "The web dashboard can't";
+export const presenceProblem = (error: unknown): string => `${PRESENCE_PREFIX} see this PC: ${errorText(error)}`;
 
 /** This PC's presence for the web dashboard, and the receiving end of its commands. */
 export class DeviceLink {
@@ -49,7 +57,7 @@ export class DeviceLink {
     if (this.stopAll) return;
     const { cloud, bus, device } = this.deps;
     // Also re-checks commands, in case Realtime dropped one while reconnecting.
-    const heartbeat = setInterval(() => void this.beat().then(() => this.checkPending()), HEARTBEAT_MS);
+    const heartbeat = setInterval(() => void this.refresh(), HEARTBEAT_MS);
     const offs = [
       cloud.onCommand(device.id, (command) => void this.handle(command)),
       bus.on("hode:summary", (summary) => this.liveChanged(isLiveHode(summary) ? summary : null)),
@@ -60,8 +68,7 @@ export class DeviceLink {
       offs.forEach((off) => off());
     };
     bus.emit("hode:summary-request", {});
-    await this.beat();
-    await this.checkPending();
+    await this.refresh();
   }
 
   stop(): void {
@@ -69,13 +76,21 @@ export class DeviceLink {
     this.stopAll = undefined;
   }
 
-  /** Commands that arrived while this PC was off or Realtime was reconnecting. */
-  async checkPending(): Promise<void> {
+  /** Tells the dashboard this PC is here and picks up waiting commands now, e.g. from a "Try again". */
+  async refresh(): Promise<void> {
+    const problem = (await this.beat()) ?? (await this.checkPending());
+    this.deps.onPresence?.(problem);
+  }
+
+  /** Commands that arrived while this PC was off or Realtime was reconnecting. Returns what went wrong, if anything. */
+  async checkPending(): Promise<string | undefined> {
     try {
       const pending = await this.deps.cloud.pendingCommands(this.deps.device.id);
       for (const command of pending) await this.handle(command);
+      return undefined;
     } catch (error) {
       console.error("Couldn't check for Hodes started from the web", error);
+      return `${PRESENCE_PREFIX} start Hodes on this PC: ${errorText(error)}`;
     }
   }
 
@@ -83,16 +98,19 @@ export class DeviceLink {
     if (JSON.stringify(next) === JSON.stringify(this.live)) return;
     this.live = next;
     clearTimeout(this.liveTimer);
-    this.liveTimer = setTimeout(() => void this.beat(), LIVE_THROTTLE_MS);
+    this.liveTimer = setTimeout(() => void this.beat().then((problem) => problem && this.deps.onPresence?.(problem)), LIVE_THROTTLE_MS);
   }
 
-  private async beat(): Promise<void> {
+  /** Returns why the dashboard couldn't be told, if it couldn't. */
+  private async beat(): Promise<string | undefined> {
     const { cloud, device } = this.deps;
     const track = this.deps.track ?? ((work) => work());
     try {
       await track(() => cloud.heartbeat({ id: device.id, name: device.name, last_seen_at: new Date().toISOString(), live: this.live }));
+      return undefined;
     } catch (error) {
       console.error("Couldn't tell the web dashboard this PC is online", error);
+      return presenceProblem(error);
     }
   }
 

@@ -5,6 +5,7 @@ import { openDatabase, type SqlDatabase } from "../../data/sql";
 import { DeviceLink, type DeviceIdentity } from "../sync/device-link";
 import { SyncEngine } from "../sync/engine";
 import { SqliteSyncSource } from "../sync/local";
+import { AccountSyncSession } from "../sync/session";
 import { BrowserSyncState, recordDeletions } from "../sync/state";
 import { SupabaseCloud } from "../sync/supabase-cloud";
 import { createSupabase, siteUrl, supabaseConfig } from "./config";
@@ -90,19 +91,7 @@ export async function connectAccount(deps: ConnectAccountDeps): Promise<AccountS
     if (!client || !db) throw new Error("Sync needs a Supabase project and the local database");
     const cloud = new SupabaseCloud(client, user.id);
     const engine = new SyncEngine({ cloud, local: new SqliteSyncSource(db), settings, state: new BrowserSyncState(localStorage, user.id), bus, track });
-    const link = new DeviceLink({ cloud, bus, device, track });
-    return {
-      start: () => {
-        engine.start();
-        void link.start();
-      },
-      stop: () => {
-        engine.stop();
-        link.stop();
-      },
-      status: () => engine.status(),
-      subscribe: (listener) => engine.subscribe(listener),
-    };
+    return new AccountSyncSession(engine, (onPresence) => new DeviceLink({ cloud, bus, device, track, onPresence }));
   };
   const service = new AccountService({ backend: client && new SupabaseAuth(client, siteUrl()), loopback: new TauriLoopback(deps), bus, session, prefs: browserPrefs });
   await service.start();
