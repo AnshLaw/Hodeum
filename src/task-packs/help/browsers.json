@@ -1,0 +1,49 @@
+[
+  {
+    "id": "brave-new-tab",
+    "app": "brave",
+    "title": "Open a new tab in Brave",
+    "keywords": ["new tab", "open tab", "another tab", "ctrl t", "reopen tab"],
+    "steps": [
+      "Select the + (New tab) button to the right of your open tabs.",
+      "Or press Ctrl+T to open a new tab and jump to it.",
+      "Closed one by mistake? Ctrl+Shift+T reopens the last closed tab."
+    ],
+    "source": { "title": "What keyboard shortcuts can I use in Brave?", "url": "https://support.brave.app/hc/en-us/articles/360032272171-What-keyboard-shortcuts-can-I-use-in-Brave" }
+  },
+  {
+    "id": "brave-bookmarks",
+    "app": "brave",
+    "title": "Bookmark a page in Brave",
+    "keywords": ["bookmark", "bookmarks", "favourite", "favorite", "save page", "save site", "bookmarks bar"],
+    "steps": [
+      "Press Ctrl+D, or select the bookmark icon at the right end of the address bar, to bookmark the page.",
+      "Press Ctrl+Shift+B to show or hide the Bookmarks bar.",
+      "Press Ctrl+Shift+O to open the Bookmarks Manager."
+    ],
+    "source": { "title": "What keyboard shortcuts can I use in Brave?", "url": "https://support.brave.app/hc/en-us/articles/360032272171-What-keyboard-shortcuts-can-I-use-in-Brave" }
+  },
+  {
+    "id": "chrome-new-tab",
+    "app": "chrome",
+    "title": "Open a new tab in Chrome",
+    "keywords": ["new tab", "open tab", "another tab", "ctrl t"],
+    "steps": [
+      "Select New tab (+) next to the last tab on the right.",
+      "Or press Ctrl+T."
+    ],
+    "source": { "title": "Manage tabs in Chrome", "url": "https://support.google.com/chrome/answer/2391819?co=GENIE.Platform%3DDesktop" }
+  },
+  {
+    "id": "chrome-bookmarks",
+    "app": "chrome",
+    "title": "Create and find bookmarks in Chrome",
+    "keywords": ["bookmark", "bookmarks", "favourite", "favorite", "save page", "save site", "bookmark manager"],
+    "steps": [
+      "Go to the site you want to visit again.",
+      "To the right of the address bar, select Bookmark (the star).",
+      "To find bookmarks, select More (⋮) > Bookmarks and lists > Bookmark Manager, or type @bookmarks in the address bar and press Tab."
+    ],
+    "source": { "title": "Create, find and edit bookmarks in Chrome", "url": "https://support.google.com/chrome/answer/188842" }
+  }
+]

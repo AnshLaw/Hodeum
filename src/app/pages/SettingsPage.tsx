@@ -116,7 +116,7 @@ export function SettingsPage({ services }: { services: AppServices }) {
         vision={vision}
         webSearch={
           settings && (
-            <Row label="Let Hodey search the web" detail="For questions in Ask Hodey. On this PC, Hodey turns what you typed into a short, generic query and removes emails, links, file names and long numbers; only that query is sent, to Stack Exchange and Microsoft Learn (or Brave Search if you've set a key). Your screen, files and Hodey's replies never are. Each answer shows the exact query, and the blue dot shows while it searches.">
+            <Row label="Let Hodey search the web" detail="Hodey first checks its offline help for Excel, File Explorer, Settings, Notepad, Calculator, Brave, Chrome and WhatsApp; that never leaves this PC. With this on, other questions you ask Hodey, typed in Ask Hodey or spoken, are turned into a short, generic query with emails, links, file names and long numbers removed. Only that query is sent: to your Tavily, Exa or Brave Search key if you've set one, otherwise Exa's free search, then DuckDuckGo, then Stack Exchange. Hodey then reads the top one or two pages it found, directly or through Jina Reader, which receives only the public page address. Your screen, files and Hodey's replies are never sent. Answers are remembered for a day. Each answer shows the exact query and its sources, says why if the search couldn't run, and the blue dot shows while it searches.">
               <input type="checkbox" className="hswitch" checked={settings.webSearch} onChange={(e) => update({ ...settings, webSearch: e.target.checked })} aria-label="Let Hodey search the web" />
             </Row>
           )

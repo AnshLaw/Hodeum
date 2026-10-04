@@ -1,0 +1,15 @@
+[
+  {
+    "id": "settings-dark-mode",
+    "app": "settings",
+    "title": "Choose dark or light mode",
+    "keywords": ["dark", "dark mode", "light mode", "night mode", "theme", "black background"],
+    "steps": [
+      "Open Settings (press Windows logo key + I).",
+      "Select Personalization > Colors.",
+      "Next to Choose your mode, pick Dark or Light.",
+      "Pick Custom to set Windows and apps separately."
+    ],
+    "source": { "title": "Personalize your Colors in Windows", "url": "https://support.microsoft.com/en-us/windows/personalize-your-colors-in-windows-3290d30f-d064-5cfe-6470-2fe9c6533e37" }
+  }
+]

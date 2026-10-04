@@ -1,27 +1,48 @@
-//! Web search for the local model. Only a scrubbed, generic query leaves the PC: no screenshot,
-//! window titles, chat history, cookies or account; results come back as plain text.
+//! Web search for the local model. Only a scrubbed, generic query leaves the PC (plus the public
+//! links of results, to read them): no screenshot, window titles, chat history, cookies or account.
 //!
-//! General search engines block programs, so by default Hodey asks two public APIs built for them:
-//! Stack Exchange (Super User how-tos) and Microsoft Learn. With `HODEUM_BRAVE_API_KEY` set it uses
-//! Brave Search for full web results instead.
+//! Sources, first relevant answer wins, the next one starting if the current one is slow:
+//! a search key the learner set up (Tavily, Exa or Brave), Exa's free hosted search, DuckDuckGo's
+//! HTML page, then Stack Exchange accepted answers. The top one or two pages are then read so the
+//! model sees the steps themselves. Answers are remembered for a day; a source that says to slow
+//! down is left alone for a while. The offline help index runs in the webview, before any of this.
+
+mod chain;
+mod ddg;
+mod exa;
+mod keyed;
+mod limits;
+#[cfg(test)]
+mod live;
+mod guard;
+mod read;
+mod scrub;
+mod source;
+mod stack;
+mod text;
 
 use std::sync::OnceLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use regex::Regex;
 use serde::Serialize;
-use serde_json::Value;
 
-const MAX_QUERY_CHARS: usize = 120;
+use chain::{first_hit, Failures};
+use limits::memory;
+use scrub::{cache_key, relevant, scrub_query};
+use source::{failure, SourceError, SourceId};
+
 const MAX_RESULTS: usize = 5;
-const MAX_SNIPPET_CHARS: usize = 300;
-const TIMEOUT: Duration = Duration::from_secs(8);
-const STACK_URL: &str = "https://api.stackexchange.com/2.3/search/excerpts";
-const STACK_PAGE: &str = "3";
-const LEARN_URL: &str = "https://learn.microsoft.com/api/search";
-const LEARN_PAGE: &str = "2";
-const BRAVE_URL: &str = "https://api.search.brave.com/res/v1/web/search";
-const BRAVE_KEY_ENV: &str = "HODEUM_BRAVE_API_KEY";
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+/// Exa answers in about 1.8 s; past this the next source starts too.
+const HEDGE: Duration = Duration::from_millis(2_500);
+const SEARCH_BUDGET: Duration = Duration::from_millis(4_500);
+/// Search plus reading; spoken questions wait at most 6 s in the webview.
+const TOTAL_BUDGET: Duration = Duration::from_millis(5_500);
+/// Not worth starting a page read with less time than this.
+const MIN_READ_TIME: Duration = Duration::from_millis(800);
+/// DuckDuckGo turns to bot checks after a few quick calls.
+const DDG_MIN_GAP: Duration = Duration::from_secs(20);
 /// Identifies the app, not the person: no version, machine or account details.
 const USER_AGENT: &str = "Hodeum";
 
@@ -31,144 +52,119 @@ pub struct WebResult {
     pub title: String,
     pub url: String,
     pub snippet: String,
+    /// Which search service found it.
+    pub source: String,
+    /// The source's own longer text (Exa highlights, an answer body); read instead of fetching.
+    #[serde(skip)]
+    pub body: String,
 }
 
-#[derive(Debug, Serialize)]
+/// The part of a result's page that answers the question. Mirrors `WebPage` in types.ts.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WebPage {
+    pub title: String,
+    pub url: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct WebSearch {
     /// Exactly what was sent, shown to the learner.
     pub query: String,
+    /// The service whose results these are; empty when none found anything.
+    pub provider: String,
     pub results: Vec<WebResult>,
+    pub pages: Vec<WebPage>,
+    /// Answered from memory: nothing left the PC this time.
+    pub cached: bool,
+    /// Why sources or page reads didn't help, e.g. "DuckDuckGo: blocked automated searches".
+    pub failures: Vec<String>,
 }
 
-fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
-    cell.get_or_init(|| Regex::new(pattern).expect("built-in pattern is valid"))
+fn client() -> Result<&'static reqwest::Client, String> {
+    static CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+    CLIENT
+        .get_or_init(|| reqwest::Client::builder().user_agent(USER_AGENT).timeout(REQUEST_TIMEOUT).connect_timeout(CONNECT_TIMEOUT).build().map_err(|e| format!("couldn't set up web access: {e}")))
+        .as_ref()
+        .map_err(Clone::clone)
 }
 
-/// Removes anything personal a query might carry: emails, links, file paths, long numbers, the
-/// Windows user name, and file names. What's left is capped and trimmed.
-pub fn scrub_query(query: &str, user_name: &str) -> String {
-    static EMAIL: OnceLock<Regex> = OnceLock::new();
-    static URL: OnceLock<Regex> = OnceLock::new();
-    static PATH: OnceLock<Regex> = OnceLock::new();
-    static FILE: OnceLock<Regex> = OnceLock::new();
-    static DIGITS: OnceLock<Regex> = OnceLock::new();
-    let mut text = re(&EMAIL, r"\S+@\S+").replace_all(query, " ").into_owned();
-    text = re(&URL, r"(?i)\b(?:https?://|www\.)\S+").replace_all(&text, " ").into_owned();
-    text = re(&PATH, r#"(?i)(?:\b[a-z]:[\\/]|\\\\|~/|/(?:users|home)/)[^\s"']*"#).replace_all(&text, " ").into_owned();
-    text = re(&FILE, r"\b[\w-]+\.(?:xlsx?|docx?|pptx?|pdf|csv|txt|png|jpe?g|zip)\b").replace_all(&text, " ").into_owned();
-    text = re(&DIGITS, r"\d{5,}").replace_all(&text, " ").into_owned();
-    if user_name.chars().count() >= 3 {
-        text = Regex::new(&format!("(?i){}", regex::escape(user_name))).map(|r| r.replace_all(&text, " ").into_owned()).unwrap_or(text);
+fn chain_ids() -> Vec<SourceId> {
+    let mut ids = keyed::configured();
+    ids.extend([SourceId::Exa, SourceId::DuckDuckGo, SourceId::StackExchange]);
+    ids
+}
+
+/// Whether `id` may be asked now; DuckDuckGo is also spaced out so it doesn't start blocking.
+fn may_ask(id: SourceId) -> Result<(), SourceError> {
+    let (mut memory, now) = (memory(), Instant::now());
+    if let Some(left) = memory.cooldowns.remaining(id, now) {
+        return Err(SourceError::CoolingDown(left));
     }
-    let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    joined.chars().take(MAX_QUERY_CHARS).collect::<String>().trim().to_string()
-}
-
-/// Words too common to show a result is about the question.
-const STOPWORDS: [&str; 24] = ["the", "and", "for", "how", "what", "with", "into", "from", "this", "that", "can", "does", "you", "your", "are", "new", "use", "using", "make", "get", "set", "way", "add", "in"];
-/// A result must mention at least this many of the question's key words.
-const MIN_SHARED_WORDS: usize = 2;
-
-fn key_words(text: &str) -> Vec<String> {
-    text.to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.len() > 2 && !STOPWORDS.contains(w))
-        .map(str::to_string)
-        .collect()
-}
-
-/// Keeps results that share enough key words with the query, so loosely related pages don't mislead.
-pub fn relevant(results: Vec<WebResult>, query: &str) -> Vec<WebResult> {
-    let words = key_words(query);
-    let needed = MIN_SHARED_WORDS.min(words.len());
-    results
-        .into_iter()
-        .filter(|r| {
-            let haystack = format!("{} {}", r.title, r.snippet).to_lowercase();
-            words.iter().filter(|w| haystack.contains(w.as_str())).count() >= needed
-        })
-        .collect()
-}
-
-/// Markup and entities out, whitespace collapsed, length capped.
-fn plain(html: &str) -> String {
-    static TAG: OnceLock<Regex> = OnceLock::new();
-    let text = re(&TAG, r"<[^>]*>").replace_all(html, " ");
-    let decoded = text.replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ");
-    decoded.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(MAX_SNIPPET_CHARS).collect()
-}
-
-fn text_at<'a>(item: &'a Value, key: &str) -> &'a str {
-    item.get(key).and_then(Value::as_str).unwrap_or_default()
-}
-
-/// Stack Exchange search excerpts: question titles with the matching question or answer text.
-pub fn parse_stack(json: &Value) -> Vec<WebResult> {
-    let items = json.get("items").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
-    items
-        .iter()
-        .filter_map(|item| {
-            let id = item.get("question_id")?.as_u64()?;
-            Some(WebResult { title: plain(text_at(item, "title")), url: format!("https://superuser.com/q/{id}"), snippet: plain(text_at(item, "excerpt")) })
-        })
-        .collect()
-}
-
-/// Microsoft Learn search results.
-pub fn parse_learn(json: &Value) -> Vec<WebResult> {
-    let items = json.get("results").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
-    items
-        .iter()
-        .filter(|item| text_at(item, "url").starts_with("https://"))
-        .map(|item| WebResult { title: plain(text_at(item, "title")), url: text_at(item, "url").to_string(), snippet: plain(text_at(item, "description")) })
-        .collect()
-}
-
-/// Brave Search web results.
-pub fn parse_brave(json: &Value) -> Vec<WebResult> {
-    let items = json.pointer("/web/results").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
-    items
-        .iter()
-        .filter(|item| text_at(item, "url").starts_with("https://"))
-        .map(|item| WebResult { title: plain(text_at(item, "title")), url: text_at(item, "url").to_string(), snippet: plain(text_at(item, "description")) })
-        .collect()
-}
-
-async fn get_json(client: &reqwest::Client, url: &str, params: &[(&str, &str)], key: Option<&str>) -> Result<Value, String> {
-    let url = reqwest::Url::parse_with_params(url, params).map_err(|e| e.to_string())?;
-    let mut request = client.get(url).header("Accept", "application/json");
-    if let Some(key) = key {
-        request = request.header("X-Subscription-Token", key);
+    if id == SourceId::DuckDuckGo {
+        memory.cooldowns.rest(id, now, DDG_MIN_GAP);
     }
-    let response = request.send().await.map_err(|e| format!("Couldn't reach the web: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("The search service answered {}", response.status()));
-    }
-    serde_json::from_str(&response.text().await.map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    Ok(())
 }
 
-/// Stack Exchange and Microsoft Learn at the same time, so a slow one can't double the wait; one
-/// failing still leaves the other.
-async fn keyless(client: &reqwest::Client, query: &str) -> Result<Vec<WebResult>, String> {
-    let (stack_client, stack_query) = (client.clone(), query.to_string());
-    let stack = tauri::async_runtime::spawn(async move {
-        let params = [("order", "desc"), ("sort", "relevance"), ("q", stack_query.as_str()), ("site", "superuser"), ("pagesize", STACK_PAGE)];
-        get_json(&stack_client, STACK_URL, &params, None).await
-    });
-    let learn = [("search", query), ("locale", "en-us"), ("$top", LEARN_PAGE)];
-    let learn = get_json(client, LEARN_URL, &learn, None).await;
-    let stack = stack.await.map_err(|e| format!("The Stack Exchange search stopped: {e}")).and_then(|result| result);
-    match (stack, learn) {
-        (Err(a), Err(b)) => Err(format!("{a}; {b}")),
-        (stack, learn) => {
-            for error in [stack.as_ref().err(), learn.as_ref().err()].into_iter().flatten() {
-                eprintln!("one web search source failed: {error}");
-            }
-            let mut results = stack.map(|j| parse_stack(&j)).unwrap_or_default();
-            results.extend(learn.map(|j| parse_learn(&j)).unwrap_or_default());
-            Ok(results)
-        }
+fn rest_after(id: SourceId, error: &SourceError) {
+    let rest = if *error == SourceError::Blocked { Some(id.cooldown()) } else { error.rest() };
+    if let Some(rest) = rest {
+        memory().cooldowns.rest(id, Instant::now(), rest);
     }
+}
+
+/// One source's relevant results, resting it when it asks.
+async fn ask(client: &'static reqwest::Client, id: SourceId, query: String) -> chain::Outcome {
+    may_ask(id)?;
+    let outcome = match id {
+        SourceId::Exa => exa::search(client, &query, None).await,
+        SourceId::DuckDuckGo => ddg::search(client, &query).await,
+        SourceId::StackExchange => stack::search(client, &query, |wait| memory().cooldowns.rest(id, Instant::now(), wait)).await,
+        SourceId::Tavily | SourceId::ExaKeyed | SourceId::Brave => keyed::search(client, id, &query).await,
+        SourceId::Jina => Err(SourceError::Parse("Jina Reader reads pages; it doesn't search".into())),
+    };
+    if let Err(error) = &outcome {
+        rest_after(id, error);
+    }
+    let mut kept = relevant(outcome?, &query);
+    kept.truncate(MAX_RESULTS);
+    Ok(kept)
+}
+
+fn readable(failures: &Failures) -> Vec<String> {
+    failures.iter().map(|(id, error)| failure(*id, error)).collect()
+}
+
+/// No hit: an empty answer if any source answered at all, otherwise an error naming every reason.
+fn without_hit(query: &str, failures: Failures) -> Result<WebSearch, String> {
+    let reasons = readable(&failures);
+    if failures.iter().any(|(_, e)| *e == SourceError::NothingRelevant) {
+        return Ok(WebSearch { query: query.into(), provider: String::new(), results: vec![], pages: vec![], cached: false, failures: reasons });
+    }
+    Err(format!("No search service could answer: {}", reasons.join("; ")))
+}
+
+/// The source chain, then a read of the best pages in whatever time is left.
+pub async fn search(client: &'static reqwest::Client, query: &str) -> Result<WebSearch, String> {
+    let started = Instant::now();
+    let owned = query.to_string();
+    let (hit, failures) = first_hit(&chain_ids(), HEDGE, SEARCH_BUDGET, move |id| ask(client, id, owned.clone())).await;
+    for line in readable(&failures) {
+        eprintln!("web search: {line}");
+    }
+    let Some(hit) = hit else { return without_hit(query, failures) };
+    let mut reasons = readable(&failures);
+    let left = TOTAL_BUDGET.saturating_sub(started.elapsed());
+    let pages = if left >= MIN_READ_TIME {
+        let (pages, read_failures) = read::read_pages(client, &hit.results, query, left).await;
+        reasons.extend(read_failures);
+        pages
+    } else {
+        reasons.push("reading pages: no time left".into());
+        Vec::new()
+    };
+    Ok(WebSearch { query: query.into(), provider: hit.id.label().into(), results: hit.results, pages, cached: false, failures: reasons })
 }
 
 /// Searches the web for a generic how-to query. Errors are learner-readable.
@@ -179,51 +175,44 @@ pub async fn web_search(query: String) -> Result<WebSearch, String> {
     if query.is_empty() {
         return Err("There was nothing safe to search for.".into());
     }
-    let client = reqwest::Client::builder().user_agent(USER_AGENT).timeout(TIMEOUT).build().map_err(|e| e.to_string())?;
-    let mut results: Vec<WebResult> = match std::env::var(BRAVE_KEY_ENV).ok().filter(|k| !k.is_empty()) {
-        Some(key) => parse_brave(&get_json(&client, BRAVE_URL, &[("q", query.as_str())], Some(&key)).await?),
-        None => keyless(&client, &query).await?,
-    };
-    results = relevant(results, &query);
-    results.truncate(MAX_RESULTS);
-    Ok(WebSearch { results, query })
+    let key = cache_key(&query);
+    let remembered = memory().cache.get(&key, Instant::now());
+    if let Some(found) = remembered {
+        return Ok(WebSearch { query, cached: true, failures: Vec::new(), ..found });
+    }
+    let found = search(client()?, &query).await?;
+    if !found.results.is_empty() {
+        memory().cache.put(key, Instant::now(), found.clone());
+    }
+    Ok(found)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
-    fn scrubs_personal_details_from_queries() {
-        let query = r"anshr asked: email anshr@example.com about C:\Users\anshr\Q3-salaries.xlsx see https://intranet/x 4111111111111111 pivot table";
-        assert_eq!(scrub_query(query, "anshr"), "asked: email about see pivot table");
+    fn an_empty_answer_when_a_source_answered_otherwise_every_reason() {
+        let answered = vec![(SourceId::Exa, SourceError::RateLimited(SourceId::Exa.cooldown())), (SourceId::DuckDuckGo, SourceError::NothingRelevant)];
+        let empty = without_hit("q", answered).unwrap();
+        assert!(empty.results.is_empty());
+        assert_eq!(empty.failures, vec!["Exa (free): rate-limited, resting 15 min", "DuckDuckGo: nothing relevant"]);
+        let unreachable = vec![(SourceId::Exa, SourceError::Network("timed out".into())), (SourceId::DuckDuckGo, SourceError::Blocked)];
+        assert_eq!(without_hit("q", unreachable).unwrap_err(), "No search service could answer: Exa (free): unreachable (timed out); DuckDuckGo: blocked automated searches");
     }
 
     #[test]
-    fn caps_long_queries() {
-        let capped = scrub_query(&"word ".repeat(100), "");
-        assert!(capped.chars().count() <= MAX_QUERY_CHARS && capped.chars().count() > MAX_QUERY_CHARS - "word ".len());
+    fn results_serialise_without_the_long_source_text() {
+        let result = WebResult { title: "t".into(), url: "https://x".into(), snippet: "s".into(), source: "Exa".into(), body: "long".into() };
+        let json = serde_json::to_value(&result).unwrap();
+        assert!(json.get("body").is_none());
+        assert_eq!(json["source"], "Exa");
     }
 
     #[test]
-    fn drops_results_that_are_not_about_the_question() {
-        let result = |title: &str| WebResult { title: title.into(), url: "https://x".into(), snippet: String::new() };
-        let kept = relevant(vec![result("Accessing Cloud PCs"), result("Insert a worksheet in Excel")], "shortcut to insert a new worksheet in excel");
-        assert_eq!(kept, vec![result("Insert a worksheet in Excel")]);
-    }
-
-    #[test]
-    fn reads_stack_exchange_excerpts() {
-        let body = json!({ "items": [{ "question_id": 42, "title": "Freeze top row &amp; column", "excerpt": "Go to <span class=\"highlight\">View</span> &gt; Freeze Panes" }] });
-        assert_eq!(parse_stack(&body), vec![WebResult { title: "Freeze top row & column".into(), url: "https://superuser.com/q/42".into(), snippet: "Go to View > Freeze Panes".into() }]);
-    }
-
-    #[test]
-    fn reads_learn_and_brave_results_and_drops_odd_links() {
-        let learn = json!({ "results": [{ "title": "Keyboard shortcuts", "url": "https://learn.microsoft.com/k", "description": "Shift+F11 inserts a sheet." }, { "title": "x", "url": "javascript:alert(1)" }] });
-        assert_eq!(parse_learn(&learn).len(), 1);
-        let brave = json!({ "web": { "results": [{ "title": "Insert a worksheet", "url": "https://support.microsoft.com/w", "description": "Select <strong>Shift+F11</strong>." }] } });
-        assert_eq!(parse_brave(&brave)[0].snippet, "Select Shift+F11 .");
+    fn keyless_sources_are_always_in_the_chain_in_order() {
+        let ids = chain_ids();
+        let tail: Vec<_> = ids.iter().rev().take(3).rev().copied().collect();
+        assert_eq!(tail, vec![SourceId::Exa, SourceId::DuckDuckGo, SourceId::StackExchange]);
     }
 }

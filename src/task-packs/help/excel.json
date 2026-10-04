@@ -1,0 +1,42 @@
+[
+  {
+    "id": "excel-pivot-table",
+    "app": "excel",
+    "title": "Create a PivotTable",
+    "keywords": ["pivot", "pivottable", "pivot table", "summarize", "summarise", "summary", "analyze", "analyse", "totals by", "insert pivottable"],
+    "steps": [
+      "Select the cells you want to create a PivotTable from.",
+      "Select Insert > PivotTable.",
+      "Choose where the PivotTable goes: New Worksheet or Existing Worksheet, then select OK.",
+      "In the PivotTable Fields pane, check the fields you want: text fields go to Rows, numbers go to Values.",
+      "Drag a field between the Filters, Columns, Rows and Values areas to rearrange the table."
+    ],
+    "source": { "title": "Create a PivotTable to analyze worksheet data", "url": "https://support.microsoft.com/en-us/office/create-a-pivottable-to-analyze-worksheet-data-a9a84538-bfe9-40a9-a8e9-f99134456576" }
+  },
+  {
+    "id": "excel-freeze-panes",
+    "app": "excel",
+    "title": "Freeze panes to lock rows and columns",
+    "keywords": ["freeze", "freeze panes", "freeze top row", "freeze first column", "lock row", "lock column", "keep header visible", "header row", "unfreeze"],
+    "steps": [
+      "To keep the top row in view, select View > Freeze Panes > Freeze Top Row.",
+      "To keep the first column in view, select View > Freeze Panes > Freeze First Column.",
+      "To lock several rows and columns, select the cell below the rows and to the right of the columns you want to keep visible, then select View > Freeze Panes > Freeze Panes.",
+      "To undo it, select View > Freeze Panes > Unfreeze Panes."
+    ],
+    "source": { "title": "Freeze panes to lock rows and columns", "url": "https://support.microsoft.com/en-us/office/freeze-panes-to-lock-rows-and-columns-dab2ffc9-020d-4026-8121-67dd25f2508f" }
+  },
+  {
+    "id": "excel-insert-sheet",
+    "app": "excel",
+    "title": "Insert or delete a worksheet",
+    "keywords": ["new sheet", "insert sheet", "add sheet", "another sheet", "insert worksheet", "new worksheet", "sheet tab", "delete sheet", "rename sheet"],
+    "steps": [
+      "Select the New Sheet (+) button at the bottom of the workbook, next to the sheet tabs.",
+      "Or select Home > Insert > Insert Sheet.",
+      "To rename the sheet, double-click its tab, type the new name and press Enter.",
+      "To delete a sheet, right-click its tab and select Delete."
+    ],
+    "source": { "title": "Insert or delete a worksheet", "url": "https://support.microsoft.com/en-us/excel/get-started/insert-or-delete-a-worksheet" }
+  }
+]

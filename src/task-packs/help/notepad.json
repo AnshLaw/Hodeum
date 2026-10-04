@@ -1,0 +1,14 @@
+[
+  {
+    "id": "notepad-save",
+    "app": "notepad",
+    "title": "Save a file in Notepad",
+    "keywords": ["save", "save as", "save file", "ctrl s", "txt", "text file"],
+    "steps": [
+      "Select File > Save, or press Ctrl+S.",
+      "The first time (or with File > Save as), choose a folder and type a name in the File name box.",
+      "Select Save."
+    ],
+    "source": { "title": "Help in Notepad", "url": "https://support.microsoft.com/en-us/windows/apps/help-in-notepad" }
+  }
+]

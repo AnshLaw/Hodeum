@@ -1,0 +1,28 @@
+[
+  {
+    "id": "whatsapp-pin-chat",
+    "app": "whatsapp",
+    "title": "Pin or unpin a chat",
+    "keywords": ["pin", "pin chat", "unpin", "top of chats", "keep chat on top", "pinned"],
+    "steps": [
+      "Click the chat you'd like to pin, then open its menu (right-click the chat, or click the small arrow that appears on it).",
+      "Click Pin.",
+      "Choose how long the pin should last, then click Pin.",
+      "To unpin, open the pinned chat's menu and click Unpin. You can pin up to three chats."
+    ],
+    "source": { "title": "How to pin or unpin a chat", "url": "https://faq.whatsapp.com/645907560577342/?cms_platform=windows-desktop" }
+  },
+  {
+    "id": "whatsapp-send-file",
+    "app": "whatsapp",
+    "title": "Send a file, photo or document",
+    "keywords": ["send file", "send document", "send pdf", "send photo", "attach", "attachment", "pdf", "share file"],
+    "steps": [
+      "Open the individual or group chat.",
+      "Click Attach (the + next to the message box), then choose the type: Document, or Photos & videos.",
+      "Pick the file, click Open, then click Send.",
+      "You can also drag a file into the chat. Documents can be up to 2 GB."
+    ],
+    "source": { "title": "How to send media, contacts, or location", "url": "https://faq.whatsapp.com/453914586839706/?cms_platform=windows-desktop" }
+  }
+]

@@ -1,13 +1,18 @@
 import type { ChatMessage } from "../data/types";
 import { COPY } from "../lib/copy";
+import { webSources } from "../providers/vision/qwen-chat-provider";
 import type { CapturedFrame } from "../providers/vision/types";
+import { localHelp } from "../providers/web/local-help";
 import type { WebProgress, WebSearch, WebSearchSource } from "../providers/web/types";
+import { errorText, sourceHosts, withDeadline } from "../providers/web/util";
 import type { ChatProvider, WindowInfo, WindowSource } from "./services";
 
-/** Sources kept with a reply; the model sees all results, the learner the main ones. */
-const SHOWN_SOURCES = 3;
-/** Rust gives each source 8 s and asks them together; past this the answer comes from the local model alone. */
-export const WEB_SEARCH_TIMEOUT_MS = 12_000;
+export { sourceHosts };
+
+/** Sites named in the status line while Hodey reads. */
+const SHOWN_HOSTS = 3;
+/** Rust budgets 5.5 s for search plus reading pages; past this the answer comes from the local model alone. */
+export const WEB_SEARCH_TIMEOUT_MS = 8_000;
 
 export interface ReplyDeps {
   chat: ChatProvider;
@@ -28,55 +33,27 @@ export interface ReplyOptions {
 export interface ReplyResult {
   text: string;
   web?: ChatMessage["web"];
-  /** The search failed; the answer came from the local model alone. */
+  /** Why the web couldn't help (search or deciding on one failed); the answer came from the local model alone. */
   webError?: string;
 }
 
-/** Each site once, without "www.", for "Searched … · superuser.com · learn.microsoft.com". */
-export function sourceHosts(urls: string[]): string[] {
-  const hosts = urls.flatMap((url) => {
-    try {
-      return [new URL(url).hostname.replace(/^www\./, "")];
-    } catch {
-      return [];
-    }
-  });
-  return [...new Set(hosts)];
-}
+type Decision = { query?: string; error?: string };
 
-/** `work`, unless the learner cancels (rejects with the abort reason) or it outlasts `ms`. */
-function withDeadline<T>(work: Promise<T>, ms: number, signal: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    if (signal.aborted) return reject(signal.reason);
-    const stop = () => reject(signal.reason);
-    const timer = setTimeout(() => reject(new Error(`No answer from the web within ${ms / 1000} s`)), ms);
-    signal.addEventListener("abort", stop, { once: true });
-    const settle = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", stop);
-    };
-    work.then(
-      (value) => {
-        settle();
-        resolve(value);
-      },
-      (error: unknown) => {
-        settle();
-        reject(error);
-      },
-    );
-  });
-}
-
-/** The model's generic query, or none. A failed decision means no search, not no answer. */
-async function decideQuery(chat: ChatProvider, history: ChatMessage[], signal: AbortSignal): Promise<string | undefined> {
+/** The model's generic query, or none. A failed decision means no search, not no answer, and says why. */
+async function decideQuery(chat: ChatProvider, history: ChatMessage[], signal: AbortSignal): Promise<Decision> {
   try {
-    return await chat.searchQuery?.(history, signal);
+    return { query: await chat.searchQuery?.(history, signal) };
   } catch (error) {
     if (signal.aborted) throw error;
     console.error("Couldn't decide on a web search; answering locally", error);
-    return undefined;
+    return { error: COPY.webDecideFailed(errorText(error)) };
   }
+}
+
+function foundStatus(found: WebSearch): string {
+  const hosts = sourceHosts(webSources(found).map((s) => s.url)).slice(0, SHOWN_HOSTS).join(", ");
+  if (hosts === "") return found.failures?.length ? COPY.webNothingBecause(found.failures.join("; ")) : COPY.webNothing;
+  return found.cached ? COPY.webFromMemory(hosts) : COPY.readingWeb(hosts);
 }
 
 /** One search per question: no retries and no second search, whatever comes back. */
@@ -85,16 +62,15 @@ async function searchOnce(web: WebSearchSource, query: string, options: ReplyOpt
   options.onWeb?.({ state: "searching", query });
   try {
     const found = await withDeadline(web.search(query), WEB_SEARCH_TIMEOUT_MS, options.signal);
-    const hosts = sourceHosts(found.results.slice(0, SHOWN_SOURCES).map((r) => r.url));
-    options.onStatus(hosts.length > 0 ? COPY.readingWeb(hosts.join(", ")) : COPY.webNothing);
-    options.onWeb?.({ state: "found", query: found.query, hosts });
+    options.onStatus(foundStatus(found));
+    options.onWeb?.({ state: "found", query: found.query, hosts: sourceHosts(webSources(found).map((s) => s.url)).slice(0, SHOWN_HOSTS) });
     return { web: found };
   } catch (error) {
     if (options.signal.aborted) throw error;
     console.error("Web search failed; answering locally", error);
     options.onStatus(COPY.webFallback);
     options.onWeb?.({ state: "failed", query });
-    return { webError: error instanceof Error ? error.message : String(error) };
+    return { webError: errorText(error) };
   }
 }
 
@@ -107,18 +83,42 @@ async function streamAnswer(deps: ReplyDeps, history: ChatMessage[], frame: Capt
   return text;
 }
 
-/** Looks at the attached window, searches the web if allowed and useful, then streams Hodey's answer. */
-export async function produceReply(deps: ReplyDeps, history: ChatMessage[], context: WindowInfo | undefined, options: ReplyOptions): Promise<ReplyResult> {
-  const frame = context && deps.windows ? await deps.windows.capture(context.id) : undefined;
-  // The query is written from the learner's words alone; the frame is only for the local answer.
-  const query = options.webEnabled && deps.web ? await decideQuery(deps.chat, history, options.signal) : undefined;
-  if (!query || !deps.web) return { text: await streamAnswer(deps, history, frame, undefined, options) };
+/** The offline help for the learner's latest message, in the attached app; nothing leaves the PC. */
+function offlineHelp(history: ChatMessage[], context: WindowInfo | undefined): WebSearch | undefined {
+  const latest = history.filter((m) => m.role === "user").at(-1);
+  return latest ? localHelp(latest.content, context?.app) : undefined;
+}
+
+async function searchAndAnswer(deps: ReplyDeps & { web: WebSearchSource }, history: ChatMessage[], frame: CapturedFrame | undefined, query: string, options: ReplyOptions): Promise<ReplyResult> {
   try {
     const { web, webError } = await searchOnce(deps.web, query, options);
     const text = await streamAnswer(deps, history, frame, web, options);
-    const sources = web?.results.slice(0, SHOWN_SOURCES).map(({ title, url }) => ({ title, url }));
+    // The same numbered list the model cited from, so "[2]" is the second source shown.
+    const sources = web ? webSources(web).map(({ title, url }) => ({ title, url })) : undefined;
     return { text, ...(web && sources ? { web: { query: web.query, sources } } : {}), ...(webError ? { webError } : {}) };
   } finally {
     options.onWeb?.({ state: "finished" });
   }
+}
+
+/**
+ * Looks at the attached window, then grounds the answer: Hodey's offline help first, else (if the
+ * learner allowed it) one web search, else the local model alone. Streams Hodey's answer.
+ */
+export async function produceReply(deps: ReplyDeps, history: ChatMessage[], context: WindowInfo | undefined, options: ReplyOptions): Promise<ReplyResult> {
+  const frame = context && deps.windows ? await deps.windows.capture(context.id) : undefined;
+  const help = offlineHelp(history, context);
+  if (help) {
+    // Not returned as `web`: the chat labels that "Searched the web", and nothing was searched.
+    options.onStatus(COPY.offlineHelp(help.pages?.[0]?.title ?? help.results[0].title));
+    return { text: await streamAnswer(deps, history, frame, help, options) };
+  }
+  if (!options.webEnabled || !deps.web) return { text: await streamAnswer(deps, history, frame, undefined, options) };
+  // The query is written from the learner's words alone; the frame is only for the local answer.
+  const decision = await decideQuery(deps.chat, history, options.signal);
+  if (!decision.query) {
+    const text = await streamAnswer(deps, history, frame, undefined, options);
+    return { text, ...(decision.error ? { webError: decision.error } : {}) };
+  }
+  return searchAndAnswer({ ...deps, web: deps.web }, history, frame, decision.query, options);
 }

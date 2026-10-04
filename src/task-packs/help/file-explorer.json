@@ -1,0 +1,40 @@
+[
+  {
+    "id": "explorer-zip",
+    "app": "file-explorer",
+    "title": "Zip files and folders",
+    "keywords": ["zip", "compress", "compressed", "zipped", "archive", "make smaller", "zip file", "zip folder"],
+    "steps": [
+      "Select the files or folder you want to zip (hold Ctrl and click to pick several).",
+      "Right-click the selection and choose Compress to > ZIP File.",
+      "If you don't see Compress to, select Show more options > Send to > Compressed (zipped) folder.",
+      "A zipped folder with the same name appears in the same place; type a new name if you like and press Enter."
+    ],
+    "source": { "title": "Zip and unzip files", "url": "https://support.microsoft.com/en-us/windows/zip-and-unzip-files-8d28fa72-f2f9-712f-67df-f80cf89fd4e5" }
+  },
+  {
+    "id": "explorer-rename",
+    "app": "file-explorer",
+    "title": "Rename a file",
+    "keywords": ["rename", "change name", "file name", "new name", "f2"],
+    "steps": [
+      "In File Explorer, select the file you want to rename.",
+      "Select Rename on the toolbar, press F2, or right-click the file and select Rename.",
+      "Type the new name and press Enter."
+    ],
+    "source": { "title": "Rename a file", "url": "https://support.microsoft.com/en-us/office/collab-files/rename-a-file" }
+  },
+  {
+    "id": "explorer-new-folder",
+    "app": "file-explorer",
+    "title": "Create a new folder",
+    "keywords": ["new folder", "create folder", "make folder", "folder new"],
+    "steps": [
+      "Press Windows logo key + E to open File Explorer.",
+      "Go to the place where you want the new folder.",
+      "Select New > Folder.",
+      "Type a name for the folder and press Enter."
+    ],
+    "source": { "title": "Create a new folder", "url": "https://support.microsoft.com/en-us/office/create-a-new-folder-cbbfb6f5-59dd-4e5d-95f6-a12577952e17" }
+  }
+]

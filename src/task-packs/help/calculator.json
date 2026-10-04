@@ -1,0 +1,15 @@
+[
+  {
+    "id": "calculator-percent",
+    "app": "calculator",
+    "title": "Work out a percentage",
+    "keywords": ["percent", "percentage", "per cent", "%", "discount", "tip"],
+    "steps": [
+      "Use Standard mode (Open Navigation > Standard): Scientific mode has no % key.",
+      "Type the whole amount, for example 50, then select × (Multiply by).",
+      "Type the percentage, for example 10, then select %.",
+      "Select = to see the answer: 10% of 50 is 5."
+    ],
+    "source": { "title": "What does % key do in Windows Calculator? - Microsoft Q&A", "url": "https://learn.microsoft.com/en-us/answers/questions/2468570/what-does-key-do-in-windows-7-calculator" }
+  }
+]
