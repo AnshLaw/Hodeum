@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appQuery, classify, isSubstantive, opensWithQuestion, type Intent } from "./intent";
+import { appQuery, asksAboutScreen, classify, type Intent } from "./intent";
 
 /** The 30 cases the idle-loop investigation validated, plus the Hinglish and Hindi ones. */
 const CASES: [string, Intent][] = [
@@ -50,6 +50,9 @@ const CASES: [string, Intent][] = [
   ["42 17", "noise"],
   ["how many sheets are there", "question"],
   ["explain this screen", "unclear"],
+  ["pivot table kya hai", "question"],
+  ["क्या डार्क मोड चालू है", "question"],
+  ["dark mode kahan hai", "question"],
   ["क्या आप मुझे डार्क मोड चालू करना सिखा सकते हैं", "task"],
   ["kya aap mujhe pivot table banana sikha sakte ho", "task"],
   ["मुझे डार्क मोड चालू करना सीखना है", "task"],
@@ -83,26 +86,57 @@ describe("classify", () => {
   });
 });
 
-describe("isSubstantive", () => {
-  it("is two or more real words, in any language", () => {
-    for (const said of ["explain this screen", "tell me about this page", "new tab", "इस पेज के बारे में बताओ", "is page ke bare mein batao"]) {
-      expect(isSubstantive(said), said).toBe(true);
+describe("asksAboutScreen", () => {
+  it("is asking Hodey to explain, describe or tell, in English, Hinglish or Hindi", () => {
+    const asks = [
+      "explain this screen",
+      "tell me about this page",
+      "Can you describe what's on my screen?",
+      "please summarize this page",
+      "show me the insert tab",
+      "इस पेज के बारे में बताओ",
+      "is page ke bare mein batao",
+      "ye samjhao",
+      "mujhe batao na",
+      "is screen ko explain karo",
+    ];
+    for (const said of asks) expect(asksAboutScreen(said), said).toBe(true);
+  });
+
+  it("is pointing at something on screen", () => {
+    for (const said of ["this button", "that error", "anything wrong with this page", "इस बटन का मतलब", "ye button"]) {
+      expect(asksAboutScreen(said), said).toBe(true);
     }
   });
 
-  it("isn't a fragment, a filler phrase, thanks or a count", () => {
-    for (const said of ["the tab", "let me think", "I don't know", "never mind", "the third one", "give me a minute", "sounds good", "yes please", "haan theek hai", "okay thank you", "one two three"]) {
-      expect(isSubstantive(said), said).toBe(false);
-    }
-  });
-});
-
-describe("opensWithQuestion", () => {
-  it("is a question word or helper verb first, not a request with one inside", () => {
-    expect(opensWithQuestion("What is a pivot table?")).toBe(true);
-    expect(opensWithQuestion("how many sheets are there")).toBe(true);
-    expect(opensWithQuestion("how do I make a pivot table")).toBe(false);
-    expect(opensWithQuestion("क्या आप मुझे डार्क मोड चालू करना सिखा सकते हैं")).toBe(false);
+  it("isn't thanks, a sign-off, a mic check, a remark to someone else or speech recognition's noise", () => {
+    const chatter = [
+      "shukriya hodey",
+      "dhanyavaad hodey",
+      "शुक्रिया होडी",
+      "bahut badhiya",
+      "that makes sense",
+      "great job hodey",
+      "bye hodey",
+      "see you later",
+      "can you hear me clearly",
+      "hello can you hear me now",
+      "mic testing one two three",
+      "testing the mic",
+      "meri awaaz aa rahi hai",
+      "sunai de raha hai",
+      "sorry I wasn't talking to you",
+      "I was talking to someone else",
+      "never mind forget it",
+      "koi baat nahi",
+      "Thank you for watching, see you next time",
+      "subscribe to my channel",
+      "We are okay we are going to put monster tricks out a little bit",
+      "new tab",
+      "I'll tell you later",
+      "let me show you something",
+    ];
+    for (const said of chatter) expect(asksAboutScreen(said), said).toBe(false);
   });
 });
 

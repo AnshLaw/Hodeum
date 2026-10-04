@@ -3,7 +3,7 @@ import { withoutAddresses } from "../../providers/web/scrub";
 import { goalEvent, goalEvents } from "../hode/bridge";
 import type { HodeEvent, HodeState } from "../hode/model";
 import { appChoiceEvent, idleOpenAppEvent, openAppEvent } from "../hode/open-app";
-import { classify, isAcknowledgement, isSubstantive, opensWithQuestion, type Intent } from "./intent";
+import { asksAboutScreen, classify, isAcknowledgement, type Intent } from "./intent";
 
 export { isAcknowledgement } from "./intent";
 
@@ -196,17 +196,18 @@ const TEACH_ME =
   /^(?:how (?:do|can|would|should|could) (?:i|we|you)|how to|where do i|teach me|show me how|help me|i want to|i need to|i'd like to|(?:can|could|will|would) you (?:teach|show|help))|(?:kaise|sikhao|sikha do)|कैसे|सिखाओ|सिखा दो/i;
 
 /**
- * Idle, once it's neither small talk nor noise: a pack's lesson, a task or a request to be taught (planned into a
- * Hode, which says so while vision loads), or a question about the screen. A pack's words start its lesson even
- * around a Hindi question word ("क्या आप मुझे डार्क मोड चालू करना सिखा सकते हैं"); one that opens with a question
- * word ("what is a pivot table?") is answered instead. Anything else with a few real words in it ("explain this
- * screen") is asked about the screen.
+ * Idle, once it's neither small talk nor noise. Asking to be taught ("how do I…", "teach me…", "kaise…", "सिखाओ") or
+ * a task is planned into a Hode (which says so while vision loads), a pack's lesson when one fits. Any other
+ * question is answered, in any language ("pivot table kya hai"); a pack's own words start its lesson. Anything else
+ * is asked about the screen only when the learner asks Hodey in so many words ("explain this screen"): thanks,
+ * sign-offs and talk meant for someone else go unanswered.
  */
 function askOrStart(text: string, intent: Intent, packs: TaskPack[], openAllowed: boolean, visionStarting: boolean, apps: InstalledApp[]): HodeEvent[] {
   const goal = goalEvent(text, { packs, openAllowed, apps, visionStarting });
-  if (goal.type === "GOAL_SUBMITTED" && goal.pack && !opensWithQuestion(text)) return [{ type: "START_HODE" }, goal];
   if (intent === "task" || TEACH_ME.test(text)) return [{ type: "START_HODE" }, goal];
-  return intent === "question" || isSubstantive(text) ? [question(text)] : [];
+  if (intent === "question") return [question(text)];
+  if (goal.type === "GOAL_SUBMITTED" && goal.pack) return [{ type: "START_HODE" }, goal];
+  return asksAboutScreen(text) ? [question(text)] : [];
 }
 
 /**
