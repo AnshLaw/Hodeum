@@ -147,12 +147,17 @@ async fn get_json(client: &reqwest::Client, url: &str, params: &[(&str, &str)], 
     serde_json::from_str(&response.text().await.map_err(|e| e.to_string())?).map_err(|e| e.to_string())
 }
 
-/// Stack Exchange and Microsoft Learn together; one failing still leaves the other.
+/// Stack Exchange and Microsoft Learn at the same time, so a slow one can't double the wait; one
+/// failing still leaves the other.
 async fn keyless(client: &reqwest::Client, query: &str) -> Result<Vec<WebResult>, String> {
-    let stack = [("order", "desc"), ("sort", "relevance"), ("q", query), ("site", "superuser"), ("pagesize", STACK_PAGE)];
+    let (stack_client, stack_query) = (client.clone(), query.to_string());
+    let stack = tauri::async_runtime::spawn(async move {
+        let params = [("order", "desc"), ("sort", "relevance"), ("q", stack_query.as_str()), ("site", "superuser"), ("pagesize", STACK_PAGE)];
+        get_json(&stack_client, STACK_URL, &params, None).await
+    });
     let learn = [("search", query), ("locale", "en-us"), ("$top", LEARN_PAGE)];
-    let stack = get_json(client, STACK_URL, &stack, None).await;
     let learn = get_json(client, LEARN_URL, &learn, None).await;
+    let stack = stack.await.map_err(|e| format!("The Stack Exchange search stopped: {e}")).and_then(|result| result);
     match (stack, learn) {
         (Err(a), Err(b)) => Err(format!("{a}; {b}")),
         (stack, learn) => {
