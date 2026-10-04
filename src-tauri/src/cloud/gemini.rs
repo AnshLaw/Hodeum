@@ -1,10 +1,15 @@
 //! Opt-in Gemini reasoning (PRD §10.1). Only text leaves the PC: the lesson step, the skill level
 //! and UI Automation labels with their rectangles. No screenshot, audio or learner words.
 
-use std::time::Duration;
+use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use reqwest::header::RETRY_AFTER;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::{json, Value};
+
+use super::gemini_guard::{backoff, retry_delay, Guard};
 
 const API_BASE: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 /// Dev builds only: overrides the model chosen in Settings > Cloud.
@@ -15,6 +20,8 @@ const DEFAULT_MODEL: &str = "gemini-3.5-flash-lite";
 const MAX_MODEL_CHARS: usize = 80;
 /// A slow cloud answer is worse than the local one; the policy then cools Gemini down.
 const TIMEOUT: Duration = Duration::from_secs(6);
+/// The model list is checked before the first request; past this the chosen model is simply tried.
+const LIST_WAIT: Duration = Duration::from_secs(2);
 /// Gemini 3 models think by default; a tutor's next step needs little of it.
 const GEMINI_3_PREFIX: &str = "gemini-3";
 const THINKING_LEVEL: &str = "low";
@@ -126,22 +133,96 @@ fn describe(error: reqwest::Error) -> String {
     message
 }
 
-async fn post(key: &str, model: &str, body: &Value) -> Result<Value, String> {
-    let client = reqwest::Client::builder().timeout(TIMEOUT).build().map_err(|e| e.to_string())?;
-    let response = client
-        .post(endpoint(model))
-        .header("x-goog-api-key", key)
-        .header("Content-Type", "application/json")
-        .body(body.to_string())
-        .send()
-        .await
-        .map_err(|e| format!("Couldn't reach Gemini: {}", describe(e)))?;
-    let status = response.status();
-    let text = response.text().await.map_err(|e| format!("Gemini's answer was cut off: {}", describe(e)))?;
-    if !status.is_success() {
-        return Err(format!("Gemini answered {status}: {}", truncate(&text)));
+/// Why a request failed: an HTTP status worth acting on (404, 429, 503), or anything else.
+enum Failure {
+    Status { status: StatusCode, body: String, retry_after: Option<String> },
+    Other(String),
+}
+
+impl Failure {
+    fn message(&self) -> String {
+        match self {
+            Failure::Status { status, body, .. } => format!("Gemini answered {status}: {}", truncate(body)),
+            Failure::Other(message) => message.clone(),
+        }
     }
-    serde_json::from_str(&text).map_err(|e| format!("Gemini's response isn't JSON: {e}"))
+}
+
+static GUARD: LazyLock<Mutex<Guard>> = LazyLock::new(Mutex::default);
+
+/// The guard holds only counters and timestamps, so state left by a panicking holder is still usable.
+fn guard() -> MutexGuard<'static, Guard> {
+    GUARD.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+async fn post(key: &str, model: &str, body: &Value) -> Result<Value, Failure> {
+    let client = reqwest::Client::builder().timeout(TIMEOUT).build().map_err(|e| Failure::Other(e.to_string()))?;
+    let sent = client.post(endpoint(model)).header("x-goog-api-key", key).header("Content-Type", "application/json").body(body.to_string()).send().await;
+    let response = sent.map_err(|e| Failure::Other(format!("Couldn't reach Gemini: {}", describe(e))))?;
+    let status = response.status();
+    let retry_after = response.headers().get(RETRY_AFTER).and_then(|v| v.to_str().ok()).map(str::to_string);
+    let text = response.text().await.map_err(|e| Failure::Other(format!("Gemini's answer was cut off: {}", describe(e))))?;
+    if !status.is_success() {
+        return Err(Failure::Status { status, body: text, retry_after });
+    }
+    serde_json::from_str(&text).map_err(|e| Failure::Other(format!("Gemini's response isn't JSON: {e}")))
+}
+
+fn entropy() -> u32 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or_default()
+}
+
+/// One request, and one jittered retry if Gemini is overloaded (503). Every attempt counts toward the RPM.
+async fn send(key: &str, model: &str, body: &Value) -> Result<Value, Failure> {
+    guard().admit(model, Instant::now()).map_err(Failure::Other)?;
+    match post(key, model, body).await {
+        Err(Failure::Status { status: StatusCode::SERVICE_UNAVAILABLE, .. }) => {
+            tokio::time::sleep(backoff(entropy())).await;
+            guard().admit(model, Instant::now()).map_err(Failure::Other)?;
+            post(key, model, body).await
+        }
+        other => other,
+    }
+}
+
+/// Learns which models exist once per session. A slow or failed list just leaves the 404 check to do it.
+async fn learn_models() {
+    if !guard().needs_list() {
+        return;
+    }
+    match tokio::time::timeout(LIST_WAIT, super::catalog::gemini_list_models()).await {
+        Ok(Ok(models)) => guard().set_listed(models.into_iter().map(|model| model.id).collect()),
+        Ok(Err(e)) => eprintln!("couldn't list Gemini models; trusting the chosen one: {e}"),
+        Err(_) => eprintln!("listing Gemini models took over {}s; trusting the chosen one", LIST_WAIT.as_secs()),
+    }
+}
+
+/// The chosen model if Google has it, else the default; a 404 retires the model for the session.
+async fn ask(key: &str, chosen: &str, request: &GeminiRequest) -> Result<Value, Failure> {
+    learn_models().await;
+    let model = guard().usable(chosen, DEFAULT_MODEL);
+    if model != chosen {
+        eprintln!("Gemini has no model \"{chosen}\"; asking {model}");
+    }
+    match send(key, &model, &build_body(request, &model)).await {
+        Err(Failure::Status { status: StatusCode::NOT_FOUND, .. }) if model != DEFAULT_MODEL => {
+            eprintln!("Gemini answered 404 for \"{model}\"; using {DEFAULT_MODEL} from now on");
+            guard().mark_unavailable(&model);
+            send(key, DEFAULT_MODEL, &build_body(request, DEFAULT_MODEL)).await
+        }
+        other => other,
+    }
+}
+
+/// A 429 pauses Gemini for as long as Google asked, so the next steps go local without a request.
+fn explain(failure: Failure) -> String {
+    match failure {
+        Failure::Status { status: StatusCode::TOO_MANY_REQUESTS, body, retry_after } => {
+            let wait = guard().pause(Instant::now(), retry_delay(&body, retry_after.as_deref()));
+            format!("Gemini's rate limit was reached (429); local reasoning for the next {}s", wait.as_secs())
+        }
+        other => other.message(),
+    }
 }
 
 /// Asks Gemini for the next teaching action. The key is read here and never returned.
@@ -150,7 +231,7 @@ pub async fn gemini_reason(request: GeminiRequest, model: Option<String>) -> Res
     validate(&request)?;
     let model = model_id(model, super::dev_env::var(MODEL_ENV), cfg!(debug_assertions))?;
     let key = super::keys::read("gemini").ok_or("No Gemini key is saved.")?;
-    let response = post(&key, &model, &build_body(&request, &model)).await.inspect_err(|e| eprintln!("Gemini request failed: {e}"))?;
+    let response = ask(&key, &model, &request).await.map_err(explain).inspect_err(|e| eprintln!("Gemini request failed: {e}"))?;
     extract_reply(&response).inspect_err(|e| eprintln!("Gemini reply unusable: {e}"))
 }
 
@@ -233,6 +314,15 @@ mod tests {
         let reply = tauri::async_runtime::block_on(gemini_reason(request(), None)).expect("Gemini answered");
         let model = model_id(None, super::super::dev_env::var(MODEL_ENV), true).expect("a valid model");
         println!("Gemini ({model}): {reply}");
+        assert!(reply["kind"].as_str().is_some_and(|kind| KINDS.contains(&kind)), "{reply}");
+    }
+
+    /// The list check swaps a model Google doesn't have for the default, so no request 404s.
+    #[test]
+    #[ignore = "live: lists models (free) and spends one small Gemini request"]
+    fn live_gemini_falls_back_from_a_model_google_doesnt_have() {
+        let reply = tauri::async_runtime::block_on(gemini_reason(request(), Some("gemini-0-made-up".into()))).expect("the default model answered");
+        println!("Gemini (made-up model, default answered): {reply}");
         assert!(reply["kind"].as_str().is_some_and(|kind| KINDS.contains(&kind)), "{reply}");
     }
 }
