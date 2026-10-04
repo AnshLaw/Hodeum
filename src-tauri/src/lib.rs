@@ -1,9 +1,12 @@
 mod account;
 #[cfg(test)]
 mod ai_root;
+#[cfg(test)]
+mod build_stamp;
 mod app_focus;
 mod app_launch;
 mod app_window;
+mod apps;
 mod chat_context;
 mod child_job;
 mod cloud;
@@ -27,8 +30,39 @@ pub(crate) const ANNOTATE_EVENT: &str = "annotate:start";
 /// The per-user Run registry value for "Start Hodeum when I sign in"; the uninstaller removes it
 /// (src-tauri/installer-hooks.nsh).
 const AUTOSTART_NAME: &str = "Hodeum";
+/// %LOCALAPPDATA%\com.hodeum.app\logs\hodeum.log
+const LOG_FILE_NAME: &str = "hodeum";
+/// One 5 MB file plus the previous one.
+const LOG_MAX_BYTES: u128 = 5_000_000;
+/// WebView2 reads these at startup: they would open a DevTools port (full IPC) or attach a script
+/// debugger. The test harness sets the first one for debug builds only.
+#[cfg(not(debug_assertions))]
+const WEBVIEW_DEBUG_VARS: [&str; 2] = ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "WEBVIEW2_PIPE_FOR_SCRIPT_DEBUGGER"];
+
+/// Release builds ignore the WebView2 debugging variables, so nobody who can set the user's
+/// environment gets a debugger into Hodeum. Must run before any webview is created.
+fn harden_webview_env() {
+    #[cfg(not(debug_assertions))]
+    for name in WEBVIEW_DEBUG_VARS {
+        std::env::remove_var(name);
+    }
+}
+
+/// Logs to stdout (tauri dev's terminal) and a rotating file, in local time.
+fn logging() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
+    tauri_plugin_log::Builder::new()
+        .targets([Target::new(TargetKind::Stdout), Target::new(TargetKind::LogDir { file_name: Some(LOG_FILE_NAME.into()) })])
+        .max_file_size(LOG_MAX_BYTES)
+        .rotation_strategy(RotationStrategy::KeepOne)
+        .timezone_strategy(TimezoneStrategy::UseLocal)
+        .level(log::LevelFilter::Info)
+        .build()
+}
 
 fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let exe = std::env::current_exe().map(|exe| exe.display().to_string()).unwrap_or_else(|error| format!("exe unknown: {error}"));
+    log::info!("Hodeum {} starting ({exe})", tray::build_info());
     surfaces::setup(app)?;
     dock::keep_top_anchored(app)?;
     app_window::keep_alive(app)?;
@@ -53,7 +87,11 @@ fn notch_camera(webview: &tauri::Webview, kind: PermissionKind) -> PermissionRes
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    harden_webview_env();
     let app = tauri::Builder::default()
+        // First, so a second launch hands over and exits before it hooks input or starts a model.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| tray::on_second_launch(app, &argv, &cwd)))
+        .plugin(logging())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(db::DATABASE_URL, db::migrations())
@@ -84,17 +122,23 @@ pub fn run() {
             dock::set_notch_tall,
             dock::begin_notch_drag,
             vlm::vlm_status,
+            tray::build_info,
+            tray::debug_quit,
             app_window::open_app_window,
             chat_context::list_windows,
             chat_context::last_app_window,
             chat_context::capture_window,
             app_focus::focus_app,
             app_launch::launch_app,
+            apps::catalog::list_apps,
+            apps::catalog::open_installed_app,
             web_search::web_search,
             voice::voice_status,
             voice::voice_start,
             voice::voice_stop,
             voice::voice_converse,
+            voice::voice_warm_mic,
+            voice::set_speech_hints,
             voice::set_speech_language,
             voice::set_hands_free,
             voice::tts_speak,

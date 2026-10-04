@@ -12,7 +12,9 @@ use tauri::{AppHandle, Emitter};
 
 /// Holding this long, without pressing anything else, starts talking.
 pub const HOLD: Duration = Duration::from_millis(300);
-const TICK: Duration = Duration::from_millis(25);
+/// Only the hold needs the clock (releases and chords are key events), so a talk starts at most one
+/// tick after `HOLD`.
+const TICK: Duration = Duration::from_millis(40);
 const VK_RCONTROL: u32 = 0xA3;
 const VK_RMENU: u32 = 0xA5;
 const VK_A: u32 = 0x41;
@@ -151,7 +153,7 @@ fn dispatch(app: &AppHandle, action: Action) {
         Action::Command(other) => Err(format!("no command for Hodey key + {other}")),
     };
     if let Err(reason) = result {
-        eprintln!("Hodey key: {reason}");
+        log::warn!("Hodey key: {reason}");
     }
 }
 
@@ -168,7 +170,7 @@ pub fn spawn(app: AppHandle) -> Result<(), String> {
         thread::sleep(TICK);
         let action = match gesture().lock() {
             Ok(mut state) => state.on_tick(Instant::now()),
-            Err(e) => return eprintln!("Hodey key state poisoned: {e}"),
+            Err(e) => return log::error!("Hodey key state poisoned: {e}"),
         };
         send(action);
     });
@@ -203,6 +205,19 @@ mod tests {
         assert_eq!(g.on_tick(later(t, 320)), Some(Action::TalkStart));
         assert_eq!(g.on_tick(later(t, 400)), None);
         assert_eq!(g.on_key(VK_RCONTROL, false, later(t, 2000)), (Some(Action::TalkEnd), false));
+    }
+
+    #[test]
+    fn talking_starts_within_one_tick_of_the_hold() {
+        let mut g = Gesture::new(HodeyKey::RightCtrl);
+        let t = Instant::now();
+        g.on_key(VK_RCONTROL, true, t);
+        let mut elapsed = Duration::ZERO;
+        while g.on_tick(t + elapsed).is_none() {
+            elapsed += TICK;
+            assert!(elapsed <= HOLD + TICK, "no talk after {elapsed:?}");
+        }
+        assert!(elapsed >= HOLD);
     }
 
     #[test]

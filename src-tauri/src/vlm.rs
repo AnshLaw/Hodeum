@@ -19,14 +19,59 @@ use crate::child_job::ChildJob;
 pub const VLM_HOST: &str = "127.0.0.1";
 pub const VLM_PORT: u16 = 8737;
 const SERVER_EXE: &str = "runtime/llama/llama-server.exe";
-const MODEL_FILE: &str = "models/Qwen3VL-4B-Instruct-Q4_K_M.gguf";
-const MMPROJ_FILE: &str = "models/mmproj-Qwen3VL-4B-Instruct-F16.gguf";
 const LOG_FILE: &str = "runtime/llama-server.log";
 const SETUP_HINT: &str = "Run scripts/setup-local-ai.ps1 to install the local vision model.";
-/// Enough for one ~1280 px screenshot (~1k image tokens) plus the prompt and a short answer.
-const CONTEXT_TOKENS: &str = "8192";
-/// Offload every layer: the 4B Q4 model plus projector fits the 6 GB RTX 3060.
+/// Picks a candidate model for benchmarking (see `PROFILES`); unset means the default.
+const PROFILE_ENV: &str = "HODEUM_VLM_PROFILE";
+/// One screenshot (1024-1600 image tokens) plus ~80 candidate controls and a short answer; the
+/// largest prompt seen was ~2.6k tokens.
+const CONTEXT_TOKENS: &str = "6144";
+/// Offload every layer: the 4B Q4 model plus projector fits the 6 GB RTX 3060 (CPU vision took minutes).
 const GPU_LAYERS: &str = "99";
+/// One slot: parallel slots split decode speed (54 -> 8-16 tok/s) and reserve more cache; the
+/// web side aborts stale requests instead.
+const PARALLEL_SLOTS: &str = "1";
+/// An 8-bit attention cache with flash attention: 459 MiB instead of 1152 MiB at this context.
+const KV_CACHE_TYPE: &str = "q8_0";
+/// Qwen-VL grounding needs at least 1024 image tokens (llama.cpp warns below that); the cap keeps
+/// a large window's screenshot inside the context.
+const IMAGE_MIN_TOKENS: &str = "1024";
+const IMAGE_MAX_TOKENS: &str = "1600";
+/// No host-RAM prompt cache: saving and restoring it stalled requests by 200-900 ms.
+const HOST_CACHE_MIB: &str = "0";
+
+/// A local vision model: its weights, its vision projector and any arguments it needs on top of
+/// the shared server settings. Every profile answers in 0-1000 coordinates, like Qwen3-VL.
+#[derive(Debug, PartialEq)]
+pub struct VlmProfile {
+    pub name: &'static str,
+    model: &'static str,
+    mmproj: &'static str,
+    extra_args: &'static [&'static str],
+}
+
+const QWEN3_VL_4B: VlmProfile = VlmProfile {
+    name: "qwen3-vl-4b",
+    model: "models/Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+    mmproj: "models/mmproj-Qwen3VL-4B-Instruct-F16.gguf",
+    extra_args: &[],
+};
+/// Candidate: stronger reasoning, OCR and Hindi; it thinks unless told not to.
+const QWEN35_4B: VlmProfile = VlmProfile {
+    name: "qwen35-4b",
+    model: "models/Qwen3.5-4B-Q4_K_M.gguf",
+    mmproj: "models/mmproj-Qwen3.5-4B-F16.gguf",
+    extra_args: &["--reasoning", "off"],
+};
+/// Candidate: a GUI-grounding specialist on the Qwen3-VL architecture.
+const GUI_OWL_4B: VlmProfile = VlmProfile {
+    name: "gui-owl-4b",
+    model: "models/GUI-Owl-1.5-4B-Instruct.Q4_K_M.gguf",
+    mmproj: "models/GUI-Owl-1.5-4B-Instruct.mmproj-f16.gguf",
+    extra_args: &[],
+};
+/// The first profile is the default.
+const PROFILES: [&VlmProfile; 3] = [&QWEN3_VL_4B, &QWEN35_4B, &GUI_OWL_4B];
 const MAX_RESTARTS: u32 = 3;
 const READY_TIMEOUT: Duration = Duration::from_secs(180);
 const POLL: Duration = Duration::from_millis(500);
@@ -121,15 +166,39 @@ fn port_is_free() -> bool {
     TcpListener::bind((VLM_HOST, VLM_PORT)).is_ok()
 }
 
-pub fn missing_files(root: &Path) -> Vec<&'static str> {
-    [SERVER_EXE, MODEL_FILE, MMPROJ_FILE].into_iter().filter(|file| !root.join(file).exists()).collect()
+/// The profile `name` picks (case and spaces ignored); unset or empty is the default. Only the
+/// built-in profiles exist, so the variable can't point the server at arbitrary files.
+pub fn profile_named(name: Option<&str>) -> Result<&'static VlmProfile, String> {
+    let wanted = name.map(|n| n.trim().to_ascii_lowercase()).unwrap_or_default();
+    if wanted.is_empty() {
+        return Ok(PROFILES[0]);
+    }
+    PROFILES.into_iter().find(|profile| profile.name == wanted).ok_or_else(|| {
+        let known: Vec<&str> = PROFILES.iter().map(|profile| profile.name).collect();
+        format!("{PROFILE_ENV}={wanted} is not a known vision model; use one of: {}", known.join(", "))
+    })
 }
 
-pub fn server_args(root: &Path, api_key: &str) -> Vec<String> {
+fn chosen_profile() -> Result<&'static VlmProfile, String> {
+    profile_named(std::env::var(PROFILE_ENV).ok().as_deref())
+}
+
+pub fn missing_files(root: &Path, profile: &VlmProfile) -> Vec<&'static str> {
+    [SERVER_EXE, profile.model, profile.mmproj].into_iter().filter(|file| !root.join(file).exists()).collect()
+}
+
+pub fn server_args(root: &Path, api_key: &str, profile: &VlmProfile) -> Vec<String> {
     let path = |file: &str| root.join(file).to_string_lossy().into_owned();
     let port = VLM_PORT.to_string();
-    let args = ["-m", &path(MODEL_FILE), "--mmproj", &path(MMPROJ_FILE), "--host", VLM_HOST, "--port", &port, "-ngl", GPU_LAYERS, "-c", CONTEXT_TOKENS, "--api-key", api_key];
-    args.iter().map(|arg| arg.to_string()).collect()
+    let files = ["-m", &path(profile.model), "--mmproj", &path(profile.mmproj)];
+    let network = ["--host", VLM_HOST, "--port", &port, "--api-key", api_key];
+    let memory = [
+        "-ngl", GPU_LAYERS, "-c", CONTEXT_TOKENS, "-np", PARALLEL_SLOTS, "-fa", "on", "-ctk", KV_CACHE_TYPE, "-ctv", KV_CACHE_TYPE,
+        "--cache-ram", HOST_CACHE_MIB,
+    ];
+    let vision = ["--image-min-tokens", IMAGE_MIN_TOKENS, "--image-max-tokens", IMAGE_MAX_TOKENS];
+    let all = files.iter().chain(&network).chain(&memory).chain(&vision).chain(profile.extra_args);
+    all.map(|arg| arg.to_string()).collect()
 }
 
 fn set_status(app: &AppHandle, status: VlmStatus) {
@@ -138,7 +207,7 @@ fn set_status(app: &AppHandle, status: VlmStatus) {
         *current = status.clone();
     }
     if let Err(error) = app.emit(STATUS_EVENT, status) {
-        eprintln!("failed to emit {STATUS_EVENT}: {error}");
+        log::error!("failed to emit {STATUS_EVENT}: {error}");
     }
 }
 
@@ -156,14 +225,14 @@ fn healthy() -> bool {
     response.starts_with("HTTP/1.1 200")
 }
 
-fn start_server(root: &Path, api_key: &str) -> Result<Child, String> {
+fn start_server(root: &Path, api_key: &str, profile: &VlmProfile) -> Result<Child, String> {
     if !port_is_free() {
         return Err(format!("port {VLM_PORT} is already in use by another program, so the local vision model won't start"));
     }
     let log = File::create(root.join(LOG_FILE)).map_err(|e| format!("couldn't create {LOG_FILE}: {e}"))?;
     let errors = log.try_clone().map_err(|e| e.to_string())?;
     Command::new(root.join(SERVER_EXE))
-        .args(server_args(root, api_key))
+        .args(server_args(root, api_key, profile))
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(errors))
         .creation_flags(CREATE_NO_WINDOW)
@@ -177,9 +246,9 @@ enum RunEnd {
 }
 
 /// Waits for the model to load, then watches the process until it exits or is stopped.
-fn run_once(app: &AppHandle, root: &Path) -> Result<RunEnd, String> {
+fn run_once(app: &AppHandle, root: &Path, profile: &VlmProfile) -> Result<RunEnd, String> {
     let api_key = new_api_key();
-    let mut child = start_server(root, &api_key)?;
+    let mut child = start_server(root, &api_key, profile)?;
     let vlm = app.state::<Vlm>();
     if let Err(reason) = bind_to_app(&vlm, &child) {
         // An untied server could outlive Hodeum and hold the port; don't run one.
@@ -217,17 +286,25 @@ fn run_once(app: &AppHandle, root: &Path) -> Result<RunEnd, String> {
 
 fn supervise(app: AppHandle) {
     let root = local_ai_root();
-    let missing = missing_files(&root);
+    let profile = match chosen_profile() {
+        Ok(profile) => profile,
+        Err(detail) => {
+            log::error!("local vision model: {detail}");
+            return set_status(&app, VlmStatus::Failed { detail });
+        }
+    };
+    let missing = missing_files(&root, profile);
     if !missing.is_empty() {
         return set_status(&app, VlmStatus::Missing { detail: format!("{SETUP_HINT} Missing: {}", missing.join(", ")) });
     }
+    log::info!("local vision model: {} ({})", profile.name, server_args(&root, "<per-launch key>", profile).join(" "));
     let mut last_error = String::new();
     for attempt in 0..=MAX_RESTARTS {
         set_status(&app, VlmStatus::Starting);
-        match run_once(&app, &root) {
+        match run_once(&app, &root, profile) {
             Ok(RunEnd::Stopped) => return,
             Ok(RunEnd::Exited(reason)) | Err(reason) => {
-                eprintln!("local vision model: {reason} (attempt {})", attempt + 1);
+                log::warn!("local vision model: {reason} (attempt {})", attempt + 1);
                 last_error = reason;
             }
         }
@@ -252,18 +329,68 @@ mod tests {
     #[test]
     fn reports_every_missing_file_for_an_empty_root() {
         let root = Path::new("Z:/definitely/not/here");
-        assert_eq!(missing_files(root), vec![SERVER_EXE, MODEL_FILE, MMPROJ_FILE]);
+        assert_eq!(missing_files(root, &QWEN3_VL_4B), vec![SERVER_EXE, QWEN3_VL_4B.model, QWEN3_VL_4B.mmproj]);
+    }
+
+    fn args_of(profile: &VlmProfile) -> Vec<String> {
+        server_args(Path::new("C:/hodeum"), "secret", profile)
+    }
+
+    fn value(args: &[String], flag: &str) -> Option<String> {
+        args.iter().position(|a| a == flag).map(|i| args[i + 1].clone())
     }
 
     #[test]
     fn binds_loopback_only_and_offloads_to_gpu() {
-        let args = server_args(Path::new("C:/hodeum"), "secret");
-        let value = |flag: &str| args.iter().position(|a| a == flag).map(|i| args[i + 1].clone());
-        assert_eq!(value("--host").as_deref(), Some("127.0.0.1"));
-        assert_eq!(value("--port").as_deref(), Some("8737"));
-        assert_eq!(value("-ngl").as_deref(), Some("99"));
-        assert!(value("--mmproj").unwrap().ends_with("mmproj-Qwen3VL-4B-Instruct-F16.gguf"));
-        assert_eq!(value("--api-key").as_deref(), Some("secret"));
+        let args = args_of(&QWEN3_VL_4B);
+        assert_eq!(value(&args, "--host").as_deref(), Some("127.0.0.1"));
+        assert_eq!(value(&args, "--port").as_deref(), Some("8737"));
+        assert_eq!(value(&args, "-ngl").as_deref(), Some("99"));
+        assert!(value(&args, "-m").unwrap().ends_with("Qwen3VL-4B-Instruct-Q4_K_M.gguf"));
+        assert!(value(&args, "--mmproj").unwrap().ends_with("mmproj-Qwen3VL-4B-Instruct-F16.gguf"));
+        assert_eq!(value(&args, "--api-key").as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn fits_the_6gb_gpu_with_one_slot_and_a_quantised_cache() {
+        let args = args_of(&QWEN3_VL_4B);
+        assert_eq!(value(&args, "-np").as_deref(), Some("1"), "one slot: stale requests are aborted, never queued in parallel");
+        assert_eq!(value(&args, "-c").as_deref(), Some("6144"));
+        assert_eq!(value(&args, "-fa").as_deref(), Some("on"));
+        assert_eq!(value(&args, "-ctk").as_deref(), Some("q8_0"));
+        assert_eq!(value(&args, "-ctv").as_deref(), Some("q8_0"));
+        assert_eq!(value(&args, "--cache-ram").as_deref(), Some("0"), "the host prompt cache stalled requests 200-900 ms");
+    }
+
+    #[test]
+    fn gives_screenshots_enough_image_tokens_to_ground() {
+        let args = args_of(&QWEN3_VL_4B);
+        assert_eq!(value(&args, "--image-min-tokens").as_deref(), Some("1024"));
+        assert_eq!(value(&args, "--image-max-tokens").as_deref(), Some("1600"));
+    }
+
+    #[test]
+    fn qwen3_vl_4b_is_the_default_profile() {
+        assert_eq!(profile_named(None).unwrap().name, "qwen3-vl-4b");
+        assert_eq!(profile_named(Some("")).unwrap().name, "qwen3-vl-4b");
+    }
+
+    #[test]
+    fn candidate_profiles_swap_the_files_and_add_their_own_args() {
+        let qwen35 = profile_named(Some("qwen35-4b")).unwrap();
+        let args = args_of(qwen35);
+        assert!(value(&args, "-m").unwrap().ends_with("Qwen3.5-4B-Q4_K_M.gguf"));
+        assert!(value(&args, "--mmproj").unwrap().ends_with("mmproj-Qwen3.5-4B-F16.gguf"));
+        assert_eq!(value(&args, "--reasoning").as_deref(), Some("off"), "Qwen3.5 thinks by default");
+        assert_eq!(value(&args, "-np").as_deref(), Some("1"), "candidates keep the shared server settings");
+        let owl = profile_named(Some(" GUI-Owl-4B ")).unwrap();
+        assert!(args_of(owl).iter().any(|a| a.ends_with("GUI-Owl-1.5-4B-Instruct.Q4_K_M.gguf")));
+    }
+
+    #[test]
+    fn an_unknown_profile_is_an_error_naming_the_choices() {
+        let error = profile_named(Some("gemma")).unwrap_err();
+        assert!(error.contains("gemma") && error.contains("qwen35-4b") && error.contains(PROFILE_ENV), "{error}");
     }
 
     #[test]

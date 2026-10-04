@@ -5,7 +5,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::surfaces::{keep_out_of_occlusion, NOTCH};
 
-const POLL_INTERVAL: Duration = Duration::from_millis(33);
+/// 20 Hz is quick enough for hover; faster polling only costs CPU.
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const ERROR_BACKOFF: Duration = Duration::from_secs(1);
 const HOVER_EVENT: &str = "notch:hover";
 
@@ -69,10 +70,10 @@ pub fn watch_presses(app: AppHandle, presses: std::sync::mpsc::Receiver<(i32, i3
                 Ok(true) => {}
                 Ok(false) => {
                     if let Err(error) = app.emit_to(NOTCH, OUTSIDE_PRESS_EVENT, ()) {
-                        eprintln!("couldn't tell the notch about a click elsewhere: {error}");
+                        log::warn!("couldn't tell the notch about a click elsewhere: {error}");
                     }
                 }
-                Err(error) => eprintln!("couldn't check where a click landed: {error}"),
+                Err(error) => log::warn!("couldn't check where a click landed: {error}"),
             }
         }
     });
@@ -103,7 +104,7 @@ pub fn spawn(app: AppHandle) {
                 Ok(())
             });
             if let Err(error) = result {
-                eprintln!("notch hit-test failed: {error}");
+                log::warn!("notch hit-test failed: {error}");
                 thread::sleep(ERROR_BACKOFF);
             }
         }

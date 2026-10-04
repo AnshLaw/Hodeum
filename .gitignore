@@ -36,3 +36,8 @@ dist-site/
 # Browser-test screenshots, snapshots and logs from the Playwright tools
 .playwright-mcp/
 brag-output/
+
+# Real-app test harness: run artifacts (screenshots, overlay/UIA dumps) and its compiled helper
+scripts/e2e/runs/
+scripts/e2e/*.dll
+scripts/e2e/target.log

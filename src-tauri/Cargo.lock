@@ -72,6 +72,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "android_log-sys"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84521a3cf562bc62942e294181d9eef17eb38ceb8c68677bc49f144e4c3d4f8d"
+
+[[package]]
+name = "android_logger"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbb4e440d04be07da1f1bf44fb4495ebd58669372fe0cffa6e48595ac5bd88a3"
+dependencies = [
+ "android_log-sys",
+ "env_filter",
+ "log",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1393,6 +1410,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
+name = "ego-tree"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b04dc5a38e4f151a79d9f2451ae6037fb6eaf5cba34771f44781f80e508498e3"
+
+[[package]]
 name = "either"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1460,6 +1483,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "env_filter"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bf3c259d255ca70051b30e2e95b5446cdb8949ac4cd22c0d7fd634d89f568e2"
+dependencies = [
+ "log",
+ "regex",
 ]
 
 [[package]]
@@ -1539,6 +1572,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
+]
+
+[[package]]
+name = "fern"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4316185f709b23713e41e3195f90edef7fb00c3ed4adc79769cf09cc762a3b29"
+dependencies = [
+ "log",
 ]
 
 [[package]]
@@ -2185,16 +2227,21 @@ name = "hodeum"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "image",
  "keyring",
+ "log",
  "regex",
  "reqwest",
  "rodio",
+ "scraper",
  "serde",
  "serde_json",
  "sherpa-onnx",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
+ "tauri-plugin-log",
+ "tauri-plugin-single-instance",
  "tauri-plugin-sql",
  "tokio",
  "uiautomation",
@@ -2477,6 +2524,8 @@ dependencies = [
  "moxcms",
  "num-traits",
  "png 0.18.1",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -3288,6 +3337,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "num_threads"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -4677,6 +4735,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "scraper"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bdd0be4d296f048bfb06dd01bbc80ef789ddd2e55583e8d2e6b804942abfabc2"
+dependencies = [
+ "cssparser",
+ "ego-tree",
+ "html5ever",
+ "precomputed-hash",
+ "selectors",
+ "tendril",
+]
+
+[[package]]
 name = "security-framework"
 version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5835,6 +5907,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-log"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "850d1e8f27d96203b7e6e6da1a2bf034c10f465b64a17c97e06940c9006385bf"
+dependencies = [
+ "android_logger",
+ "fern",
+ "log",
+ "objc2",
+ "objc2-foundation",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "swift-rs",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.21",
+ "time",
+]
+
+[[package]]
+name = "tauri-plugin-single-instance"
+version = "2.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee2c8fe2d6b75caed0153f91eda30ea1dea3bfb6710d5adb80456d2c035a569d"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "windows-sys 0.61.2",
+ "zbus",
+]
+
+[[package]]
 name = "tauri-plugin-sql"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6024,7 +6133,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb87b95ec50ddfa440816d227a17b2ccbdda963a316a727fda0fc4334f7d134"
 dependencies = [
  "deranged",
+ "libc",
  "num-conv",
+ "num_threads",
  "powerfmt",
  "serde_core",
  "time-core",
@@ -7770,6 +7881,21 @@ checksum = "0ef0a8027ec3ee71300ab3bcbcd0393f434aa72b91ca6d635a39941deae8eea0"
 dependencies = [
  "cc",
  "pkg-config",
+]
+
+[[package]]
+name = "zune-core"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d56377fd46368984a170bc5aac5567e52ca5da874caa60bea39fcbca78fb658b"
+
+[[package]]
+name = "zune-jpeg"
+version = "0.5.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296"
+dependencies = [
+ "zune-core",
 ]
 
 [[package]]

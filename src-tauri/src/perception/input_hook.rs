@@ -9,8 +9,8 @@ use tauri::{AppHandle, Emitter};
 use windows::Win32::Foundation::{LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, VK_BROWSER_BACK, VK_CONTROL, VK_DIVIDE, VK_ESCAPE, VK_LEFT, VK_NUMPAD0, VK_OEM_1, VK_OEM_102, VK_OEM_3, VK_OEM_4, VK_OEM_8,
-    VK_RETURN, VK_SPACE, VK_TAB,
+    GetAsyncKeyState, VK_BACK, VK_BROWSER_BACK, VK_CONTROL, VK_DELETE, VK_DIVIDE, VK_ESCAPE, VK_LEFT, VK_NUMPAD0, VK_OEM_1, VK_OEM_102, VK_OEM_3,
+    VK_OEM_4, VK_OEM_8, VK_RETURN, VK_SPACE, VK_TAB,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, SetWindowsHookExW,
@@ -23,8 +23,11 @@ use windows::Win32::UI::WindowsAndMessaging::{WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_M
 
 use super::foreground::{root_window, window_pid};
 
-/// Wait for the UI to settle after the last learner action before re-reading it.
-const SETTLE: Duration = Duration::from_millis(350);
+/// Wait for the UI to settle after the last learner action before re-reading it. Short, so a click
+/// is checked quickly; slower UI (a Win11 menu takes up to ~1.8 s) needs a later look anyway.
+const SETTLE: Duration = Duration::from_millis(180);
+/// After typing has paused this long, re-read once (a typed formula or name may finish a step).
+const TYPING_IDLE: Duration = Duration::from_millis(800);
 pub const LEARNER_ACTION_EVENT: &str = "perception:learner-action";
 /// Keys that commit something in most apps. Only the key code is inspected; nothing typed is recorded.
 const ACTION_KEYS: [u16; 4] = [VK_RETURN.0, VK_TAB.0, VK_ESCAPE.0, VK_SPACE.0];
@@ -81,8 +84,16 @@ pub enum MouseButton {
     Right,
 }
 
-/// `None` is a committing key: worth a re-read, with nothing more to report.
-static SIGNAL: OnceLock<mpsc::Sender<Option<LearnerInput>>> = OnceLock::new();
+/// What the hooks tell the debounce thread. Nothing about which key was pressed is kept.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Signal {
+    /// A learner action; `None` is a committing key: worth a re-read, with nothing more to report.
+    Action(Option<LearnerInput>),
+    /// A key that edits text: re-read once typing pauses.
+    Typed,
+}
+
+static SIGNAL: OnceLock<mpsc::Sender<Signal>> = OnceLock::new();
 
 pub fn is_action_key(vk_code: u32) -> bool {
     ACTION_KEYS.iter().any(|&key| u32::from(key) == vk_code)
@@ -90,6 +101,11 @@ pub fn is_action_key(vk_code: u32) -> bool {
 
 pub fn is_typing_key(vk_code: u32) -> bool {
     u16::try_from(vk_code).is_ok_and(|vk| TYPING_KEYS.iter().any(|keys| keys.contains(&vk)))
+}
+
+/// Typing a character or deleting one: the text changed, so it's worth a look once typing pauses.
+fn edits_text(vk_code: u32) -> bool {
+    is_typing_key(vk_code) || vk_code == u32::from(VK_BACK.0) || vk_code == u32::from(VK_DELETE.0)
 }
 
 /// Whether releasing this key commits something: Space right after typing is just text.
@@ -161,7 +177,7 @@ fn is_own(hwnd: windows::Win32::Foundation::HWND) -> bool {
     window_pid(root_window(hwnd)) == std::process::id()
 }
 
-fn signal(input: Option<LearnerInput>) {
+fn signal(input: Signal) {
     if let Some(sender) = SIGNAL.get() {
         // A send only fails once the debounce thread has exited at shutdown; nothing to recover.
         let _ = sender.send(input);
@@ -179,7 +195,7 @@ pub fn is_press(message: u32) -> bool {
 fn report_press(point: POINT) {
     // Sending never blocks, so the hook still returns at once; a closed channel only means the watcher stopped.
     if let Some(Err(error)) = PRESSES.get().map(|presses| presses.send((point.x, point.y))) {
-        eprintln!("couldn't report a mouse press to the notch: {error}");
+        log::warn!("couldn't report a mouse press to the notch: {error}");
     }
 }
 
@@ -200,7 +216,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
         let at = PointDto { x: f64::from(point.x), y: f64::from(point.y) };
         // SAFETY: WindowFromPoint has no preconditions.
         if let Some(input) = mouse_input(wparam.0 as u32, x_button, at).filter(|_| !is_own(unsafe { WindowFromPoint(point) })) {
-            signal(Some(input));
+            signal(Signal::Action(Some(input)));
         }
     }
     // SAFETY: forwarding the unmodified hook arguments, as required.
@@ -233,13 +249,14 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
         }
         let alt = info.flags.0 & LLKHF_ALTDOWN.0 != 0;
         let report = if down {
-            shortcut_input(vk_code, ctrl_down(), alt).map(Some)
+            let typed = (info.flags.0 & LLKHF_INJECTED.0 == 0 && edits_text(vk_code)).then_some(Signal::Typed);
+            shortcut_input(vk_code, ctrl_down(), alt).map(|input| Signal::Action(Some(input))).or(typed)
         } else {
-            (message == WM_KEYUP && commits(vk_code, since_typed())).then_some(None)
+            (message == WM_KEYUP && commits(vk_code, since_typed())).then_some(Signal::Action(None))
         };
         // SAFETY: GetForegroundWindow has no preconditions.
-        if let Some(input) = report.filter(|_| !is_own(unsafe { GetForegroundWindow() })) {
-            signal(input);
+        if let Some(report) = report.filter(|_| !is_own(unsafe { GetForegroundWindow() })) {
+            signal(report);
         }
     }
     // SAFETY: as above.
@@ -272,21 +289,67 @@ fn collect(inputs: &mut Vec<LearnerInput>, input: Option<LearnerInput>) {
     inputs.push(input);
 }
 
-/// Collapses a burst of actions into one event once input has been quiet for `SETTLE`; the event
-/// carries the burst's clicks and undo/back, oldest first.
-fn debounce(app: AppHandle, signals: mpsc::Receiver<Option<LearnerInput>>) {
-    while let Ok(first) = signals.recv() {
-        let mut inputs = Vec::new();
-        collect(&mut inputs, first);
-        loop {
-            match signals.recv_timeout(SETTLE) {
-                Ok(input) => collect(&mut inputs, input),
-                Err(mpsc::RecvTimeoutError::Timeout) => break,
-                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+/// Pure timing of learner-action events: a burst of actions becomes one event once input has been
+/// quiet for `SETTLE` (carrying its clicks and undo/back, oldest first), and typing becomes one
+/// empty event once it has paused for `TYPING_IDLE`.
+#[derive(Debug, Default)]
+struct Debounce {
+    inputs: Vec<LearnerInput>,
+    action_due: Option<Instant>,
+    typing_due: Option<Instant>,
+}
+
+impl Debounce {
+    fn on_signal(&mut self, signal: Signal, now: Instant) {
+        match signal {
+            Signal::Action(input) => {
+                collect(&mut self.inputs, input);
+                self.action_due = Some(now + SETTLE);
+                // This action's re-read comes after the typing so far, so it covers it.
+                self.typing_due = None;
             }
+            Signal::Typed => self.typing_due = Some(now + TYPING_IDLE),
         }
-        if let Err(error) = app.emit(LEARNER_ACTION_EVENT, inputs) {
-            eprintln!("failed to emit {LEARNER_ACTION_EVENT}: {error}");
+    }
+
+    /// When the next event may be due; None while there's nothing to report.
+    fn deadline(&self) -> Option<Instant> {
+        match (self.action_due, self.typing_due) {
+            (Some(action), Some(typing)) => Some(action.min(typing)),
+            (action, typing) => action.or(typing),
+        }
+    }
+
+    /// The event to emit at `now`, if one is due.
+    fn take_due(&mut self, now: Instant) -> Option<Vec<LearnerInput>> {
+        if self.action_due.is_some_and(|due| due <= now) {
+            self.action_due = None;
+            return Some(std::mem::take(&mut self.inputs));
+        }
+        if self.typing_due.is_some_and(|due| due <= now) {
+            self.typing_due = None;
+            return Some(Vec::new());
+        }
+        None
+    }
+}
+
+fn debounce(app: AppHandle, signals: mpsc::Receiver<Signal>) {
+    let mut state = Debounce::default();
+    loop {
+        let received = match state.deadline() {
+            Some(due) => signals.recv_timeout(due.saturating_duration_since(Instant::now())),
+            None => signals.recv().map_err(|_| mpsc::RecvTimeoutError::Disconnected),
+        };
+        match received {
+            Ok(signal) => state.on_signal(signal, Instant::now()),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+        }
+        if let Some(inputs) = state.take_due(Instant::now()) {
+            if let Err(error) = app.emit(LEARNER_ACTION_EVENT, inputs) {
+                log::error!("failed to emit {LEARNER_ACTION_EVENT}: {error}");
+            }
         }
     }
 }
@@ -300,7 +363,7 @@ pub fn spawn(app: AppHandle) -> Result<(), String> {
     thread::spawn(move || debounce(app, receiver));
     thread::spawn(|| {
         if let Err(error) = run_hooks() {
-            eprintln!("learner input hook stopped: {error}");
+            log::error!("learner input hook stopped: {error}");
         }
     });
     Ok(())
@@ -393,6 +456,78 @@ mod tests {
         let click = LearnerInput::Click { at: PointDto { x: 1.0, y: 2.0 }, button: MouseButton::Right };
         assert_eq!(serde_json::to_string(&click).unwrap(), r#"{"kind":"click","at":{"x":1.0,"y":2.0},"button":"right"}"#);
         assert_eq!(serde_json::to_string(&LearnerInput::Undo).unwrap(), r#"{"kind":"undo"}"#);
+    }
+
+    fn ms(start: Instant, millis: u64) -> Instant {
+        start + Duration::from_millis(millis)
+    }
+
+    const CLICK: Option<LearnerInput> = Some(LearnerInput::Click { at: PointDto { x: 1.0, y: 2.0 }, button: MouseButton::Left });
+
+    #[test]
+    fn settles_quickly_but_waits_longer_for_typing_to_pause() {
+        assert!(SETTLE <= Duration::from_millis(200), "a click is re-read within ~0.2 s");
+        assert!(TYPING_IDLE > SETTLE);
+    }
+
+    #[test]
+    fn a_click_is_reported_once_the_ui_settles() {
+        let (t, mut d) = (Instant::now(), Debounce::default());
+        d.on_signal(Signal::Action(CLICK), t);
+        assert_eq!(d.deadline(), Some(t + SETTLE));
+        assert_eq!(d.take_due(t + SETTLE - Duration::from_millis(1)), None);
+        assert_eq!(d.take_due(t + SETTLE), Some(vec![CLICK.unwrap()]));
+        assert_eq!(d.deadline(), None, "nothing more to report");
+    }
+
+    #[test]
+    fn a_burst_of_actions_is_one_event_after_the_last() {
+        let (t, mut d) = (Instant::now(), Debounce::default());
+        d.on_signal(Signal::Action(CLICK), t);
+        d.on_signal(Signal::Action(Some(LearnerInput::Undo)), ms(t, 100));
+        assert_eq!(d.take_due(t + SETTLE), None, "the second action restarted the wait");
+        assert_eq!(d.take_due(ms(t, 100) + SETTLE), Some(vec![CLICK.unwrap(), LearnerInput::Undo]));
+    }
+
+    #[test]
+    fn typing_is_re_read_once_when_it_pauses() {
+        let (t, mut d) = (Instant::now(), Debounce::default());
+        for at in [0, 120, 240] {
+            d.on_signal(Signal::Typed, ms(t, at));
+        }
+        assert_eq!(d.deadline(), Some(ms(t, 240) + TYPING_IDLE));
+        assert_eq!(d.take_due(ms(t, 240) + TYPING_IDLE - Duration::from_millis(1)), None);
+        assert_eq!(d.take_due(ms(t, 240) + TYPING_IDLE), Some(Vec::new()), "a re-read with nothing to report");
+        assert_eq!(d.deadline(), None);
+    }
+
+    #[test]
+    fn a_commit_key_after_typing_covers_the_typing() {
+        let (t, mut d) = (Instant::now(), Debounce::default());
+        d.on_signal(Signal::Typed, t);
+        d.on_signal(Signal::Action(None), ms(t, 300));
+        assert_eq!(d.take_due(ms(t, 300) + SETTLE), Some(Vec::new()));
+        assert_eq!(d.deadline(), None, "no second re-read for the same typing");
+    }
+
+    #[test]
+    fn typing_after_a_click_is_re_read_after_the_click() {
+        let (t, mut d) = (Instant::now(), Debounce::default());
+        d.on_signal(Signal::Action(CLICK), t);
+        d.on_signal(Signal::Typed, ms(t, 100));
+        assert_eq!(d.take_due(t + SETTLE), Some(vec![CLICK.unwrap()]));
+        assert_eq!(d.deadline(), Some(ms(t, 100) + TYPING_IDLE));
+        assert_eq!(d.take_due(ms(t, 100) + TYPING_IDLE), Some(Vec::new()));
+    }
+
+    #[test]
+    fn text_edits_are_characters_backspace_and_delete() {
+        for vk in [0x41, 0x31, 0x6B, 0xBE, 0x08, 0x2E] {
+            assert!(edits_text(vk), "{vk:#x}");
+        }
+        for vk in [0x0D, 0x09, 0x10, 0x11, 0x25, 0x70, 0x20] {
+            assert!(!edits_text(vk), "{vk:#x}");
+        }
     }
 
     #[test]

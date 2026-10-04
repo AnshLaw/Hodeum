@@ -19,16 +19,27 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uiautomation = "0.25"
 xcap = "0.9"
+# xcap's own `image` only encodes PNG; JPEG keeps the screenshot sent to the vision model small.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 base64 = "0.22"
 reqwest = { version = "0.13", features = ["gzip"] }
 regex = "1"
+scraper = { version = "0.27", default-features = false }
 sherpa-onnx = { version = "1.13.8", default-features = false, features = ["shared"] }
 rodio = "0.22"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "net"] }
 keyring = { version = "3", features = ["windows-native"] }
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_UI_Shell", "Win32_System_LibraryLoader", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_System_JobObjects", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Shell_PropertiesSystem", "Win32_Devices_FunctionDiscovery", "Win32_Storage_Packaging_Appx", "Win32_Storage_FileSystem", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common"] }
 tauri-plugin-autostart = "2"
+tauri-plugin-log = "2"
+tauri-plugin-single-instance = "2"
+log = "0.4"
 
+# `tauri build` turns this on and `tauri dev` leaves it off; a plain cargo build no longer bakes in a
+# possibly stale dist/.
 [features]
 custom-protocol = ["tauri/custom-protocol"]
-default = ["custom-protocol"]
+
+# Dependencies optimised in dev builds too: screenshot encoding took 2.4-3.4 s at opt-level 0.
+[profile.dev.package."*"]
+opt-level = 3
