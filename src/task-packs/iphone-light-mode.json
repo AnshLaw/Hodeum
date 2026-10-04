@@ -1,0 +1,130 @@
+{
+  "id": "iphone-light-mode",
+  "title": "Turn on Light Mode on iPhone",
+  "app": "iPhone",
+  "surface": "phone",
+  "goalPhrases": [
+    "iphone light",
+    "phone light",
+    "iphone dark mode off",
+    "phone dark mode off",
+    "iphone turn off dark",
+    "phone turn off dark"
+  ],
+  "prerequisites": [
+    "Mirror your iPhone into Hodey (menu → Show iPhone) and start on the Home Screen, in Dark mode."
+  ],
+  "concept": "Light Mode shows dark text on a light background, which is clearest in daylight.",
+  "recap": "You turned on Light Mode: Settings, Display & Brightness, then Light.",
+  "check": {
+    "question": "Quick check: where do you switch between Light and Dark?",
+    "options": [
+      "Display & Brightness",
+      "Wallpaper",
+      "Sounds"
+    ],
+    "answer": 0,
+    "explain": "Display & Brightness controls how the screen looks."
+  },
+  "steps": [
+    {
+      "id": "open-settings",
+      "objective": "Open Settings",
+      "skill": "ios.settings.open",
+      "target": {
+        "names": [
+          "Settings"
+        ],
+        "label": "Settings"
+      },
+      "speech": {
+        "demonstrate": "On your iPhone, tap Settings, the grey gear. I've highlighted it.",
+        "guide": "Tap Settings.",
+        "hint": "Which app holds all of your phone's options?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Settings holds every iPhone option, including how the screen looks.",
+      "success": {
+        "kind": "element_visible",
+        "names": [
+          "Airplane Mode"
+        ]
+      },
+      "mistakes": []
+    },
+    {
+      "id": "open-display",
+      "objective": "Open Display & Brightness",
+      "skill": "ios.settings.display",
+      "target": {
+        "names": [
+          "Display*Brightness"
+        ],
+        "label": "Display & Brightness"
+      },
+      "speech": {
+        "demonstrate": "Scroll down a little and tap Display & Brightness.",
+        "guide": "Tap Display & Brightness.",
+        "hint": "Look for the setting about your screen.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Display & Brightness controls light and dark appearance, text size and brightness.",
+      "success": {
+        "kind": "element_visible",
+        "names": [
+          "Appearance"
+        ]
+      },
+      "mistakes": [
+        {
+          "signal": {
+            "kind": "element_visible",
+            "names": [
+              "*Add New Wallpaper*"
+            ]
+          },
+          "correction": "That's Wallpaper. Tap Settings at the top left to go back, then choose Display & Brightness."
+        }
+      ]
+    },
+    {
+      "id": "choose-light",
+      "objective": "Choose Light",
+      "skill": "ios.appearance.light_mode",
+      "target": {
+        "names": [
+          "Light"
+        ],
+        "label": "Light"
+      },
+      "speech": {
+        "demonstrate": "Under Appearance, tap Light. The whole screen will turn bright.",
+        "guide": "Tap Light.",
+        "hint": "Appearance has two choices. Which one is brighter?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Light Mode uses dark text on light backgrounds, which is clearest in bright light.",
+      "success": {
+        "kind": "screen_tone",
+        "tone": "light",
+        "names": [
+          "Appearance"
+        ]
+      },
+      "mistakes": [
+        {
+          "signal": {
+            "kind": "element_visible",
+            "names": [
+              "*Dynamic Type*"
+            ]
+          },
+          "correction": "That opened Text Size. Go back; Light is under Appearance at the top."
+        }
+      ]
+    }
+  ]
+}
