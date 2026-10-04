@@ -72,6 +72,7 @@ npm run e2e:stop
 ## Notes and gotchas
 
 - CDP only works on debug builds: release builds clear `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` at startup. The port binds to loopback.
+- Hodeum ignores injected (SendInput) clicks and keys, so its own Do-it presses never count as the learner's. `start-hodeum.ps1` sets `HODEUM_E2E_INPUT=1`, which makes a debug build count the harness's input as the learner's; release builds ignore it. Starting the app another way, set it yourself or say "I did it" after each scripted action.
 - `cdp.mjs start`/`end` fall back to the `hode:start`/`hode:end` bus events when `__hodeumDebug` is missing; `state`, `say`, `events` need the hook.
 - The notch's DOM appears in UIA only after a second query (Chromium enables accessibility lazily) and only while the pill is hovered.
 - Explorer often ignores the first right-click after its window opens, and Win11 menus take up to ~1.8 s to appear and animate ~35 px while settling; `e2e-zip.ps1` retries and waits for two equal rect reads.
