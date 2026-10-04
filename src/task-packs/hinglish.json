@@ -144,5 +144,254 @@
         ]
       }
     }
+  },
+  "windows-dark-mode": {
+    "title": "Windows में Dark mode on करना",
+    "prerequisites": [
+      "Windows Light mode में है। Settings कलर्स वाले पेज पर खुलती है।"
+    ],
+    "concept": "Windows सब कुछ light या dark दिखा सकता है। ये switch Settings में, पर्सनलाइज़ेशन और फिर कलर्स के अंदर है, और वो पेज मैंने आपके लिए खोल दिया है।",
+    "recap": "आपने Dark mode on कर दिया: Settings, पर्सनलाइज़ेशन, कलर्स, फिर चूज़ योर mode।",
+    "check": {
+      "question": "Quick check: कौन सी setting Windows को light और dark के बीच बदलती है?",
+      "options": [
+        "चूज़ योर mode",
+        "ऐक्सेंट कलर",
+        "ट्रांसपेरेंसी इफ़ेक्ट्स"
+      ],
+      "explain": "चूज़ योर mode से Windows और आपके सारे app एक साथ बदलते हैं।"
+    },
+    "steps": {
+      "open-mode-menu": {
+        "objective": "चूज़ योर mode खोलिए",
+        "speech": {
+          "demonstrate": "दाईं तरफ़ चूज़ योर mode के बगल वाले menu पर click कीजिए। एक छोटी list खुलेगी।",
+          "guide": "चूज़ योर mode वाला menu खोलिए।",
+          "hint": "ऊपर की कौन सी setting तय करती है कि पूरा Windows कैसा दिखे?"
+        },
+        "explain": "ये एक setting Windows और आपके सारे app को light और dark के बीच बदल देती है।",
+        "corrections": []
+      },
+      "choose-dark": {
+        "objective": "Dark चुनिए",
+        "speech": {
+          "demonstrate": "Dark पर click कीजिए। पूरी screen तुरंत dark हो जाएगी।",
+          "guide": "Dark पर click कीजिए।",
+          "hint": "तीन choices हैं। रात में आँखों के लिए कौन सी आसान है?"
+        },
+        "explain": "Dark mode में dark background पर light text होता है, जो कम रोशनी में आँखों के लिए आसान है।",
+        "corrections": [
+          "कस्टम में light और dark दोनों मिले होते हैं। Menu फिर से खोलिए और Dark चुनिए।",
+          "ये Light ही रहा। Menu फिर से खोलिए और Dark चुनिए।"
+        ]
+      }
+    }
+  },
+  "windows-light-mode": {
+    "title": "Windows को Light mode में करना",
+    "prerequisites": [
+      "Windows Dark mode में है। Settings कलर्स वाले पेज पर खुलती है।"
+    ],
+    "concept": "Windows सब कुछ light या dark दिखा सकता है। ये switch Settings में, पर्सनलाइज़ेशन और फिर कलर्स के अंदर है, और वो पेज मैंने आपके लिए खोल दिया है।",
+    "recap": "आपने Windows को Light mode में कर दिया: Settings, पर्सनलाइज़ेशन, कलर्स, फिर चूज़ योर mode।",
+    "check": {
+      "question": "Quick check: कौन सी setting Windows को light और dark के बीच बदलती है?",
+      "options": [
+        "चूज़ योर mode",
+        "ऐक्सेंट कलर",
+        "ट्रांसपेरेंसी इफ़ेक्ट्स"
+      ],
+      "explain": "चूज़ योर mode से Windows और आपके सारे app एक साथ बदलते हैं।"
+    },
+    "steps": {
+      "open-mode-menu": {
+        "objective": "चूज़ योर mode खोलिए",
+        "speech": {
+          "demonstrate": "दाईं तरफ़ चूज़ योर mode के बगल वाले menu पर click कीजिए। एक छोटी list खुलेगी।",
+          "guide": "चूज़ योर mode वाला menu खोलिए।",
+          "hint": "ऊपर की कौन सी setting तय करती है कि पूरा Windows कैसा दिखे?"
+        },
+        "explain": "ये एक setting Windows और आपके सारे app को light और dark के बीच बदल देती है।",
+        "corrections": []
+      },
+      "choose-light": {
+        "objective": "Light चुनिए",
+        "speech": {
+          "demonstrate": "Light पर click कीजिए। Windows तुरंत उजला हो जाएगा।",
+          "guide": "Light पर click कीजिए।",
+          "hint": "तीन choices हैं। सफ़ेद background पर गहरा text किसमें होता है?"
+        },
+        "explain": "Light mode में light background पर dark text होता है, जो रोशनी वाले कमरे में देखने में आसान है।",
+        "corrections": [
+          "कस्टम में light और dark दोनों मिले होते हैं। Menu फिर से खोलिए और Light चुनिए।"
+        ]
+      }
+    }
+  },
+  "notepad-save-note": {
+    "title": "नोट लिखकर save करना",
+    "prerequisites": [
+      "नोटपैड खुला है। आपके बाक़ी tabs जैसे हैं वैसे ही रहेंगे।"
+    ],
+    "concept": "नोटपैड में सादा text रहता है, जैसे कोई list या छोटा नोट। Save करने से वो एक file बन जाता है जिसे आप बाद में फिर खोल सकते हैं।",
+    "recap": "आपने नोट लिखकर save कर दिया: नया tab, आपका text, File, सेव ऐज़, फिर Save।",
+    "check": {
+      "question": "Quick check: सेव ऐज़ किस menu में है?",
+      "options": [
+        "File",
+        "एडिट",
+        "व्यू"
+      ],
+      "explain": "File menu में file से जुड़ी हर चीज़ है: नई file, खोलना, save और प्रिंट।"
+    },
+    "steps": {
+      "new-tab": {
+        "objective": "नया tab खोलिए",
+        "speech": {
+          "demonstrate": "अपने tabs के बगल वाले प्लस पर click कीजिए। एक नया, ख़ाली पेज खुलेगा।",
+          "guide": "नया tab खोलने के लिए प्लस पर click कीजिए।",
+          "hint": "ऊपर देखिए, आख़िरी tab के ठीक बाद।"
+        },
+        "explain": "हर tab अपना अलग पेज है, इसलिए आपका नया नोट बाक़ी खुली चीज़ों को नहीं छेड़ता।",
+        "corrections": []
+      },
+      "type-note": {
+        "objective": "छोटा सा नोट type कीजिए",
+        "speech": {
+          "demonstrate": "पेज में click कीजिए और एक छोटा नोट type कीजिए, जैसे सामान की list। हर लाइन के बाद Enter दबाइए।",
+          "guide": "अपना नोट type कीजिए, फिर Enter दबाइए।",
+          "hint": "पहले बड़े ख़ाली area में click कीजिए, फिर type कीजिए।"
+        },
+        "explain": "Save करते समय नोटपैड आपकी पहली लाइन को file का नाम सुझाता है।",
+        "corrections": []
+      },
+      "open-file-menu": {
+        "objective": "File menu खोलिए",
+        "speech": {
+          "demonstrate": "ऊपर left में File पर click कीजिए। Save उसी में है।",
+          "guide": "File menu खोलिए।",
+          "hint": "Save करना, खोलना और प्रिंट करना, सब एक ही menu में है।"
+        },
+        "explain": "File menu में file से जुड़ी हर चीज़ है: नई file, खोलना, save और प्रिंट।",
+        "corrections": []
+      },
+      "choose-save-as": {
+        "objective": "सेव ऐज़ चुनिए",
+        "speech": {
+          "demonstrate": "सेव ऐज़ पर click कीजिए। एक window खुलेगी जिसमें आप नाम और folder चुनते हैं।",
+          "guide": "सेव ऐज़ पर click कीजिए।",
+          "hint": "आपको चुनना है कि नोट कहाँ जाए, तो वो option चुनिए जो पूछता है।"
+        },
+        "explain": "सेव ऐज़ हमेशा नाम और folder पूछता है, ताकि आपको पता रहे कि नोट कहाँ गया।",
+        "corrections": []
+      },
+      "save": {
+        "objective": "नाम दीजिए और Save पर click कीजिए",
+        "speech": {
+          "demonstrate": "नोट डॉक्यूमेंट्स में जा रहा है; ऊपर वाली पट्टी यही बताती है। चाहें तो फ़ाइल नेम में नाम type कीजिए, फिर Save पर click कीजिए।",
+          "guide": "नाम देखिए, फिर Save पर click कीजिए।",
+          "hint": "नोट रखने वाला button नीचे right में है।"
+        },
+        "explain": "Save हो गया: tab में अब file का नाम दिखता है, और आपका नोट डॉक्यूमेंट्स में सुरक्षित है।",
+        "corrections": [
+          "इससे सेव ऐज़ window बिना save किए बंद हो गई। File खोलिए, फिर सेव ऐज़ दोबारा चुनिए।"
+        ]
+      }
+    }
+  },
+  "calculator-percent": {
+    "title": "परसेंटेज निकालना",
+    "prerequisites": [
+      "कैलकुलेटर खुला है।"
+    ],
+    "concept": "परसेंट का मतलब है सौ में से। पचास का बीस परसेंट निकालने के लिए पचास को बीस से गुणा करते हैं, और परसेंट वाला button बीस को सौ से भाग देता है।",
+    "recap": "आपने पचास का बीस परसेंट निकाल लिया: 50, गुणा, 20, परसेंट, फिर बराबर। जवाब 10 है।",
+    "check": {
+      "question": "Quick check: परसेंट वाला button 20 के साथ क्या करता है?",
+      "options": [
+        "उसे 0.2 बना देता है",
+        "20 जोड़ देता है",
+        "उसे दोगुना कर देता है"
+      ],
+      "explain": "परसेंट सौ से भाग देता है, इसलिए बीस 0.2 बन जाता है।"
+    },
+    "steps": {
+      "open-menu": {
+        "objective": "Menu खोलिए",
+        "speech": {
+          "demonstrate": "ऊपर left में तीन लाइनों पर click कीजिए। उनमें हर तरह का कैलकुलेटर है।",
+          "guide": "ऊपर left वाला menu खोलिए।",
+          "hint": "तीन छोटी लाइनों में बाक़ी कैलकुलेटर छुपे हैं।"
+        },
+        "explain": "कैलकुलेटर कई तरह के होते हैं; ये menu उनके बीच switch करता है।",
+        "corrections": []
+      },
+      "choose-standard": {
+        "objective": "स्टैंडर्ड चुनिए",
+        "speech": {
+          "demonstrate": "स्टैंडर्ड पर click कीजिए। ये रोज़ वाला कैलकुलेटर है, जिसमें परसेंट का button है।",
+          "guide": "स्टैंडर्ड पर click कीजिए।",
+          "hint": "सबसे ऊपर वाला सीधा-सादा कैलकुलेटर चुनिए।"
+        },
+        "explain": "स्टैंडर्ड में वो परसेंट button है जो टिप और डिस्काउंट के लिए चाहिए।",
+        "corrections": [
+          "ये दूसरा कैलकुलेटर है। Menu फिर से खोलिए और स्टैंडर्ड चुनिए।"
+        ]
+      },
+      "type-fifty": {
+        "objective": "50 डालिए",
+        "speech": {
+          "demonstrate": "हम पचास का बीस परसेंट निकालेंगे। 50 बनाने के लिए 5 और फिर 0 पर click कीजिए।",
+          "guide": "5 पर click कीजिए, फिर 0 पर।",
+          "hint": "रक़म पचास है। कौन से दो buttons उसे बनाते हैं?"
+        },
+        "explain": "पहले पूरी रक़म type कीजिए; display में वही दिखता है जो आपने type किया।",
+        "corrections": []
+      },
+      "multiply": {
+        "objective": "गुणा पर click कीजिए",
+        "speech": {
+          "demonstrate": "गुणा वाले button पर click कीजिए। किसी चीज़ का बीस परसेंट मतलब गुणा।",
+          "guide": "गुणा पर click कीजिए।",
+          "hint": "परसेंटेज में 'का' शब्द का मतलब कौन सा हिसाब है?"
+        },
+        "explain": "किसी रक़म का परसेंटेज, रक़म गुणा परसेंट होता है।",
+        "corrections": [
+          "ये प्लस है। उसकी जगह गुणा पर click कीजिए; वो प्लस को बदल देगा।"
+        ]
+      },
+      "type-twenty": {
+        "objective": "20 डालिए",
+        "speech": {
+          "demonstrate": "अब परसेंट, यानी बीस। 2 और फिर 0 पर click कीजिए।",
+          "guide": "2 पर click कीजिए, फिर 0 पर।",
+          "hint": "परसेंट बीस है। कौन से दो buttons उसे बनाते हैं?"
+        },
+        "explain": "परसेंट को सादे number की तरह type कीजिए; बाक़ी काम परसेंट वाला button करता है।",
+        "corrections": []
+      },
+      "percent": {
+        "objective": "परसेंट पर click कीजिए",
+        "speech": {
+          "demonstrate": "परसेंट वाले button पर click कीजिए। बीस 0.2 बन जाएगा, यानी बीस परसेंट।",
+          "guide": "परसेंट पर click कीजिए।",
+          "hint": "कौन सा button बीस को बीस परसेंट बनाता है?"
+        },
+        "explain": "परसेंट सौ से भाग देता है, इसलिए बीस परसेंट 0.2 है।",
+        "corrections": [
+          "आपने परसेंट से पहले बराबर दबा दिया, इसलिए पचास गुणा बीस निकल आया। सी वाले button पर click कीजिए, फिर 50, गुणा, 20, और बराबर से पहले परसेंट।"
+        ]
+      },
+      "equals": {
+        "objective": "बराबर पर click कीजिए",
+        "speech": {
+          "demonstrate": "जवाब के लिए बराबर पर click कीजिए।",
+          "guide": "बराबर पर click कीजिए।",
+          "hint": "कौन सा button जवाब देता है?"
+        },
+        "explain": "पचास का बीस परसेंट दस है। यही buttons हर टिप या डिस्काउंट के लिए काम आते हैं।",
+        "corrections": []
+      }
+    }
   }
 }

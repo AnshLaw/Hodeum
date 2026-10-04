@@ -1,0 +1,71 @@
+{
+  "id": "windows-light-mode",
+  "title": "Switch Windows to Light mode",
+  "app": "Settings",
+  "launch": { "uri": "ms-settings:colors" },
+  "goalPhrases": [
+    "light mode",
+    "light theme",
+    "turn on light mode",
+    "switch to light mode",
+    "make windows light",
+    "turn off dark mode",
+    "switch off dark mode",
+    "disable dark mode",
+    "remove dark mode",
+    "dark mode off",
+    "dark mode band",
+    "dark mode hatao",
+    "लाइट मोड",
+    "लाइट मोड चालू",
+    "लाइट थीम",
+    "डार्क मोड बंद",
+    "डार्क मोड हटाओ"
+  ],
+  "notFor": ["iphone", "phone", "ipad", "android", "mobile", "आईफोन", "फोन", "मोबाइल"],
+  "prerequisites": ["Windows is in Dark mode. Settings opens on the Colors page."],
+  "concept": "Windows can show everything light or dark. The switch is in Settings, under Personalization, then Colors, and I've opened that page for you.",
+  "recap": "You switched Windows to Light mode: Settings, Personalization, Colors, then Choose your mode.",
+  "check": {
+    "question": "Quick check: which box switches Windows between light and dark?",
+    "options": ["Choose your mode", "Accent color", "Transparency effects"],
+    "answer": 0,
+    "explain": "Choose your mode changes Windows and your apps together."
+  },
+  "steps": [
+    {
+      "id": "open-mode-menu",
+      "objective": "Open Choose your mode",
+      "skill": "settings.appearance.mode",
+      "target": { "names": ["Choose your mode"], "role": "combo box", "label": "Choose your mode" },
+      "speech": {
+        "demonstrate": "Click the box next to Choose your mode, on the right. A short list opens.",
+        "guide": "Open the Choose your mode box.",
+        "hint": "Which setting near the top picks how all of Windows looks?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "This one box switches Windows and your apps between light and dark.",
+      "success": { "kind": "element_visible", "names": ["Custom", "Light"] },
+      "mistakes": []
+    },
+    {
+      "id": "choose-light",
+      "objective": "Choose Light",
+      "skill": "settings.appearance.light_mode",
+      "target": { "names": ["Light"], "role": "list item" },
+      "speech": {
+        "demonstrate": "Click Light. Windows turns bright straight away.",
+        "guide": "Click Light.",
+        "hint": "Three choices. Which one gives dark text on a white background?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Light mode uses dark text on light backgrounds, which is easy to see in a bright room.",
+      "success": { "kind": "element_selected", "names": ["Light"] },
+      "mistakes": [
+        { "signal": { "kind": "element_selected", "names": ["Custom"] }, "correction": "Custom mixes light and dark. Open the box again and pick Light." }
+      ]
+    }
+  ]
+}

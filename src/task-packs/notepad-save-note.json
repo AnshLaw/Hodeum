@@ -1,0 +1,114 @@
+{
+  "id": "notepad-save-note",
+  "title": "Write and save a note",
+  "app": "Notepad",
+  "launch": { "exe": "notepad.exe" },
+  "goalPhrases": [
+    "save a note",
+    "write a note",
+    "take a note",
+    "write and save a note",
+    "note in notepad",
+    "note likho",
+    "note likhna",
+    "नोट सेव",
+    "नोट लिखो",
+    "नोट लिखना",
+    "नोटपैड में नोट"
+  ],
+  "notFor": ["sticky", "onenote", "iphone", "phone", "आईफोन", "फोन"],
+  "prerequisites": ["Notepad is open. Your other tabs stay as they are."],
+  "concept": "Notepad keeps plain text, like a list or a quick note. Saving puts it in a file you can open again later.",
+  "recap": "You wrote a note and saved it: a new tab, your text, File, Save as, then Save.",
+  "check": {
+    "question": "Quick check: which menu has Save as?",
+    "options": ["File", "Edit", "View"],
+    "answer": 0,
+    "explain": "The File menu holds everything about the file itself: new, open, save and print."
+  },
+  "steps": [
+    {
+      "id": "new-tab",
+      "objective": "Open a new tab",
+      "skill": "notepad.tabs.new",
+      "target": { "names": ["Add New Tab"], "role": "button", "label": "New tab" },
+      "speech": {
+        "demonstrate": "Click the plus next to your tabs. It opens a fresh, empty page.",
+        "guide": "Click the plus to open a new tab.",
+        "hint": "Look at the top, just after the last tab.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Each tab is its own page, so your new note leaves everything else that's open alone.",
+      "success": { "kind": "window_title_contains", "text": "Untitled - Notepad" },
+      "mistakes": []
+    },
+    {
+      "id": "type-note",
+      "objective": "Type a short note",
+      "skill": "notepad.text.type",
+      "target": { "names": ["Text editor"], "role": "document", "label": "The page" },
+      "speech": {
+        "demonstrate": "Click in the page and type a short note, like a shopping list. Press Enter at the end of each line.",
+        "guide": "Type your note, then press Enter.",
+        "hint": "Click inside the big empty area first, then type.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Notepad suggests your first line as the file's name when you save.",
+      "success": { "kind": "window_title_contains", "text": "*" },
+      "mistakes": []
+    },
+    {
+      "id": "open-file-menu",
+      "objective": "Open the File menu",
+      "skill": "notepad.file.save_as",
+      "target": { "names": ["File"], "role": "menu item" },
+      "speech": {
+        "demonstrate": "Click File at the top left. Saving is in there.",
+        "guide": "Open the File menu.",
+        "hint": "Saving, opening and printing all sit in one menu.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "The File menu holds everything about the file itself: new, open, save and print.",
+      "success": { "kind": "element_visible", "names": ["Save as", "File name:"] },
+      "mistakes": []
+    },
+    {
+      "id": "choose-save-as",
+      "objective": "Choose Save as",
+      "skill": "notepad.file.save_as",
+      "target": { "names": ["Save as"], "role": "menu item" },
+      "speech": {
+        "demonstrate": "Click Save as. A window opens where you choose the name and the folder.",
+        "guide": "Click Save as.",
+        "hint": "You want to choose where it goes, so pick the option that asks.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Save as always asks for a name and a folder, so you know exactly where your note goes.",
+      "success": { "kind": "element_visible", "names": ["File name:"] },
+      "mistakes": [],
+      "checkpoint": true
+    },
+    {
+      "id": "save",
+      "objective": "Name it and click Save",
+      "skill": "notepad.file.save",
+      "target": { "names": ["Save"], "role": "button" },
+      "speech": {
+        "demonstrate": "It's going into Documents; the bar at the top says so. Type a name in File name if you like, then click Save.",
+        "guide": "Check the name, then click Save.",
+        "hint": "The button that keeps your note is at the bottom right.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Saved: the tab now shows the file's name, and your note is safe in Documents.",
+      "success": { "kind": "window_title_contains", "text": ".txt - Notepad" },
+      "mistakes": [
+        { "signal": { "kind": "element_visible", "names": ["Add New Tab"] }, "correction": "That closed the Save as window without saving. Open File, then Save as again." }
+      ]
+    }
+  ]
+}

@@ -79,7 +79,7 @@ describe("prerequisite edges", () => {
 describe("buildSkillGraph", () => {
   it("shows every pack skill, grouped by area, practised areas first", () => {
     const graph = buildSkillGraph([skillRecord("hint", "windows.explorer.compress")], TASK_PACKS);
-    expect(graph.areas.map((a) => a.id)).toEqual(["windows", "excel", "ios"]);
+    expect(graph.areas.map((a) => a.id)).toEqual(["windows", "excel", "ios", "settings", "notepad", "calculator"]);
     const windows = graph.areas[0];
     expect(windows.title).toBe("Windows");
     expect(windows.nodes.map((n) => [n.id, n.masteryLabel])).toEqual([

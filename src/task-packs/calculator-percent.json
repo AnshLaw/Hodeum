@@ -1,0 +1,161 @@
+{
+  "id": "calculator-percent",
+  "title": "Work out a percentage",
+  "app": "Calculator",
+  "launch": { "exe": "calc.exe" },
+  "goalPhrases": [
+    "calculate a percentage",
+    "calculate percent",
+    "work out a percentage",
+    "find a percentage",
+    "percent in calculator",
+    "percentage on calculator",
+    "20 percent of 50",
+    "work out a tip",
+    "calculate a tip",
+    "work out a discount",
+    "calculate a discount",
+    "percent nikalo",
+    "percent nikalna",
+    "percentage nikalo",
+    "प्रतिशत निकालो",
+    "प्रतिशत निकालना",
+    "परसेंट निकालो"
+  ],
+  "notFor": ["excel", "battery", "zoom", "volume", "brightness", "iphone", "phone"],
+  "prerequisites": ["Calculator is open."],
+  "concept": "Percent means out of a hundred. To find twenty percent of fifty, you multiply fifty by twenty, and the percent key divides the twenty by a hundred.",
+  "recap": "You found twenty percent of fifty: 50, times, 20, percent, then equals. It's 10.",
+  "check": {
+    "question": "Quick check: what does the percent key do to 20?",
+    "options": ["Turns it into 0.2", "Adds 20", "Doubles it"],
+    "answer": 0,
+    "explain": "Percent divides by a hundred, so twenty becomes 0.2."
+  },
+  "steps": [
+    {
+      "id": "open-menu",
+      "objective": "Open the menu",
+      "skill": "calculator.mode.standard",
+      "target": { "names": ["Open Navigation"], "role": "button", "label": "Menu" },
+      "speech": {
+        "demonstrate": "Click the three lines at the top left. They list every kind of calculator.",
+        "guide": "Open the menu at the top left.",
+        "hint": "The three small lines hide the other calculators.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Calculator has several kinds; this menu switches between them.",
+      "success": { "kind": "element_visible", "names": ["Standard Calculator", "Standard Calculator mode"] },
+      "mistakes": []
+    },
+    {
+      "id": "choose-standard",
+      "objective": "Choose Standard",
+      "skill": "calculator.mode.standard",
+      "target": { "names": ["Standard Calculator"], "role": "list item", "label": "Standard" },
+      "speech": {
+        "demonstrate": "Click Standard. That's the everyday calculator, with a percent key.",
+        "guide": "Click Standard.",
+        "hint": "Pick the plain, everyday one at the top.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Standard has the percent key you need for tips and discounts.",
+      "success": { "kind": "element_visible", "names": ["Standard Calculator mode"] },
+      "mistakes": [
+        {
+          "signal": { "kind": "element_visible", "names": ["Scientific Calculator mode", "Programmer Calculator mode", "Graphing Calculator mode"] },
+          "correction": "That's a different calculator. Open the menu again and pick Standard."
+        }
+      ]
+    },
+    {
+      "id": "type-fifty",
+      "objective": "Enter 50",
+      "skill": "calculator.keys.digits",
+      "target": { "names": ["Five"], "role": "button", "label": "5" },
+      "speech": {
+        "demonstrate": "We'll find twenty percent of fifty. Click 5, then 0, to make 50.",
+        "guide": "Click 5, then 0.",
+        "hint": "The amount is fifty. Which two keys make it?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Type the whole amount first; the display shows what you've typed.",
+      "success": { "kind": "element_visible", "names": ["Display is 50"] },
+      "mistakes": []
+    },
+    {
+      "id": "multiply",
+      "objective": "Click times",
+      "skill": "calculator.percent.of",
+      "target": { "names": ["Multiply by"], "role": "button", "label": "×" },
+      "speech": {
+        "demonstrate": "Click the times key. Twenty percent of something means times.",
+        "guide": "Click times.",
+        "hint": "In a percentage, which sum does the word 'of' mean?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "A percentage of an amount is the amount times the percent.",
+      "success": { "kind": "element_visible", "names": ["Expression is 50 ×*", "Expression is 50 x*"] },
+      "mistakes": [
+        { "signal": { "kind": "element_visible", "names": ["Expression is 50 +*"] }, "correction": "That's plus. Click times instead; it replaces the plus." }
+      ]
+    },
+    {
+      "id": "type-twenty",
+      "objective": "Enter 20",
+      "skill": "calculator.keys.digits",
+      "target": { "names": ["Two"], "role": "button", "label": "2" },
+      "speech": {
+        "demonstrate": "Now the percent, twenty. Click 2, then 0.",
+        "guide": "Click 2, then 0.",
+        "hint": "The percent is twenty. Which two keys make it?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Type the percent as a plain number; the percent key does the rest.",
+      "success": { "kind": "element_visible", "names": ["Display is 20", "Display is 0.2"] },
+      "mistakes": []
+    },
+    {
+      "id": "percent",
+      "objective": "Click percent",
+      "skill": "calculator.percent.of",
+      "target": { "names": ["Percent"], "role": "button", "label": "%" },
+      "speech": {
+        "demonstrate": "Click the percent key. Twenty becomes 0.2, which is twenty percent.",
+        "guide": "Click percent.",
+        "hint": "Which key turns twenty into twenty percent?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Percent divides by a hundred, so twenty percent is 0.2.",
+      "success": { "kind": "element_visible", "names": ["Display is 0.2", "Expression is 50 × 0.2*", "Expression is 50 x 0.2*"] },
+      "mistakes": [
+        {
+          "signal": { "kind": "element_visible", "names": ["Display is 1,000", "Display is 1000"] },
+          "correction": "That clicked equals before percent, so it worked out fifty times twenty. Click C, then 50, times, 20, and percent before equals."
+        }
+      ]
+    },
+    {
+      "id": "equals",
+      "objective": "Click equals",
+      "skill": "calculator.percent.of",
+      "target": { "names": ["Equals"], "role": "button", "label": "=" },
+      "speech": {
+        "demonstrate": "Click equals for the answer.",
+        "guide": "Click equals.",
+        "hint": "Which key gives you the answer?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Twenty percent of fifty is ten. The same keys work for any tip or discount.",
+      "success": { "kind": "element_visible", "names": ["Display is 10"] },
+      "mistakes": []
+    }
+  ]
+}

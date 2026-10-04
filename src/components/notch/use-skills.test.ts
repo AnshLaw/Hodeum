@@ -32,6 +32,6 @@ describe("graphOf", () => {
   it("passes loading and errors through, and builds the graph when ready", () => {
     expect(graphOf({ state: "error", message: "locked" }, TASK_PACKS)).toEqual({ state: "error", message: "locked" });
     const ready = graphOf({ state: "ready", records: [] }, TASK_PACKS);
-    expect(ready.state === "ready" && ready.graph.areas.map((a) => a.id)).toEqual(["excel", "windows", "ios"]);
+    expect(ready.state === "ready" && ready.graph.areas.map((a) => a.id)).toEqual(["excel", "windows", "ios", "settings", "notepad", "calculator"]);
   });
 });

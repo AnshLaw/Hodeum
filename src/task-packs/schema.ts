@@ -39,6 +39,19 @@ const stepSchema = z
   })
   .strict();
 
+/** A link that opens an app's own page ("ms-settings:colors", "calculator:"): a scheme and a bare page name, no paths or arguments. */
+const LAUNCH_URI_PATTERN = /^[a-z][a-z0-9-]*:[a-z0-9-]*$/i;
+
+/** A program or a link, exactly one; `sample` is a practice file or folder shipped with Hodeum. */
+const launchSchema = z
+  .object({
+    exe: z.string().min(1).optional(),
+    uri: z.string().regex(LAUNCH_URI_PATTERN, "a launch uri is a scheme and a page name, like ms-settings:colors").optional(),
+    sample: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((launch) => (launch.exe === undefined) !== (launch.uri === undefined), "a launch names exactly one of exe or uri");
+
 /** Most answers a recall question offers: more would crowd the notch. */
 const MAX_CHECK_OPTIONS = 4;
 
@@ -52,7 +65,7 @@ const packSchema = z
     id: z.string().min(1),
     title: z.string().min(1),
     app: z.string().min(1),
-    launch: z.object({ exe: z.string().min(1), sample: z.string().min(1).optional() }).strict().optional(),
+    launch: launchSchema.optional(),
     surface: z.enum(["windows", "phone"]).optional(),
     goalPhrases: names,
     notFor: names.optional(),
