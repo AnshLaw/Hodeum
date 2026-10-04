@@ -30,6 +30,8 @@ const PKEY_APP_USER_MODEL_ID: PROPERTYKEY =
 const AUMID_BUFFER: usize = 512;
 /// The first language/code page pair of a version resource, as "\\StringFileInfo\\{lang}{cp}\\..." wants it.
 const TRANSLATION_QUERY: &str = "\\VarFileInfo\\Translation";
+/// `\\server\share\...`: a program on another computer.
+const NETWORK_PATH_PREFIX: &str = r"\\";
 
 /// Mirrors the `app`/`appId` pair on `ScreenObservation` and `WindowRef` in `src/lib/types.ts`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +121,15 @@ fn useful_description(description: Option<&str>) -> Option<&str> {
     description.map(str::trim).filter(|d| !d.is_empty() && !d.eq_ignore_ascii_case("Application Frame Host"))
 }
 
+/// The app name a window of program `exe` (a stem) reports without an app id: the known app's name, else
+/// the program's description, else the stem.
+fn program_app_name(exe: &str, description: Option<&str>) -> String {
+    match known_by_exe(exe) {
+        Some(known) => known.name.into(),
+        None => useful_description(description).unwrap_or(exe).to_string(),
+    }
+}
+
 /// Identifies a window from what Windows says about it. `exe_path` is the process that draws the
 /// content (for a Store-app frame, its CoreWindow child's). Order: shell surfaces, the window's AUMID,
 /// the process's AUMID, the known-exe table, the file description, the exe stem.
@@ -138,15 +149,21 @@ pub fn identify(
     if let Some(found) = aumids.filter_map(|aumid| by_aumid(aumid, &exe, catalog)).next() {
         return found;
     }
-    if let Some(known) = known_by_exe(&exe) {
-        return identity(known.id, known.name, &exe);
-    }
     let id = exe.to_lowercase();
     if id == FRAME_HOST || id.is_empty() {
         return identity("", "", &exe);
     }
-    let name = useful_description(file_description).unwrap_or(&exe).to_string();
-    AppIdentity { id, name, exe }
+    let id = known_by_exe(&exe).map_or(id, |known| known.id.into());
+    AppIdentity { id, name: program_app_name(&exe, file_description), exe }
+}
+
+/// What the windows of the program at `path` (where a Start-menu entry leads) report as their app unless
+/// they carry an app id, as packaged and web apps' do. None when `path` isn't a program on this PC: a shell
+/// folder, a snap-in, a script, or one on a network share, whose read can stall for the share's timeout.
+pub fn program_window_name(path: &str) -> Option<String> {
+    let exe = stem_of(path);
+    let program = !exe.is_empty() && !path.starts_with(NETWORK_PATH_PREFIX) && path.to_ascii_lowercase().ends_with(".exe");
+    program.then(|| program_app_name(&exe, file_description(path).as_deref()))
 }
 
 /// The app id a window of installed app `catalog_id` will report, so a launch can wait for it.
@@ -302,7 +319,7 @@ mod tests {
     const SETTINGS: &str = "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel";
 
     fn app(id: &str, name: &str) -> InstalledApp {
-        InstalledApp { id: id.into(), name: name.into(), kind: AppKind::Packaged }
+        InstalledApp { id: id.into(), name: name.into(), kind: AppKind::Packaged, window_name: None }
     }
 
     fn id_name(found: AppIdentity) -> (String, String) {
@@ -368,6 +385,31 @@ mod tests {
         assert_eq!(id_name(identify("GLFW30", r"C:\x\blender.exe", None, None, Some("Blender"), &[])), pair("blender", "Blender"));
         assert_eq!(id_name(identify("Qt5QWindow", r"C:\x\obs64.exe", None, None, None, &[])), pair("obs64", "obs64"));
         assert_eq!(id_name(identify("X", r"C:\x\tool.exe", None, None, Some("  "), &[])), pair("tool", "tool"));
+    }
+
+    #[test]
+    fn names_a_programs_windows_as_identify_does() {
+        let cases = [
+            // Measured on the dev PC: the Start menu says "WinRAR", its windows "WinRAR archiver".
+            (r"C:\Program Files\WinRAR\WinRAR.exe", Some("WinRAR archiver"), "WinRAR archiver"),
+            (r"C:\Users\x\AppData\Local\Discord\Discord.exe", Some("Discord"), "Discord"),
+            // A blank description leaves the exe stem.
+            (r"C:\Users\x\AppData\Local\Amazon Drive\AmazonPhotos.exe", Some(" "), "AmazonPhotos"),
+            (r"C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE", Some("Microsoft Excel"), "Excel"),
+        ];
+        for (path, description, name) in cases {
+            assert_eq!(program_app_name(&stem_of(path), description), name);
+            assert_eq!(identify("AnyWindowClass", path, None, None, description, &[]).name, name);
+        }
+    }
+
+    #[test]
+    fn only_a_program_has_a_window_name() {
+        assert_eq!(program_window_name("::{52205FD8-5DFB-447D-801A-D0B52F2E83E1}"), None);
+        assert_eq!(program_window_name(r"C:\WINDOWS\system32\services.msc"), None);
+        assert_eq!(program_window_name(r"C:\Ruby33-x64\bin\irb.bat"), None);
+        assert_eq!(program_window_name(r"\\fileserver\apps\tool.exe"), None);
+        assert_eq!(program_window_name(""), None);
     }
 
     #[test]

@@ -7,14 +7,15 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, State};
-use windows::Win32::Foundation::HWND;
+use windows::core::{Interface, GUID};
+use windows::Win32::Foundation::{HWND, PROPERTYKEY};
 use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED};
 use windows::Win32::UI::Shell::{
-    BHID_EnumItems, IEnumShellItems, IShellItem, SHGetKnownFolderItem, FOLDERID_AppsFolder, KF_FLAG_DEFAULT, SIGDN,
-    SIGDN_NORMALDISPLAY, SIGDN_PARENTRELATIVEPARSING,
+    BHID_EnumItems, IEnumShellItems, IShellItem, IShellItem2, SHGetKnownFolderItem, FOLDERID_AppsFolder, KF_FLAG_DEFAULT,
+    SIGDN, SIGDN_NORMALDISPLAY, SIGDN_PARENTRELATIVEPARSING,
 };
 
-use super::identity::{expected_id, AppIdentity};
+use super::identity::{expected_id, program_window_name, AppIdentity};
 use crate::app_focus::{adopt, find_window};
 use crate::app_launch::{shell_execute, wait_until_ready};
 use crate::chat_context::WindowInfo;
@@ -31,6 +32,8 @@ const BATCH: usize = 32;
 const DOCUMENT_EXTENSIONS: [&str; 10] = [".url", ".chm", ".txt", ".pdf", ".html", ".htm", ".rtf", ".msi", ".sln", ".md"];
 /// Start-menu entries that are an app's paperwork, not the app.
 const DOCUMENT_WORDS: [&str; 9] = ["uninstall", "readme", "read me", "documentation", "release notes", "license", "licence", "manual", "faq"];
+/// PKEY_Link_TargetParsingPath: where a Start-menu shortcut leads ("C:\Program Files\WinRAR\WinRAR.exe").
+const PKEY_LINK_TARGET: PROPERTYKEY = PROPERTYKEY { fmtid: GUID::from_u128(0xb9b4b3fc_2b51_4a42_b5d8_324146afcf25), pid: 2 };
 
 /// Mirrors `InstalledApp` in `src/lib/types.ts`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -46,10 +49,15 @@ pub enum AppKind {
 
 /// Mirrors `InstalledApp` in `src/lib/types.ts`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InstalledApp {
     pub id: String,
     pub name: String,
     pub kind: AppKind,
+    /// A desktop app's windows report this as their app unless they carry its id: its program's description
+    /// ("WinRAR archiver" for WinRAR). None when the entry doesn't lead to a program.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window_name: Option<String>,
 }
 
 /// Help files, uninstallers, licences and web pages that the Start menu lists next to the apps.
@@ -80,7 +88,7 @@ pub fn entry(name: &str, id: &str) -> Option<InstalledApp> {
     if name.is_empty() || id.is_empty() || is_documentation(name, id) {
         return None;
     }
-    Some(InstalledApp { id: id.into(), name: name.into(), kind: kind_of(id) })
+    Some(InstalledApp { id: id.into(), name: name.into(), kind: kind_of(id), window_name: None })
 }
 
 /// Keeps the first entry per id (the shell can list an app twice).
@@ -179,6 +187,26 @@ fn display_name(item: &IShellItem, form: SIGDN) -> Result<String, String> {
     }
 }
 
+/// Where a Start-menu entry leads, when it's a shortcut. Packaged apps and shell folders lead nowhere.
+fn link_target(item: &IShellItem) -> Option<String> {
+    let item: IShellItem2 = item.cast().map_err(|e| log::warn!("couldn't read a Start-menu entry's properties: {e}")).ok()?;
+    // SAFETY: the shell allocates the string; it's copied and then freed with CoTaskMemFree.
+    unsafe {
+        let raw = item.GetString(&PKEY_LINK_TARGET).map_err(|e| log::debug!("a Start-menu entry leads to no file: {e}")).ok()?;
+        let text = raw.to_string();
+        CoTaskMemFree(Some(raw.0 as *const _));
+        text.map_err(|e| log::warn!("a Start-menu entry's target is unreadable: {e}")).ok()
+    }
+}
+
+/// A desktop app with the name its windows will report, from the program its entry leads to.
+fn with_window_name(mut app: InstalledApp, item: &IShellItem) -> InstalledApp {
+    if app.kind == AppKind::Desktop {
+        app.window_name = link_target(item).and_then(|target| program_window_name(&target));
+    }
+    app
+}
+
 fn enumerate() -> Result<Vec<InstalledApp>, String> {
     // SAFETY: COM is initialized on this thread by the caller; every interface is released on drop.
     let items: IEnumShellItems = unsafe {
@@ -193,7 +221,7 @@ fn enumerate() -> Result<Vec<InstalledApp>, String> {
         unsafe { items.Next(&mut batch, Some(&mut fetched)) }.map_err(|e| e.to_string())?;
         for item in batch.iter().take(fetched as usize).flatten() {
             match (display_name(item, SIGDN_NORMALDISPLAY), display_name(item, SIGDN_PARENTRELATIVEPARSING)) {
-                (Ok(name), Ok(id)) => apps.extend(entry(&name, &id)),
+                (Ok(name), Ok(id)) => apps.extend(entry(&name, &id).map(|app| with_window_name(app, item))),
                 (Err(error), _) | (_, Err(error)) => eprintln!("skipping an installed app that couldn't be read: {error}"),
             }
         }
@@ -334,8 +362,11 @@ mod tests {
             assert!(apps.len() >= MIN_APPS, "only {} apps", apps.len());
             for name in EXPECTED_APPS {
                 let app = named(&apps, name);
-                println!("{name}: {} ({:?}) -> expects window id {}", app.id, app.kind, expected_id(&app.id));
+                println!("{name}: {} ({:?}) -> expects window id {}, window name {:?}", app.id, app.kind, expected_id(&app.id), app.window_name);
             }
+            let desktop: Vec<_> = apps.iter().filter(|a| a.kind == AppKind::Desktop).collect();
+            let with_window_name = desktop.iter().filter(|a| a.window_name.is_some()).count();
+            println!("{with_window_name} of {} desktop apps have a window name", desktop.len());
             assert!(!apps.iter().any(|a| is_documentation(&a.name, &a.id)));
         }
 
@@ -381,5 +412,13 @@ mod tests {
     fn serializes_kind_in_lowercase() {
         let json = serde_json::to_string(&entry("Calculator", "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App").unwrap()).unwrap();
         assert!(json.contains(r#""kind":"packaged""#));
+    }
+
+    #[test]
+    fn serializes_a_window_name_only_when_there_is_one() {
+        let mut winrar = entry("WinRAR", r"{6D809377-6AF0-444B-8957-A3773F02200E}\WinRAR\WinRAR.exe").unwrap();
+        assert!(!serde_json::to_string(&winrar).unwrap().contains("windowName"));
+        winrar.window_name = Some("WinRAR archiver".into());
+        assert!(serde_json::to_string(&winrar).unwrap().contains(r#""windowName":"WinRAR archiver""#));
     }
 }
