@@ -39,3 +39,6 @@ ios/build/
 ios/dist/
 ios/HodeyCore/.build/
 *.ipa
+
+# Browser-test screenshots, snapshots and logs from the Playwright tools
+.playwright-mcp/
