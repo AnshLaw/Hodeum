@@ -5,11 +5,12 @@
 //! (overlay first, then the notch above it, so the notch stays clickable) whenever the foreground window
 //! changes, whenever the learner's window changes, moves, resizes or goes fullscreen, and from a cheap
 //! backstop that does so only when another window has actually come over them. It never activates,
-//! shows or hides them.
+//! shows or hides them. The overlay also follows the learner's window to its monitor.
 //!
 //! Out of scope: exclusive-fullscreen DirectX games own the display while they run, so nothing can be
 //! drawn over them. Borderless fullscreen apps are ordinary windows and are covered.
 
+mod monitor;
 mod zorder;
 
 #[cfg(test)]
@@ -30,7 +31,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::dock::geometry::PxRect;
 use crate::perception::model::RectDto;
+use crate::perception::window_watch::WindowDto;
 use crate::surfaces::{NOTCH, OVERLAY};
+
+pub use monitor::cover;
 
 /// How often the backstop looks for a window that has come over the surfaces.
 const BACKSTOP: Duration = Duration::from_millis(1500);
@@ -267,6 +271,24 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
 /// Asks the keeper to put the surfaces back on top if anything covers them; returns at once.
 pub fn request_check() {
     post(CHECK, &CHECK_QUEUED);
+}
+
+/// Moves the overlay onto the monitor showing most of the learner's window.
+fn follow(app: &AppHandle, bounds: &RectDto) -> Result<(), String> {
+    let monitors = monitor::monitor_rects()?;
+    let target = monitor::monitor_for(px_rect(bounds), &monitors).ok_or_else(|| "no monitor to draw guidance on".to_string())?;
+    crate::surfaces::follow_monitor(app, target)
+}
+
+/// The learner's window changed, moved or resized: the overlay follows it to its monitor, and the
+/// keeper checks that nothing (a window gone fullscreen, say) has come over the surfaces.
+pub fn on_learner_window(app: &AppHandle, window: Option<&WindowDto>) {
+    if let Some(window) = window {
+        if let Err(error) = follow(app, &window.bounds) {
+            log::warn!("couldn't move the overlay to the learner's monitor: {error}");
+        }
+    }
+    request_check();
 }
 
 #[cfg(test)]

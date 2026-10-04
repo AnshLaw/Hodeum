@@ -155,18 +155,15 @@ impl FocusReturn {
 /// Tells the overlay to re-read its monitor (scale and origin) after moving.
 const OVERLAY_MOVED_EVENT: &str = "overlay:moved";
 
-/// Moves the overlay onto `monitor` if it isn't already covering it.
+/// Moves the overlay onto `monitor` if it isn't already covering it, then has the overlay page re-read
+/// its monitor (origin and scale).
 pub fn follow_monitor(app: &AppHandle, monitor: PxRect) -> Result<(), String> {
     let overlay = window(app, OVERLAY)?;
-    let position = overlay.outer_position().map_err(|e| e.to_string())?;
-    let size = overlay.outer_size().map_err(|e| e.to_string())?;
-    let current = PxRect { x: position.x, y: position.y, width: size.width, height: size.height };
-    if current == monitor {
-        return Ok(());
+    let hwnd = HWND(overlay.hwnd().map_err(|e| e.to_string())?.0 as *mut _);
+    if crate::topmost::cover(hwnd, monitor)? {
+        app.emit(OVERLAY_MOVED_EVENT, ()).map_err(|e| e.to_string())?;
     }
-    overlay.set_position(PhysicalPosition::new(monitor.x, monitor.y)).map_err(|e| e.to_string())?;
-    overlay.set_size(PhysicalSize::new(monitor.width, monitor.height)).map_err(|e| e.to_string())?;
-    app.emit(OVERLAY_MOVED_EVENT, ()).map_err(|e| e.to_string())
+    Ok(())
 }
 
 #[tauri::command]
