@@ -127,7 +127,7 @@ The arrows above mean “when explicitly enabled and healthy”; **Local is alwa
 - Never upload screenshots, audio, or transcripts. Learner data (skills, Hode history, settings, chat text) syncs to Supabase only after the learner signs in with Google; signing in turns sync on, the sign-in screen says so, and Settings can pause it. Signed-out use is fully local.
 - Never persist raw screenshots by default.
 - Keep API secrets out of source control; use `.env.local` for development and an OS-backed secret store for distribution.
-- Show `● Local` or `☁ Enhanced` in the notch whenever provider state is visible.
+- Show `● Local` or `☁ Cloud` in the notch whenever provider state is visible.
 
 ### Perception and performance
 

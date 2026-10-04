@@ -93,7 +93,7 @@ Turn every cloud provider off in Settings → Cloud, so the run proves the local
 **Automated:** `src/features/hode/runtime.test.ts` (a failing provider) and `src/providers/cloud/policy.test.ts` (cooldown).
 
 **Live:**
-1. Save a Gemini key and turn on cloud reasoning; the badge should read **☁ Enhanced**.
+1. Save a Gemini key and turn on cloud reasoning; the badge should read **☁ Cloud**.
 2. Start the PivotTable Hode, then disconnect Wi-Fi after the first step.
 3. **Pass:** the next step still arrives, with at most a single delay of about the request timeout, and the Hode completes. Repeat the same check with ElevenLabs voice: Hodey keeps speaking in the local voice.
 
