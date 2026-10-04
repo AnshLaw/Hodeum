@@ -2,8 +2,8 @@ use serde::Serialize;
 use windows::Graphics::Imaging::{BitmapPixelFormat, SoftwareBitmap};
 use windows::Media::Ocr::{OcrEngine, OcrWord};
 use windows::Storage::Streams::DataWriter;
-use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
-use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+
+use super::ensure_com;
 
 /// A gap wider than this many text heights splits a line: home-screen labels share a baseline.
 const SPLIT_GAP_HEIGHTS: f64 = 1.2;
@@ -62,16 +62,6 @@ fn word_of(word: &OcrWord) -> Result<Word, String> {
     let rect = winrt(word.BoundingRect(), "word box")?;
     let text = winrt(word.Text(), "word text")?.to_string();
     Ok(Word { text, x: f64::from(rect.X), y: f64::from(rect.Y), width: f64::from(rect.Width), height: f64::from(rect.Height) })
-}
-
-/// WinRT needs COM on this worker thread; a thread already in another apartment still works.
-fn ensure_com() -> Result<(), String> {
-    // SAFETY: called once per blocking worker thread before any WinRT use.
-    let hr = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
-    if hr.is_err() && hr != RPC_E_CHANGED_MODE {
-        return Err(format!("couldn't start COM for OCR: {hr:?}"));
-    }
-    Ok(())
 }
 
 fn bitmap_of(png: &[u8]) -> Result<SoftwareBitmap, String> {

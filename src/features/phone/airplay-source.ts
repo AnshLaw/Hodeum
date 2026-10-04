@@ -1,10 +1,11 @@
 import { Channel } from "@tauri-apps/api/core";
 import { avcCodec, findSps } from "./h264";
-import type { FrameSink, PhoneSource, PhoneSourceStatus } from "./phone-source";
+import type { AirplayNetwork, FrameSink, PhoneSource, PhoneSourceStatus } from "./phone-source";
+import type { AirplayNetworkChoice } from "./prefs";
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 /** Mirrors the JSON messages in src-tauri/src/phone/airplay.rs. */
-type ReceiverMessage = { state: "waiting" | "streaming" | "failed"; detail?: string | null };
+type ReceiverMessage = { state: "waiting" | "streaming" | "failed"; detail?: string | null; network?: AirplayNetwork };
 
 const KEY_FLAG = 1;
 const MICROSECONDS = 1000;
@@ -19,6 +20,13 @@ export function bytesOf(message: unknown): Uint8Array | undefined {
   return undefined;
 }
 
+/** The mirror status a receiver message means. Streaming isn't live yet: the decoder says so once a frame shows. */
+export function receiverStatus(message: ReceiverMessage): PhoneSourceStatus | undefined {
+  if (message.state === "waiting") return { state: "waiting", network: message.network };
+  if (message.state === "failed") return { state: "error", message: message.detail ?? "The AirPlay receiver stopped." };
+  return undefined;
+}
+
 /** AirPlay via the UxPlay receiver: Rust hands over H.264 access units, WebCodecs decodes them here. */
 export class AirPlayPhoneSource implements PhoneSource {
   readonly kind = "airplay" as const;
@@ -27,7 +35,11 @@ export class AirPlayPhoneSource implements PhoneSource {
   private live = false;
   private skipToKey = false;
 
-  constructor(private readonly invoke: Invoke) {}
+  /** `network` is read at every start, so Try again picks up a changed choice. */
+  constructor(
+    private readonly invoke: Invoke,
+    private readonly network: () => AirplayNetworkChoice,
+  ) {}
 
   onStatus(handler: (status: PhoneSourceStatus) => void): () => void {
     this.handlers.add(handler);
@@ -43,7 +55,7 @@ export class AirPlayPhoneSource implements PhoneSource {
       if (bytes) this.onUnit(bytes, sink);
       else this.onReceiver(message as ReceiverMessage);
     };
-    await this.invoke<void>("airplay_start", { onFrame: channel });
+    await this.invoke<void>("airplay_start", { network: this.network(), onFrame: channel });
   }
 
   async stop(): Promise<void> {
@@ -52,11 +64,10 @@ export class AirPlayPhoneSource implements PhoneSource {
   }
 
   private onReceiver(message: ReceiverMessage): void {
-    if (message.state === "waiting") this.emit({ state: "waiting" });
-    else if (message.state === "failed") {
-      this.closeDecoder();
-      this.emit({ state: "error", message: message.detail ?? "The AirPlay receiver stopped." });
-    }
+    const status = receiverStatus(message);
+    if (!status) return;
+    if (status.state === "error") this.closeDecoder();
+    this.emit(status);
   }
 
   private onUnit(bytes: Uint8Array, sink: FrameSink): void {

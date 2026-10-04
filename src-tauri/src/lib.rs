@@ -67,6 +67,7 @@ pub fn run() {
         .manage(surfaces::FocusReturn::default())
         .manage(vlm::Vlm::default())
         .manage(phone::airplay::Airplay::default())
+        .manage(phone::hotspot::Hotspot::default())
         .invoke_handler(tauri::generate_handler![
             surfaces::set_notch_hit_rect,
             surfaces::set_notch_activatable,
@@ -137,6 +138,7 @@ pub fn run() {
             if let Err(error) = app.state::<phone::airplay::Airplay>().stop() {
                 eprintln!("{error}");
             }
+            phone::hotspot::release_on_exit(app);
         }
     });
 }

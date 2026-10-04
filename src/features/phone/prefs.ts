@@ -2,13 +2,24 @@ import { z } from "zod";
 import type { PhoneSourceKind } from "./phone-source";
 
 const STORAGE_KEY = "hodeum.phone";
-const prefsSchema = z.object({ source: z.enum(["camera", "airplay"]), cameraLabel: z.string().optional() });
+const prefsSchema = z.object({
+  source: z.enum(["camera", "airplay"]),
+  cameraLabel: z.string().optional(),
+  airplayNetwork: z.enum(["direct", "wifi"]).optional(),
+});
 // AirPlay needs no extra hardware or driver, so it is the source a first-time learner can actually use.
 const DEFAULT_PREFS: PhonePrefs = { source: "airplay" };
+
+/**
+ * Mirrors `NetworkChoice` in src-tauri/src/phone/airplay.rs. "direct" (the default): the iPhone's USB
+ * tether or this laptop's hotspot, which guest Wi-Fi and VPNs can't block. "wifi": the laptop's own Wi-Fi.
+ */
+export type AirplayNetworkChoice = "direct" | "wifi";
 
 export interface PhonePrefs {
   source: PhoneSourceKind;
   cameraLabel?: string;
+  airplayNetwork?: AirplayNetworkChoice;
 }
 
 export function parsePhonePrefs(raw: string | null): PhonePrefs {

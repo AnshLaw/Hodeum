@@ -3,11 +3,18 @@ import type { CapturedFrame } from "../../providers/vision/types";
 
 export type PhoneSourceKind = "camera" | "airplay";
 
+/** Where the iPhone has to be to see the AirPlay receiver. Mirrors `Network` in src-tauri/src/phone/airplay.rs. */
+export type AirplayNetwork =
+  | { kind: "usb" }
+  | { kind: "hotspot"; ssid: string; passphrase: string }
+  /** `problem`: why the direct link (cable or laptop hotspot) couldn't be used, when it was wanted. */
+  | { kind: "wifi"; problem: string | null };
+
 export type PhoneSourceStatus =
   | { state: "off" }
   | { state: "connecting" }
-  /** The receiver is up; the iPhone hasn't started mirroring yet. */
-  | { state: "waiting" }
+  /** The receiver is up; the iPhone hasn't started mirroring yet. `network`: AirPlay only. */
+  | { state: "waiting"; network?: AirplayNetwork }
   | { state: "live"; width: number; height: number }
   | { state: "error"; message: string };
 

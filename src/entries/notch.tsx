@@ -80,7 +80,7 @@ async function openStores(): Promise<Stores> {
 function createPerception(activity: ActivityTracker) {
   const native = new NativePerception({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
   const mirror = new PhoneMirror(new FrameCanvas(), (kind) =>
-    kind === "camera" ? new CameraPhoneSource(() => loadPhonePrefs().cameraLabel) : new AirPlayPhoneSource(invoke),
+    kind === "camera" ? new CameraPhoneSource(() => loadPhonePrefs().cameraLabel) : new AirPlayPhoneSource(invoke, () => loadPhonePrefs().airplayNetwork ?? "direct"),
   );
   const phone = new PhonePerception(mirror, (png) => invoke<OcrSegment[]>("ocr_frame", { png }));
   const surfaces = new SurfacePerception({ windows: native, phone });
