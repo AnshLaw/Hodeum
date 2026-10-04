@@ -1,5 +1,6 @@
 import { appsMentioned, searchName, searchableAppId } from "./apps";
 import { localHelp } from "./local-help";
+import { withoutAddresses } from "./scrub";
 import type { WebProgress, WebSearch, WebSearchSource } from "./types";
 import { errorText, sourceHosts, withDeadline } from "./util";
 
@@ -16,12 +17,13 @@ const OPENERS = /^(?:can you|could you|would you|will you|tell me|show me|let me
 const HOW = /^(?:how (?:do|can|would|should|could) (?:i|you|we)|how to|how)\s+/;
 
 /**
- * A generic how-to query from the learner's own words: filler and pointers to the screen removed,
- * plus the app as people search for it. Deterministic (no model call), so nothing from the screen can
- * steer what leaves the PC; an app outside the allow-list is never added.
+ * A generic how-to query from the learner's own words: emails, links, paths, file names, filler and
+ * pointers to the screen removed, plus the app as people search for it. Deterministic (no model call), so
+ * nothing from the screen can steer what leaves the PC; an app outside the allow-list is never added.
  */
 export function howToQuery(question: string, appName?: string): string {
-  const words = question
+  const said = withoutAddresses(question);
+  const words = said
     .toLowerCase()
     .replace(/[^\p{L}\p{N}%+' -]/gu, " ")
     .split(/\s+/)
@@ -33,7 +35,7 @@ export function howToQuery(question: string, appName?: string): string {
   }
   if (text === "") return "";
   const app = searchableAppId(appName);
-  const named = app !== undefined && appsMentioned(question).includes(app);
+  const named = app !== undefined && appsMentioned(said).includes(app);
   const suffix = app && !named ? ` ${searchName(app)}` : "";
   return `how to ${text.split(" ").slice(0, MAX_QUERY_WORDS).join(" ")}${suffix}`;
 }

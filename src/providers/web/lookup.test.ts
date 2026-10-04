@@ -30,6 +30,13 @@ describe("howToQuery", () => {
   it("is empty when nothing but filler was said", () => {
     expect(howToQuery("um hey hodey please", "Excel")).toBe("");
   });
+
+  it("leaves out emails, links, paths and file names the learner said, before their punctuation is dropped", () => {
+    expect(howToQuery("How do I email jane.doe@example.com from Outlook?")).toBe("how to email from outlook");
+    expect(howToQuery("How do I open Q3-salaries.xlsx in Excel?", "Excel")).toBe("how to open in excel");
+    expect(howToQuery(String.raw`how do I share C:\Users\anshr\Documents\Payroll with my team`, "File Explorer")).toBe("how to share with my team File Explorer Windows 11");
+    expect(howToQuery("where do I paste www.acme-intranet.com/payroll in brave?", "Brave")).not.toMatch(/www|acme|intranet|com|payroll/);
+  });
 });
 
 describe("lookupHowTo", () => {
@@ -52,6 +59,13 @@ describe("lookupHowTo", () => {
     expect(search).toHaveBeenCalledWith("how to sort column Excel");
     expect(found).toBe(FOUND);
     expect(progress.mock.calls.map(([p]) => p.state)).toEqual(["searching", "found", "finished"]);
+  });
+
+  it("sends the web no email, link, path or file name from a spoken question", async () => {
+    const search = vi.fn(async (query: string): Promise<WebSearch> => ({ query, results: [] }));
+    await lookupHowTo("How do I email jane.doe@example.com from Outlook?", undefined, signal(), { web: { search }, webEnabled: true });
+    await lookupHowTo(String.raw`How do I attach C:\Users\anshr\Q3-salaries.xlsx to an email in Outlook?`, undefined, signal(), { web: { search }, webEnabled: true });
+    expect(search.mock.calls.map(([query]) => query)).toEqual(["how to email from outlook", "how to attach to an email in outlook"]);
   });
 
   it("doesn't search when web search is off or there's nothing to search for", async () => {
