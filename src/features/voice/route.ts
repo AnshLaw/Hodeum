@@ -2,7 +2,7 @@ import type { InstalledApp, TaskPack } from "../../lib/types";
 import { goalEvent, goalEvents } from "../hode/bridge";
 import type { HodeEvent, HodeState } from "../hode/model";
 import { appChoiceEvent, idleOpenAppEvent, openAppEvent } from "../hode/open-app";
-import { classify, isAcknowledgement } from "./intent";
+import { classify, isAcknowledgement, isSubstantive, opensWithQuestion, type Intent } from "./intent";
 
 export { isAcknowledgement } from "./intent";
 
@@ -175,14 +175,14 @@ const tooShort = (text: string) => wordsIn(text).length < MIN_WORDS;
 
 const isCommand = (text: string) => asCommand(text) !== undefined;
 
-/** During a Hode: a control, an app to open, or else a question. Noise and greetings are dropped. */
+/** During a Hode: a control, an app to open, or else a question ("is this on?" too). Noise and greetings are dropped. */
 function routeInHode(s: HodeState, text: string, apps: InstalledApp[]): HodeEvent[] {
   const acknowledged = isAcknowledgement(text);
   if (acknowledged && s.phase === "answering") return [{ type: "DISMISS" }];
   const command = asCommand(text);
   if (command) return [command];
   if (acknowledged || tooShort(text)) return [];
-  const intent = classify(text, { isCommand });
+  const intent = classify(text, { isCommand, inHode: true });
   if (intent === "noise" || intent === "greeting") return [];
   // "Open the insert tab" names no installed app, so it stays a question about the screen.
   const open = intent === "open_app" ? openAppEvent(text, apps) : undefined;
@@ -190,8 +190,21 @@ function routeInHode(s: HodeState, text: string, apps: InstalledApp[]): HodeEven
 }
 
 /**
- * Idle: only a real task (or a pack's own words) starts a Hode; a greeting gets a reply, noise nothing. A reply
- * to "Did you mean Outlook or Outlook (classic)?" that picks one opens it.
+ * Idle, once it's neither small talk nor noise: a pack's lesson, a task, or a question about the screen.
+ * A pack's words start its lesson even around a Hindi question word ("क्या आप मुझे डार्क मोड चालू करना सिखा
+ * सकते हैं"); one that opens with a question word ("what is a pivot table?") is answered instead, as before.
+ * Anything else with a few real words in it ("explain this screen") is asked about the screen.
+ */
+function askOrStart(text: string, intent: Intent, packs: TaskPack[], openAllowed: boolean): HodeEvent[] {
+  const goal = goalEvent(text, packs, openAllowed);
+  if (goal.type === "GOAL_SUBMITTED" && goal.pack && !opensWithQuestion(text)) return [{ type: "START_HODE" }, goal];
+  if (intent === "task") return openAllowed ? [{ type: "START_HODE" }, goal] : [question(text)];
+  return intent === "question" || isSubstantive(text) ? [question(text)] : [];
+}
+
+/**
+ * Idle: only a real task (or a pack's own words) starts a Hode; a greeting or mic check gets a reply, noise and
+ * fragments nothing. A reply to "Did you mean Outlook or Outlook (classic)?" that picks one opens it.
  */
 function routeIdle(s: HodeState, text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[]): HodeEvent[] {
   const open = appChoiceEvent(s, text, apps) ?? idleOpenAppEvent(text, apps, openAllowed);
@@ -200,11 +213,7 @@ function routeIdle(s: HodeState, text: string, packs: TaskPack[], openAllowed: b
   const intent = classify(text, { isCommand, isApp: () => false });
   if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];
   if (intent === "noise" || intent === "ack" || intent === "control" || tooShort(text)) return [];
-  if (intent === "question") return [question(text)];
-  const goal = goalEvent(text, packs, openAllowed);
-  if (goal.type === "GOAL_SUBMITTED" && goal.pack) return [{ type: "START_HODE" }, goal];
-  if (intent !== "task") return [];
-  return openAllowed ? [{ type: "START_HODE" }, goal] : [question(text)];
+  return askOrStart(text, intent, packs, openAllowed);
 }
 
 /**

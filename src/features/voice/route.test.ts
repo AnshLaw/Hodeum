@@ -157,12 +157,50 @@ describe("what the learner means", () => {
     }
   });
 
-  it("starts an open Hode only for a real task", () => {
-    expect(route(initialState, "new tab", true)).toEqual([]);
-    expect(route(initialState, "We are okay we are going to put monster tricks out a little bit", true)).toEqual([]);
+  it("starts an open Hode only for a real task: anything else unclear is at most a question", () => {
+    expect(route(initialState, "new tab", true)).toEqual([{ type: "VOICE_QUESTION", question: "new tab" }]);
+    expect(types(route(initialState, "We are okay we are going to put monster tricks out a little bit", true))).toEqual(["VOICE_QUESTION"]);
     for (const said of ["how to send a pdf on whatsapp", "make a pivot table in excel", "add a chart", "zip these files"]) {
       expect(types(route(initialState, said, true)), said).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
     }
+  });
+
+  it("asks about the screen for anything unclear with a few real words in it, as main did", () => {
+    for (const said of ["explain this screen", "how many sheets are there", "tell me about this page", "इस पेज के बारे में बताओ"]) {
+      expect(route(initialState, said), said).toEqual([{ type: "VOICE_QUESTION", question: said }]);
+      expect(route(initialState, said, true), said).toEqual([{ type: "VOICE_QUESTION", question: said }]);
+    }
+  });
+
+  it("still drops noise, a lone word, thanks and filler, and greets a mic check", () => {
+    for (const said of ["um so", "the", "thanks a lot", "let me think", "never mind", "the third one"]) {
+      expect(route(initialState, said, true), said).toEqual([]);
+    }
+    for (const said of ["can you hear me", "is this working", "is it on", "testing one two three"]) {
+      expect(route(initialState, said, true), said).toEqual([{ type: "CHITCHAT", kind: "greeting" }]);
+    }
+  });
+
+  it("during a Hode, 'is this on?' is a question about the screen, unless it names Hodey's hearing", () => {
+    for (const said of ["is this on?", "Is it working?", "is this working"]) {
+      expect(route(guiding, said), said).toEqual([{ type: "VOICE_QUESTION", question: said }]);
+    }
+    expect(route(guiding, "can you hear me")).toEqual([]);
+    expect(route(guiding, "is the mic on")).toEqual([]);
+    expect(route(initialState, "is the toggle on")).toEqual([{ type: "VOICE_QUESTION", question: "is the toggle on" }]);
+  });
+
+  it("starts a pack's lesson asked for in Hindi or Hinglish, question word and all", () => {
+    const darkMode = [{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", pack: { id: "windows-dark-mode" } }];
+    for (const said of ["क्या आप मुझे डार्क मोड चालू करना सिखा सकते हैं", "kya aap mujhe dark mode chalu karna sikha sakte ho", "can you teach me to turn on dark mode"]) {
+      expect(route(initialState, said), said).toMatchObject(darkMode);
+    }
+  });
+
+  it("answers a question that opens with a question word, even about a pack's task", () => {
+    expect(route(initialState, "what is a pivot table")).toEqual([{ type: "VOICE_QUESTION", question: "what is a pivot table" }]);
+    expect(route(initialState, "is dark mode on")).toEqual([{ type: "VOICE_QUESTION", question: "is dark mode on" }]);
+    expect(route(initialState, "ये बटन क्या करता है")).toEqual([{ type: "VOICE_QUESTION", question: "ये बटन क्या करता है" }]);
   });
 
   it("still starts a pack's lesson from its own words, verb or not", () => {
