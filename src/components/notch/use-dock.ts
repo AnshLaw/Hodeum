@@ -3,12 +3,15 @@ import { reportError } from "../../lib/errors";
 import type { Bus } from "../../lib/bus";
 import type { NativeShell } from "../../lib/shell";
 import { applyCommand, loadPrefs, notchWindow, savePrefs, shouldReveal, type AppPresence, type DockPrefs, type Engagement } from "../../features/dock/dock";
+import { usePulse } from "./hooks";
 
 /**
  * Keeps auto-hide from flickering as the cursor brushes past the edge, or as Hodey's signals hand over to each
  * other (a line ending as the mic opens for the reply).
  */
 const AUTO_HIDE_DELAY_MS = 2500;
+/** A click on the tucked orb that comes with no hover (touch, a screen reader) holds the notch out this long. */
+const ORB_CLICK_HOLD_MS = 3000;
 
 function browserStorage(): Storage | undefined {
   try {
@@ -71,9 +74,13 @@ export function useDock(shell: NativeShell, inHode: boolean, bus: Bus, searching
   return { prefs, update, command };
 }
 
-/** Auto-hide: reveal immediately, tuck away only once the cursor has been gone and Hodey idle a moment. */
-export function useRevealed(prefs: DockPrefs, hovered: boolean, engagement: Engagement): boolean {
-  const wanted = shouldReveal(prefs.visibility, hovered, engagement);
+/**
+ * Auto-hide: reveal immediately, fold back into the orb only once the cursor has been gone and Hodey idle a moment.
+ * The second value brings the notch out from a click on the orb.
+ */
+export function useRevealed(prefs: DockPrefs, hovered: boolean, engagement: Engagement): [boolean, () => void] {
+  const [clicked, reveal] = usePulse(ORB_CLICK_HOLD_MS);
+  const wanted = shouldReveal(prefs.visibility, hovered || clicked, engagement);
   const [revealed, setRevealed] = useState(wanted);
   useEffect(() => {
     if (wanted) {
@@ -84,6 +91,6 @@ export function useRevealed(prefs: DockPrefs, hovered: boolean, engagement: Enga
     return () => clearTimeout(timer);
   }, [wanted]);
   // Reveal in the same render the hover arrives in; otherwise the side panel first opens while still
-  // tucked off the edge and only slides in a frame later.
-  return wanted || revealed;
+  // a small orb and only grows a frame later.
+  return [wanted || revealed, reveal];
 }

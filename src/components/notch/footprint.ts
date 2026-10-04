@@ -1,6 +1,18 @@
 import { intersects } from "../../lib/coords";
-import type { OverlayPrimitive, Rect } from "../../lib/types";
+import type { OverlayPrimitive, Rect, Size } from "../../lib/types";
 import { NOTCH_WIDTHS } from "./notch-view";
+
+/**
+ * The part of the surface's box (CSS px) inside the notch window: the only part that can be hovered or clicked.
+ * The tucked orb sinks into the screen edge, and what's past it must not reach onto a neighbouring monitor.
+ */
+export function withinWindow(rect: Rect, window: Size): Rect {
+  const x = Math.min(Math.max(rect.x, 0), window.width);
+  const y = Math.min(Math.max(rect.y, 0), window.height);
+  const right = Math.min(Math.max(rect.x + rect.width, x), window.width);
+  const bottom = Math.min(Math.max(rect.y + rect.height, y), window.height);
+  return { x, y, width: right - x, height: bottom - y };
+}
 
 /** Height of the expanded guidance card in CSS px (bar + two text lines + controls), until it's measured. */
 export const GUIDANCE_CARD_HEIGHT = 160;

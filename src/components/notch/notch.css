@@ -509,11 +509,17 @@
   margin-top: 10px;
 }
 
-/* ---- Auto-hide: slide off the edge, leaving a sliver the cursor can find ---- */
+/* ---- Auto-hide: fold into a small orb at the screen edge, Hodey resting in it ---- */
 
 .notch,
 .sidebar {
-  --sliver: 5px;
+  /*
+   * The orb sinks a little into the screen edge, so a cursor thrown at the edge lands on it. What shows is no deeper
+   * than the smallest surface it opens into (the 36 px idle pill, the 44 px side tab), so a cursor resting on the orb
+   * is still on the notch once it opens: it can't flick open and shut beneath it.
+   */
+  --tucked-size: 40px; /* NOTCH_WIDTHS.tucked */
+  --tucked-sink: 4px;
   --sidebar-float-gap: 10px;
   --sidebar-tab-height: 120px;
 }
@@ -526,16 +532,106 @@
     transform var(--hd-dur) var(--hd-ease);
 }
 
-.notch--tucked {
-  transform: translateY(calc(-100% + var(--sliver)));
+/* Black over any app: a hairline ring keeps it in sight over dark windows, the shadow over light ones. */
+.notch.notch--tucked,
+.sidebar.sidebar--tucked {
+  height: var(--tucked-size);
+  min-height: var(--tucked-size);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.16),
+    0 4px 14px rgb(0 0 0 / 0.32);
+}
+
+/* Folding away eases in like the busy orb; coming back out uses the opened size's timing. */
+.notch.notch--tucked {
+  width: var(--notch-width);
+  transform: translateY(calc(-1 * var(--tucked-sink)));
+  transition:
+    width 360ms var(--hd-shrink),
+    height 360ms var(--hd-shrink),
+    border-radius 300ms var(--hd-shrink),
+    box-shadow 300ms var(--hd-shrink),
+    transform 360ms var(--hd-shrink);
+}
+
+.sidebar.sidebar--tucked {
+  width: var(--tucked-size);
 }
 
 .sidebar--left.sidebar--tucked {
-  transform: translateX(calc(-100% + var(--sliver)));
+  transform: translateX(calc(-1 * var(--tucked-sink)));
 }
 
 .sidebar--right.sidebar--tucked {
-  transform: translateX(calc(100% - var(--sliver)));
+  transform: translateX(var(--tucked-sink));
+}
+
+.notch__orb.notch__orb--tucked {
+  width: var(--tucked-size);
+  height: var(--tucked-size);
+  flex: none;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  background: none;
+  cursor: pointer;
+}
+
+/* The head sits left of and below its drawing's centre (room for z's and waves): centre it in what shows of the orb. */
+.notch .notch__orb--tucked > svg {
+  transform: translate(2px, 0);
+}
+
+.sidebar--left .notch__orb--tucked > svg {
+  transform: translate(4px, -2px);
+}
+
+.sidebar--right .notch__orb--tucked > svg {
+  transform: translate(0, -2px);
+}
+
+/* The privacy dots ride on the orb under Hodey's chin, so what Hodey is using shows even while it's tucked away. */
+.notch__orb-dots {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  display: flex;
+  transform: translateX(-50%);
+}
+
+.sidebar--left .notch__orb-dots {
+  left: calc(50% + var(--tucked-sink) / 2);
+}
+
+.sidebar--right .notch__orb-dots {
+  left: calc(50% - var(--tucked-sink) / 2);
+}
+
+.notch__orb-dots .privacy-dots {
+  gap: 2px;
+  padding: 0;
+}
+
+.notch__orb-dots .privacy-dots i {
+  width: 4px;
+  height: 4px;
+  box-shadow: 0 0 0 1.5px var(--hd-black);
+}
+
+/* Just out of the orb: the click that reached for it lands here, and mustn't press whatever opened beneath it. */
+.notch--waking > *,
+.sidebar--waking > * {
+  pointer-events: none;
+}
+
+/* After the rules above, so they don't win back the folding and sliding. */
+@media (prefers-reduced-motion: reduce) {
+  .notch.notch--tucked,
+  .sidebar {
+    transition-duration: 1ms;
+  }
 }
 
 /* ---- Drag grip: Hodey's face ---- */
@@ -967,30 +1063,9 @@
   }
 }
 
-/* While tucked away, the dots ride on the visible sliver so the learner always knows. */
-.privacy-dots--sliver {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  height: var(--sliver, 5px);
-}
-
-.privacy-dots--sliver i {
-  width: 4px;
-  height: 4px;
-}
-
 .notch,
 .sidebar {
   position: relative;
-}
-
-.sidebar--left .privacy-dots--sliver,
-.sidebar--right .privacy-dots--sliver {
-  top: 50%;
-  bottom: auto;
-  flex-direction: column;
 }
 
 /* ---- Mic ---- */

@@ -4,7 +4,8 @@ import { AGENT_STYLE_COPY, MODE_COPY } from "../../lib/modes";
 import { currentStep, rechecking, standingBy, type HodeState } from "../../features/hode/model";
 import { skillName } from "../../features/skills/graph";
 
-export type NotchSize = "idle" | "orb" | "compact" | "guidance" | "lesson" | "success" | "phone" | "skills";
+/** "orb": Hodey busy looking or thinking. "tucked": auto-hide's resting orb at the screen edge. */
+export type NotchSize = "idle" | "orb" | "tucked" | "compact" | "guidance" | "lesson" | "success" | "phone" | "skills";
 export type NotchMode = "idle" | "goal" | "status" | "guidance" | "answer" | "annotate" | "paused" | "error" | "success";
 export type NotchControl =
   | "start"
@@ -55,8 +56,11 @@ export interface NotchView {
   choices?: Choice[];
 }
 
+/** The tucked orb's diameter in CSS px; matches `--tucked-size` in notch.css. */
+const TUCKED_ORB_PX = 40;
+
 /** Pill widths in CSS px, per PRD §8.2. Height follows content. */
-export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, orb: 44, compact: 380, guidance: 496, lesson: 500, success: 340, phone: 580, skills: 520 };
+export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, orb: 44, tucked: TUCKED_ORB_PX, compact: 380, guidance: 496, lesson: 500, success: 340, phone: 580, skills: 520 };
 
 export const EXPANDED_SIZES: NotchSize[] = ["guidance", "lesson", "success", "phone", "skills"];
 const QUIET_LEVELS = new Set(["hint", "observe", "independent"]);
@@ -282,10 +286,13 @@ export interface IslandContext {
   phone: boolean;
   /** "Your skills" is open from the menu: the notch widens to hold the skill graph. */
   skills?: boolean;
+  /** Auto-hide tucked the notch away: it rests as a small orb at the screen edge until the learner reaches for it. */
+  tucked?: boolean;
 }
 
-/** The shape the top notch takes right now: the view's size, adjusted for hover, menu and peek. */
+/** The shape the top notch takes right now: the view's size, adjusted for auto-hide, hover, menu and peek. */
 export function islandSize(view: NotchView, context: IslandContext): NotchSize {
+  if (context.tucked) return "tucked";
   if (context.menuOpen) return "lesson";
   if (context.skills) return "skills";
   if (context.phone) return "phone";
