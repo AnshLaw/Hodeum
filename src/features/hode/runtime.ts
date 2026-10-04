@@ -32,6 +32,7 @@ export class HodeRuntime {
   /** Skill writes are chained so the next step's read sees the previous step's outcome. */
   private pendingWrite: Promise<void> = Promise.resolve();
   private saying: { text: string; endedAt: number | undefined } | undefined;
+  private readonly speechFinishedListeners = new Set<() => void>();
   private focusing: Promise<void> = Promise.resolve();
   private muted = false;
   /** The learner's default mode, used when a goal arrives without one. */
@@ -183,10 +184,24 @@ export class HodeRuntime {
     this.saying = saying;
     this.deps.tts
       .speak(once(text), controller.signal)
-      .catch((error) => {
-        if (!controller.signal.aborted) console.error("Speech failed", error);
-      })
-      .finally(() => (saying.endedAt = Date.now()));
+      .then(
+        () => {
+          saying.endedAt = Date.now();
+          if (!controller.signal.aborted) this.speechFinishedListeners.forEach((listener) => listener());
+        },
+        (error) => {
+          saying.endedAt = Date.now();
+          if (!controller.signal.aborted) console.error("Speech failed", error);
+        },
+      );
+  }
+
+  /** Hodey said a line in full (not interrupted): in a conversation, the learner's turn to reply. */
+  onSpeechFinished(listener: () => void): () => void {
+    this.speechFinishedListeners.add(listener);
+    return () => {
+      this.speechFinishedListeners.delete(listener);
+    };
   }
 
   /** What Hodey is saying, or said moments ago (its voice can still be echoing back through the mic). */

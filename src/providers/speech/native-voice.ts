@@ -92,6 +92,10 @@ export class NativeSpeechInput implements SpeechInput {
     return this.bridge.invoke<void>("voice_stop");
   }
 
+  followUp(): Promise<void> {
+    return this.bridge.invoke<void>("voice_follow_up");
+  }
+
   onStatus(handler: (status: SpeechInputStatus) => void): () => void {
     let last = this.status();
     return this.voice.subscribe((s) => {

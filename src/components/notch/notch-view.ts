@@ -41,6 +41,10 @@ export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, orb: 44, com
 const EXPANDED: NotchSize[] = ["guidance", "lesson", "success"];
 const QUIET_LEVELS = new Set(["hint", "observe", "independent"]);
 
+/** Longest learner question shown above an answer before it's shortened. */
+const QUESTION_CHARS = 60;
+const clip = (text: string) => (text.length > QUESTION_CHARS ? `${text.slice(0, QUESTION_CHARS - 1)}…` : text);
+
 export function isExpanded(view: NotchView): boolean {
   return EXPANDED.includes(view.size);
 }
@@ -121,7 +125,7 @@ export function notchView(s: HodeState): NotchView {
     case "guiding":
       return guidanceView(s);
     case "answering":
-      return { mode: "answer", size: "guidance", eyebrow: COPY.pointAndAsk, title: s.action?.speech ?? "", busy: false, controls: ["dismiss", "repeat"] };
+      return { mode: "answer", size: "guidance", eyebrow: s.spokenQuestion ? COPY.youAsked(clip(s.spokenQuestion)) : COPY.pointAndAsk, title: s.action?.speech ?? "", busy: false, controls: ["dismiss", "repeat"] };
     case "annotating":
       return { mode: "annotate", size: "compact", title: COPY.annotateTitle, detail: COPY.annotateDetail, busy: false, controls: ["cancel_annotate"] };
     case "paused":

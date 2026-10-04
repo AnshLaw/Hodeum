@@ -60,9 +60,9 @@ describe("connectHodeBridge", () => {
 
   it("applies saved settings to the runtime and voice", async () => {
     const { bus, settings, applyVoice } = setup();
-    await settings.save({ ...DEFAULT_SETTINGS, voice: { enabled: false, rate: 1.3, name: "zira" }, mode: "help", stuckSeconds: 20 });
+    await settings.save({ ...DEFAULT_SETTINGS, voice: { enabled: false, rate: 1.3, name: "zira", conversation: true }, mode: "help", stuckSeconds: 20 });
     bus.emit("settings:changed", {});
     await settle();
-    expect(applyVoice).toHaveBeenLastCalledWith({ enabled: false, rate: 1.3, name: "zira" });
+    expect(applyVoice).toHaveBeenLastCalledWith({ enabled: false, rate: 1.3, name: "zira", conversation: true });
   });
 });

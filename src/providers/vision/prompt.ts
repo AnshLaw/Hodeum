@@ -93,7 +93,7 @@ function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
     const box = toImageBox(region.shape.bounds, frame.rect).join(", ");
     lines.push(`The learner marked the area [${box}] and asks: <learner>${untrusted(context.utterance ?? "What is this?")}</learner>. Answer about that area with kind "answer".`);
   } else if (context.utterance) {
-    lines.push(`The learner asks: <learner>${untrusted(context.utterance)}</learner>. Answer briefly about what is on screen with kind "answer", pointing at the control it's about if there is one.`);
+    lines.push(`The learner asks: <learner>${untrusted(context.utterance)}</learner>. Answer with kind "answer" in one or two short sentences, warm and natural, the way you'd say it out loud to someone next to you; point at the control it's about if there is one.`);
   } else if (context.openGoal) {
     lines.push("There is no fixed plan: decide the single next action toward the goal from what is on screen, and point at where to do it.");
     if (context.lastInstruction) lines.push(`You last told the learner: ${untrusted(context.lastInstruction)}. Check whether they did it.`);

@@ -59,6 +59,13 @@ describe("modes in the notch", () => {
   });
 });
 
+describe("spoken answers", () => {
+  it("shows the learner's question above Hodey's answer, like a chat", () => {
+    const view = notchView({ ...initialState, phase: "answering", spokenQuestion: "what does the green button do", action: guideAction({ kind: "answer", speech: "It saves your work." }) });
+    expect(view).toMatchObject({ eyebrow: "You: “what does the green button do”", title: "It saves your work." });
+  });
+});
+
 describe("islandSize", () => {
   const looking = notchView({ ...initialState, phase: "reasoning" });
   const quiet = { settled: true, hovered: false, menuOpen: false, peek: false, listening: false };

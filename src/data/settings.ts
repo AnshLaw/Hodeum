@@ -33,8 +33,10 @@ export const settingsSchema = z.object({
   voice: z.object({
     enabled: z.boolean(),
     rate: z.number().min(MIN_RATE).max(MAX_RATE),
-    /** A local Windows voice's URI; empty means the system default. */
+    /** A natural voice ("hodey:kokoro:3") or a Windows voice URI; empty means Hodey's default. */
     name: z.string().max(MAX_VOICE_NAME).default(""),
+    /** Talk back and forth: after Hodey answers, the mic reopens briefly for the learner's reply. */
+    conversation: z.boolean().default(true),
   }),
   /** How new Hodes run by default; each Hode can still pick its own. */
   mode: z.enum(HODE_MODES).catch("teach").default("teach"),
@@ -51,7 +53,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type Appearance = Settings["appearance"];
 
 export const DEFAULT_SETTINGS: Settings = {
-  voice: { enabled: true, rate: 1.05, name: "" },
+  voice: { enabled: true, rate: 1.05, name: "", conversation: true },
   mode: "teach",
   stuckSeconds: 12,
   appearance: { ...DEFAULT_APPEARANCE },

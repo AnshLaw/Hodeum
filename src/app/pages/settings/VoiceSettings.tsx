@@ -62,6 +62,9 @@ export function VoiceSettings({ voice, natural, onChange }: { voice: Settings["v
       <Row label="Speak instructions" detail="Hodey reads each step aloud. You can also mute from the notch.">
         <input type="checkbox" className="hswitch" checked={voice.enabled} onChange={(e) => onChange({ ...voice, enabled: e.target.checked })} aria-label="Speak instructions" />
       </Row>
+      <Row label="Talk back and forth" detail="After Hodey answers, it listens a few seconds for your reply, so you can keep talking without pressing anything. Say “that's all” or stay quiet to stop.">
+        <input type="checkbox" className="hswitch" checked={voice.conversation} onChange={(e) => onChange({ ...voice, conversation: e.target.checked })} aria-label="Talk back and forth" />
+      </Row>
       <Row label="Voice" detail={error ? `Couldn't play the preview: ${error}` : "Every voice runs on this PC. Press ▶ to hear one, click it to choose."}>
         <span />
       </Row>

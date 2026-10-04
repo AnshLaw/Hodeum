@@ -20,8 +20,9 @@ use super::{set_listening, set_status_detail};
 const SAMPLE_RATE: i32 = 16_000;
 const VAD_WINDOW: usize = 512;
 const VAD_THRESHOLD: f32 = 0.5;
-/// Silence that ends an utterance; short enough to feel responsive, long enough for a breath.
-const END_SILENCE_SECS: f32 = 0.6;
+/// Silence that ends an utterance: long enough for a natural mid-sentence pause (0.6 s cut people
+/// off in testing), short enough that replies still feel quick.
+const END_SILENCE_SECS: f32 = 0.9;
 const MIN_SPEECH_SECS: f32 = 0.25;
 const MAX_SPEECH_SECS: f32 = 20.0;
 const VAD_BUFFER_SECS: f32 = 30.0;
@@ -38,6 +39,8 @@ const NO_SPEECH_AFTER: Duration = Duration::from_secs(8);
 const NOTHING_HEARD: &str = "I didn't catch anything. Tap the mic and try again.";
 /// A held talk key is released eventually; this guards against a stuck key.
 const MAX_HOLD: Duration = Duration::from_secs(60);
+/// After Hodey speaks in a conversation, how long it waits for the learner to reply.
+const FOLLOW_UP_PATIENCE: Duration = Duration::from_secs(6);
 const MIC_SILENT: &str = "Your microphone is sending silence. Check it isn't muted, or pick another input in Windows sound settings.";
 
 pub const SPEECH_START_EVENT: &str = "voice:speech-start";
@@ -51,9 +54,19 @@ struct Transcript {
     is_final: bool,
 }
 
+/// How a listening session began; it decides how long Hodey waits and what silence means.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ListenMode {
+    /// Tapped the mic: one sentence; silence ends with "I didn't catch anything".
+    Tap,
+    /// Holding the talk key: everything until release.
+    Hold,
+    /// Hodey just finished speaking in a conversation: wait briefly for a reply, quietly.
+    FollowUp,
+}
+
 pub enum ListenCommand {
-    /// `hold`: the talk key is held, so listen until Finish rather than for one sentence.
-    Start { hold: bool },
+    Start { mode: ListenMode },
     /// The talk key was released: send what was said.
     Finish,
     /// Stop without sending anything.
@@ -211,7 +224,8 @@ fn process(engines: &mut Engines, resampler: &LinearResampler, pending: &mut Vec
 
 /// One listening session. Tap: one sentence, then it stops by itself (or after a silent wait).
 /// Hold: until the talk key is released, then everything said goes as one utterance.
-fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>, hold: bool) -> Result<(), String> {
+fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>, mode: ListenMode) -> Result<(), String> {
+    let hold = mode == ListenMode::Hold;
     let (tx, audio) = mpsc::channel::<Vec<f32>>();
     let mic = open_mic(tx)?;
     let resampler = LinearResampler::create(mic.rate as i32, SAMPLE_RATE).ok_or("Couldn't set up audio resampling.")?;
@@ -248,9 +262,14 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
             warned = true;
             emit_error(app, MIC_SILENT);
         }
-        let waited_out = if hold { started.elapsed() > MAX_HOLD } else { !heard_speech && started.elapsed() > NO_SPEECH_AFTER };
+        let waited_out = match mode {
+            ListenMode::Hold => started.elapsed() > MAX_HOLD,
+            ListenMode::Tap => !heard_speech && started.elapsed() > NO_SPEECH_AFTER,
+            ListenMode::FollowUp => !heard_speech && started.elapsed() > FOLLOW_UP_PATIENCE,
+        };
         if waited_out {
-            if heard_sound && !heard_speech {
+            // A tap that heard nothing deserves a word; a quiet follow-up just means the chat is over.
+            if mode == ListenMode::Tap && heard_sound && !heard_speech {
                 emit_error(app, NOTHING_HEARD);
             }
             break;
@@ -284,7 +303,7 @@ fn load(app: &AppHandle) -> Option<Engines> {
 pub fn worker(app: AppHandle, commands: Receiver<ListenCommand>, installed: bool) {
     let mut engines = if installed { load(&app) } else { None };
     while let Ok(command) = commands.recv() {
-        let ListenCommand::Start { hold } = command else { continue };
+        let ListenCommand::Start { mode } = command else { continue };
         if engines.is_none() {
             engines = load(&app);
         }
@@ -292,7 +311,7 @@ pub fn worker(app: AppHandle, commands: Receiver<ListenCommand>, installed: bool
             emit_error(&app, super::models::SETUP_HINT);
             continue;
         };
-        if let Err(reason) = listen(&app, loaded, &commands, hold) {
+        if let Err(reason) = listen(&app, loaded, &commands, mode) {
             emit_error(&app, &reason);
         }
         loaded.segmenter.reset();

@@ -62,6 +62,7 @@ pub fn run() {
             voice::voice_status,
             voice::voice_start,
             voice::voice_stop,
+            voice::voice_follow_up,
             voice::tts_speak,
             voice::tts_stop,
             hodey_key::set_hodey_key

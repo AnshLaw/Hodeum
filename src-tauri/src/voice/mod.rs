@@ -14,7 +14,7 @@ use std::thread;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use listen::ListenCommand;
+use listen::{ListenCommand, ListenMode};
 use speak::{SpeakJob, StopSwitch};
 
 const STATUS_EVENT: &str = "voice:status";
@@ -121,7 +121,7 @@ pub fn hold_start(app: &AppHandle) -> Result<(), String> {
         listen::emit_error(app, &reason);
         return Ok(());
     }
-    send_listen(&voice, ListenCommand::Start { hold: true })
+    send_listen(&voice, ListenCommand::Start { mode: ListenMode::Hold })
 }
 
 /// Hodey key released: send what was said.
@@ -132,7 +132,14 @@ pub fn hold_end(app: &AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn voice_start(voice: State<'_, Voice>) -> Result<(), String> {
     asr_ready(&voice)?;
-    send_listen(&voice, ListenCommand::Start { hold: false })
+    send_listen(&voice, ListenCommand::Start { mode: ListenMode::Tap })
+}
+
+/// In a conversation, after Hodey speaks: listen briefly for the learner's reply.
+#[tauri::command]
+pub fn voice_follow_up(voice: State<'_, Voice>) -> Result<(), String> {
+    asr_ready(&voice)?;
+    send_listen(&voice, ListenCommand::Start { mode: ListenMode::FollowUp })
 }
 
 #[tauri::command]

@@ -182,3 +182,17 @@ describe("what Hodey is saying", () => {
     expect(runtime.hodeySaying()).toBeUndefined();
   });
 });
+
+describe("Hodey finishing a sentence", () => {
+  it("tells listeners when a line was spoken in full, but not when it was cut off", async () => {
+    const { start, runtime } = setup();
+    const finished = vi.fn();
+    runtime.onSpeechFinished(finished);
+    await start();
+    expect(finished).toHaveBeenCalled();
+    finished.mockClear();
+    runtime.interruptSpeech();
+    await settle();
+    expect(finished).not.toHaveBeenCalled();
+  });
+});

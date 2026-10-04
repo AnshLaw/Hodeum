@@ -57,6 +57,8 @@ async function boot(): Promise<void> {
     capture: () => activity.track("screen", () => invoke<CapturedFrame>("capture_active_window")),
   });
   const local = new LocalReasoningProvider(new TaskPackReasoningProvider(), qwen, () => vision.current().state === "ready");
+  /** Talk back and forth (Settings > Voice); updated when settings load or change. */
+  let conversation = true;
   const voice = createLocalVoice({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
   showMicDot(voice.speech, activity);
   const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts: voice.tts });
@@ -68,7 +70,10 @@ async function boot(): Promise<void> {
     settings,
     packs: TASK_PACKS,
     openGoalsAllowed: () => vision.current().state === "ready",
-    applyVoice: (settings) => voice.apply(settings),
+    applyVoice: (settings) => {
+      voice.apply(settings);
+      conversation = settings.conversation;
+    },
     applyHodeyKey: (key) => {
       hodeyKeySetting.set(key);
       invoke<void>("set_hodey_key", { key }).catch((error) => console.error("Couldn't set the Hodey key", error));
@@ -80,6 +85,8 @@ async function boot(): Promise<void> {
     dispatch: runtime.dispatch,
     interrupt: () => runtime.interruptSpeech(),
     hodeySaying: () => runtime.hodeySaying(),
+    onHodeyDoneSpeaking: (listener) => runtime.onSpeechFinished(listener),
+    conversation: () => conversation,
     packs: TASK_PACKS,
     openAllowed: () => vision.current().state === "ready",
   });

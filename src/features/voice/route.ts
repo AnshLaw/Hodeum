@@ -2,8 +2,9 @@ import type { TaskPack } from "../../lib/types";
 import { goalEvent } from "../hode/bridge";
 import type { HodeEvent, HodeState } from "../hode/model";
 
-/** Said before a command or question; dropped before matching. */
-const WAKE = /^(?:hey |ok |okay )?hod[e]?y[,!.]?\s*/i;
+/** Said before a command or question; dropped before matching. Includes how speech recognition
+ *  tends to mishear "Hodey" ("body", "howdy", "hodie"). */
+const WAKE = /^(?:(?:hey|hi|hello|ok|okay)[ ,]+)?(?:hode?y|hodie|hoadie|howdy|body)\b[,!.]?\s*/i;
 const POLITE = /\b(?:please|thanks|thank you|can you|could you)\b/gi;
 /** Utterances shorter than this (after cleanup) are noise: "um", "uh". */
 const MIN_CHARS = 3;

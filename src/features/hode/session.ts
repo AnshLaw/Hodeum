@@ -62,9 +62,12 @@ export function onVoiceQuestion(s: HodeState, e: EventOf<"VOICE_QUESTION">): Tra
   if (question === "" || NOT_LISTENING.includes(s.phase)) return noop(s);
   const answeringAlready = s.phase === "observing" && s.spokenQuestion !== undefined;
   const resumePhase = answeringAlready || s.phase === "answering" ? (s.resumePhase ?? resumeTarget(s)) : resumeTarget(s);
+  const requestId = s.requestId + 1;
+  // A quick acknowledgement while Hodey looks, varied so it doesn't sound canned.
+  const ack = COPY.acks[requestId % COPY.acks.length];
   return {
-    state: { ...s, phase: "observing", spokenQuestion: question, question: undefined, resumePhase, requestId: s.requestId + 1 },
-    effects: [{ type: "stopSpeech" }, { type: "cancelStuckTimer" }, { type: "observe" }],
+    state: { ...s, phase: "observing", spokenQuestion: question, question: undefined, resumePhase, requestId },
+    effects: [{ type: "stopSpeech" }, { type: "cancelStuckTimer" }, { type: "say", text: ack }, { type: "observe" }],
   };
 }
 

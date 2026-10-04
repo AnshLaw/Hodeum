@@ -16,6 +16,8 @@ export interface SpeechInput {
   onTranscript(handler: (text: string, final: boolean) => void): () => void;
   /** The learner started talking (voice activity detected): Hodey stops speaking right away. */
   onSpeechStart(handler: () => void): () => void;
+  /** In a conversation, after Hodey speaks: listen briefly for a reply (ends quietly if none comes). */
+  followUp?(): Promise<void>;
   /** Problems worth telling the learner about, e.g. a muted microphone. */
   onError?(handler: (message: string) => void): () => void;
 }

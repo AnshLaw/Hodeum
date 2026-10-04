@@ -147,7 +147,8 @@ describe("spoken questions", () => {
     const t = step(busy, { type: "VOICE_QUESTION", question: "where is insert?" });
     expect(t.state).toMatchObject({ phase: "observing", spokenQuestion: "where is insert?", resumePhase: "observing" });
     expect(t.state.requestId).toBeGreaterThan(busy.requestId);
-    expect(types(t)).toEqual(["stopSpeech", "cancelStuckTimer", "observe"]);
+    expect(types(t)).toEqual(["stopSpeech", "cancelStuckTimer", "say", "observe"]);
+    expect(COPY.acks).toContain((t.effects[2] as { text: string }).text);
   });
 
   it("answers about the whole screen, even from another app, then resumes the Hode", () => {

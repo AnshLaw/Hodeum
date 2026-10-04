@@ -36,6 +36,9 @@ export const COPY = {
   stepOf: (current: number, total: number) => `Step ${current} of ${total}`,
   openHode: (goal: string) => `Hode · ${goal}`,
   clarify: "I'm not confident which control you need. Move your pointer near the area you're working in.",
+  /** Said the moment the learner asks something, so there's no dead air while Hodey looks. */
+  acks: ["Let me look.", "One sec.", "Sure, let me see.", "Okay, looking now."],
+  youAsked: (question: string) => `You: “${question}”`,
   helpStandingBy: "I'm here if you get stuck. Ask me anytime.",
   allSteps: "All steps",
   modeLabel: "Mode",

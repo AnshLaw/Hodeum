@@ -49,6 +49,12 @@ describe("routeUtterance", () => {
     expect(route(guiding, "where is the insert tab")).toEqual([{ type: "VOICE_QUESTION", question: "where is the insert tab" }]);
   });
 
+  it("drops the wake word, including the ways speech recognition mishears it", () => {
+    expect(route(guiding, "Hello body, give me a hint")).toEqual([{ type: "HINT_REQUESTED" }]);
+    expect(route(guiding, "hey howdy repeat that")).toEqual([{ type: "REPEAT" }]);
+    expect(route(guiding, "Hodie, stop")).toEqual([{ type: "END_HODE" }]);
+  });
+
   it("ignores silence and noise", () => {
     expect(route(guiding, "  ")).toEqual([]);
     expect(route(guiding, "um")).toEqual([]);
