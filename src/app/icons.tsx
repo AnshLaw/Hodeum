@@ -56,6 +56,21 @@ export const MaximizeIcon = () => (
   </svg>
 );
 
+export const RestoreIcon = () => (
+  <svg {...BASE}>
+    <rect x="4.5" y="6.5" width="7" height="7" rx="1.2" />
+    <path d="M7 6.5V5.2c0-.7.5-1.2 1.2-1.2h4.6c.7 0 1.2.5 1.2 1.2v4.6c0 .7-.5 1.2-1.2 1.2h-1.3" />
+  </svg>
+);
+
+/** A pill with an arrow folding up into it: back to the notch. */
+export const NotchIcon = () => (
+  <svg {...BASE}>
+    <rect x="5" y="2.5" width="8" height="3.5" rx="1.75" />
+    <path d="M9 15V8.5M6.5 11 9 8.5l2.5 2.5" />
+  </svg>
+);
+
 export const CloseWindowIcon = () => (
   <svg {...BASE}>
     <path d="M5.5 5.5l7 7M12.5 5.5l-7 7" />

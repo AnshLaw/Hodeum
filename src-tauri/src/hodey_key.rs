@@ -147,7 +147,7 @@ fn dispatch(app: &AppHandle, action: Action) {
         Action::TalkEnd => crate::voice::hold_end(app),
         Action::Command(SHOW_HIDE) => Ok(crate::tray::emit_command(app, "toggle-visibility")),
         Action::Command(POINT_AND_ASK) => app.emit(crate::ANNOTATE_EVENT, serde_json::json!({})).map_err(|e| e.to_string()),
-        Action::Command(OPEN_APP) => crate::app_window::show(app, None),
+        Action::Command(OPEN_APP) => crate::app_window::toggle(app),
         Action::Command(other) => Err(format!("no command for Hodey key + {other}")),
     };
     if let Err(reason) = result {

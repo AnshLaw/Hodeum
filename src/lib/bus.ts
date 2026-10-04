@@ -1,6 +1,6 @@
 import type { ActivityChannel } from "./activity";
 import type { AccountStatus } from "../features/account/types";
-import type { DockPrefs } from "../features/dock/dock";
+import type { AppPresence, DockPrefs } from "../features/dock/dock";
 import type { LearnerAnnotation, OverlayPrimitive, Surface } from "./types";
 
 type Empty = Record<string, never>;
@@ -31,6 +31,8 @@ export interface BusEvents {
   "dock:prefs-request": Empty;
   /** Ask the notch to move or restyle Hodey, e.g. from the app's settings. */
   "dock:change": Partial<DockPrefs>;
+  /** The Hodeum app is on screen, folding back into the notch, or gone; and whether the learner is in it. */
+  "app:presence": { presence: AppPresence; focused: boolean };
   /** Sign-in and sync state, broadcast by the notch (which owns the account) whenever it changes or is asked. */
   "account:status": AccountStatus;
   "account:status-request": Empty;

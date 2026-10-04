@@ -3,7 +3,7 @@ import { reportError } from "../../lib/errors";
 import type { Bus } from "../../lib/bus";
 import type { NativeShell } from "../../lib/shell";
 import type { HodePhase } from "../../features/hode/model";
-import { applyCommand, loadPrefs, reservesSpace, savePrefs, shouldReveal, type DockPrefs } from "../../features/dock/dock";
+import { applyCommand, loadPrefs, notchWindow, savePrefs, shouldReveal, type AppPresence, type DockPrefs } from "../../features/dock/dock";
 
 /** Keeps auto-hide from flickering as the cursor brushes past the edge. */
 const AUTO_HIDE_DELAY_MS = 2500;
@@ -30,13 +30,20 @@ function useDockBroadcast(bus: Bus, prefs: DockPrefs, update: (change: Partial<D
   useEffect(() => bus.on("dock:change", update), [bus, update]);
 }
 
-/** Owns dock + visibility preferences and mirrors them onto the native window. */
+/** Whether the Hodeum app is on screen; the notch steps aside while it is. */
+function useAppPresence(bus: Bus): AppPresence {
+  const [presence, setPresence] = useState<AppPresence>("closed");
+  useEffect(() => bus.on("app:presence", (state) => setPresence(state.presence)), [bus]);
+  return presence;
+}
+
+/** Owns dock + visibility preferences and mirrors them onto the native window (stepping aside for the app). */
 export function useDock(shell: NativeShell, phase: HodePhase, bus: Bus): DockController {
   const [prefs, setPrefs] = useState<DockPrefs>(() => {
     const storage = browserStorage();
     return storage ? loadPrefs(storage) : loadPrefs({ getItem: () => null });
   });
-  const reserve = reservesSpace(prefs, phase);
+  const { visible, reserve } = notchWindow(prefs, phase, useAppPresence(bus));
 
   useEffect(() => {
     const storage = browserStorage();
@@ -46,8 +53,8 @@ export function useDock(shell: NativeShell, phase: HodePhase, bus: Bus): DockCon
     shell.setDock(prefs.dock, reserve).catch(reportError("Couldn't move Hodey to its dock"));
   }, [shell, prefs.dock, reserve]);
   useEffect(() => {
-    shell.setNotchVisible(prefs.visibility !== "hidden").catch(reportError("Couldn't show or hide Hodey"));
-  }, [shell, prefs.visibility]);
+    shell.setNotchVisible(visible).catch(reportError("Couldn't show or hide Hodey"));
+  }, [shell, visible]);
 
   const update = useCallback((change: Partial<DockPrefs>) => setPrefs((current) => ({ ...current, ...change })), []);
   const command = useCallback((name: string) => setPrefs((current) => applyCommand(current, name)), []);

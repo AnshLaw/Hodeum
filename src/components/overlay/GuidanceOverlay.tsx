@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { guidanceHidden, type AppPresenceState } from "../../app/frame";
 import type { Bus } from "../../lib/bus";
 import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
@@ -35,8 +36,10 @@ function useOverlayMonitor(shell: NativeShell): MonitorInfo | undefined {
 function useOverlayBus(bus: Bus, surfaces: Surface[]) {
   const [primitives, setPrimitives] = useState<OverlayPrimitive[]>([]);
   const [annotating, setAnnotating] = useState(false);
+  const [app, setApp] = useState<AppPresenceState>();
   useEffect(() => {
     const offs = [
+      bus.on("app:presence", setApp),
       // Guidance for another surface replaces ours, so a stale desktop highlight never lingers.
       bus.on("overlay:render", (payload) => setPrimitives(surfaces.includes(payload.surface ?? "windows") ? payload.primitives : [])),
       bus.on("overlay:clear", () => setPrimitives([])),
@@ -45,7 +48,8 @@ function useOverlayBus(bus: Bus, surfaces: Surface[]) {
     ];
     return () => offs.forEach((off) => off());
   }, [bus, surfaces.join()]);
-  return { primitives, annotating, setAnnotating };
+  // Highlights are for the learner's app; while they're in the Hodeum app they'd only cover it.
+  return { primitives: guidanceHidden(app) ? [] : primitives, annotating, setAnnotating };
 }
 
 /** The click-through guidance surface; becomes interactive only while the learner is marking for Point & Ask. */

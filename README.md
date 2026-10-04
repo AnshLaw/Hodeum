@@ -39,7 +39,10 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - The server listens only on 127.0.0.1, needs a fresh random key each launch, and won't start if another program already holds its port.
 
 **Hodeum app**
-- Open it from the notch's expand button, the tray, or <kbd>Right Ctrl</kbd>+<kbd>A</kbd>. It grows out of the notch and folds back into it when closed. Closing only hides it; Hodey keeps running.
+- Open it from the notch's expand button, the tray, or <kbd>Right Ctrl</kbd>+<kbd>A</kbd>. It grows out of the notch, and the notch steps aside while the app is on screen (a copilot sidebar gives its space back too).
+- It's a normal window: drag the title bar, double-click it or press <kbd>Win</kbd>+<kbd>Up</kbd> to maximize, snap it, resize it from any edge, minimize it. It remembers where you put it.
+- **Back to notch** (title bar), the close button, <kbd>Alt</kbd>+<kbd>F4</kbd> or <kbd>Right Ctrl</kbd>+<kbd>A</kbd> again fold it back into the notch, and the notch returns exactly as you had it (position, sidebar, auto-hide or hidden). Minimizing it brings the notch back too. Starting a Hode from the app folds it away so the notch can guide you.
+- Closing only hides it: Hodey, and any Hode in progress, keep running. Guidance highlights pause while you're in the app and come back when you switch to your own app.
 - **Home**: start a Hode, continue the live one, and see streak, skills mastered, minutes learning, recent Hodes and what to practise next.
 - **Your Hodes**: every Hode as a timeline of steps, corrections, hints and questions.
 - **Learning paths**: task packs and every skill's mastery. Change how much help a skill gets, or reset it.
@@ -60,7 +63,7 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - **Hold it:** talk to Hodey; let go to send.
 - **Hodey key + P:** Point & Ask.
 - **Hodey key + H:** show or hide Hodey.
-- **Hodey key + A:** open the Hodeum app.
+- **Hodey key + A:** open the Hodeum app, or fold it back into the notch if you're in it.
 
 Hodey swallows these letter presses, so the app underneath never sees them, and other Right Ctrl shortcuts (copy, paste) work as usual.
 

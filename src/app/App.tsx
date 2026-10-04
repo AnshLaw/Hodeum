@@ -1,16 +1,17 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { HodeSummary } from "../lib/bus";
+import { COPY } from "../lib/copy";
 import { HodeumMark } from "../components/shared/icons";
 import { railNote } from "../features/account/copy";
 import { useAccount } from "../features/account/use-account";
 import { useLiveHode } from "./hooks";
-import { ChatIcon, CloseWindowIcon, GearIcon, HodesIcon, HomeIcon, MaximizeIcon, MinimizeIcon, PathIcon } from "./icons";
+import { ChatIcon, CloseWindowIcon, GearIcon, HodesIcon, HomeIcon, MaximizeIcon, MinimizeIcon, NotchIcon, PathIcon, RestoreIcon } from "./icons";
 import { ChatPage } from "./pages/ChatPage";
 import { HodesPage } from "./pages/HodesPage";
 import { HomePage } from "./pages/HomePage";
 import { LearningPage } from "./pages/LearningPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import type { AppServices } from "./services";
+import type { AppServices, AppWindowControls } from "./services";
 import "./app.css";
 
 export type Page = "home" | "hodes" | "learning" | "chat" | "settings";
@@ -23,22 +24,35 @@ const NAV: { page: Page; label: string; icon: ReactNode }[] = [
   { page: "settings", label: "Settings", icon: <GearIcon /> },
 ];
 
+function useMaximized(window: AppWindowControls): boolean {
+  const [maximized, setMaximized] = useState(false);
+  useEffect(() => window.onMaximizedChange?.(setMaximized), [window]);
+  return maximized;
+}
+
+/** Double-clicking the drag region maximizes, like any Windows title bar. */
 function TitleBar({ services }: { services: AppServices }) {
   const { window } = services;
+  const maximized = useMaximized(window);
   return (
     <header className="happ__titlebar" data-tauri-drag-region>
       <span className="happ__brand" data-tauri-drag-region>
         <HodeumMark size={18} />
         Hodeum
       </span>
+      <span className="happ__titlebar-fill" data-tauri-drag-region />
+      <button type="button" className="happ__to-notch" title={COPY.backToNotch} onClick={window.close}>
+        <NotchIcon />
+        {COPY.backToNotch}
+      </button>
       <span className="happ__window-controls">
-        <button type="button" aria-label="Minimize" onClick={window.minimize}>
+        <button type="button" aria-label="Minimize" title="Minimize" onClick={window.minimize}>
           <MinimizeIcon />
         </button>
-        <button type="button" aria-label="Maximize" onClick={window.toggleMaximize}>
-          <MaximizeIcon />
+        <button type="button" aria-label={maximized ? "Restore" : "Maximize"} title={maximized ? "Restore" : "Maximize"} onClick={window.toggleMaximize}>
+          {maximized ? <RestoreIcon /> : <MaximizeIcon />}
         </button>
-        <button type="button" aria-label="Close" className="happ__close" onClick={window.close}>
+        <button type="button" aria-label="Close" title="Close (back to the notch)" className="happ__close" onClick={window.close}>
           <CloseWindowIcon />
         </button>
       </span>
@@ -80,6 +94,8 @@ export function HodeumApp({ services }: { services: AppServices }) {
   const [page, setPage] = useState<Page>("home");
   const live = useLiveHode(services.bus);
   const account = useAccount(services.bus);
+  // Starting a Hode hands over to the notch, which guides it: the app folds back out of the way.
+  useEffect(() => services.bus.on("hode:start", services.window.close), [services]);
   return (
     <div className="happ">
       <TitleBar services={services} />

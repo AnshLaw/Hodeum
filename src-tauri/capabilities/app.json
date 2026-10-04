@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "app",
-  "description": "Hodeum desktop app window: local data, its own window controls",
+  "description": "Hodeum desktop app window: local data, its own title bar (drag, double-click to maximize, minimize, maximize/restore, fold back to the notch)",
   "windows": ["hodeum_app"],
   "permissions": [
     "core:default",
@@ -13,6 +13,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-internal-toggle-maximize",
     "core:window:allow-is-maximized",
+    "core:window:allow-is-minimized",
     "core:window:allow-hide"
   ]
 }
