@@ -15,6 +15,7 @@ import type { AccountUser } from "./types";
 
 const DEVICE_ID_KEY = "hodeum.deviceId";
 const PAUSED_KEY = "hodeum.syncPaused";
+const OWNER_KEY = "hodeum.dataOwner";
 const FALLBACK_DEVICE_NAME = "Windows PC";
 
 export interface ConnectAccountDeps extends TauriLoopbackDeps {
@@ -41,9 +42,27 @@ async function deviceIdentity(deps: TauriLoopbackDeps): Promise<DeviceIdentity> 
   }
 }
 
+/** Stands in for an owner record that can't be read, so nothing syncs until it's sorted out. */
+const UNREADABLE_OWNER: AccountUser = { id: "unreadable", name: "an account this PC can't identify" };
+
+function readOwner(): AccountUser | undefined {
+  const saved = localStorage.getItem(OWNER_KEY);
+  if (saved === null) return undefined;
+  try {
+    const owner = JSON.parse(saved) as AccountUser;
+    if (typeof owner?.id === "string") return owner;
+    throw new Error("missing id");
+  } catch (error) {
+    console.error("This PC's data owner is unreadable; sync stays off rather than risk the wrong account", error);
+    return UNREADABLE_OWNER;
+  }
+}
+
 const browserPrefs: AccountPrefs = {
   paused: () => localStorage.getItem(PAUSED_KEY) === "true",
   setPaused: (paused) => localStorage.setItem(PAUSED_KEY, String(paused)),
+  owner: readOwner,
+  setOwner: (user) => localStorage.setItem(OWNER_KEY, JSON.stringify(user)),
 };
 
 async function openSyncDatabase(): Promise<SqlDatabase | undefined> {

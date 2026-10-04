@@ -28,10 +28,18 @@ export interface SyncSession {
   subscribe(listener: (status: SyncStatus) => void): () => void;
 }
 
-/** Pausing sync is a choice about this PC, so it isn't synced. */
+/** Choices about this PC, so they aren't synced. */
 export interface AccountPrefs {
   paused(): boolean;
   setPaused(paused: boolean): void;
+  /** The account this PC's local data belongs to: the first one that synced it. */
+  owner(): AccountUser | undefined;
+  setOwner(user: AccountUser): void;
+}
+
+/** Local data is one learner's; it must never be uploaded to (or have deletions applied in) another account. */
+export function otherAccountMessage(owner: AccountUser): string {
+  return `This PC's learning belongs to another Hodeum account (${owner.email ?? owner.name ?? owner.id}), so it won't sync here. Sign in with that account to sync.`;
 }
 
 export interface AccountServiceDeps {
@@ -134,6 +142,9 @@ export class AccountService {
       this.session = undefined;
     }
     if (!want) return this.update({ sync: OFF });
+    const owner = this.deps.prefs.owner();
+    if (owner && owner.id !== want.id) return this.update({ sync: { state: "blocked", error: otherAccountMessage(owner) } });
+    if (!owner) this.deps.prefs.setOwner(want);
     const sync = this.deps.session(want);
     const off = sync.subscribe((status) => this.update({ sync: status }));
     this.session = { user: want, sync, off };

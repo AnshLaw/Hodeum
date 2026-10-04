@@ -71,6 +71,7 @@ function setup(loopback = new FakeLoopback({ code: "abc" }), backend: AuthBacken
   const bus = new LocalBus();
   const sessions: FakeSession[] = [];
   let paused = false;
+  let owner: AccountUser | undefined;
   const service = new AccountService({
     backend: backend === "none" ? undefined : backend,
     loopback,
@@ -80,11 +81,11 @@ function setup(loopback = new FakeLoopback({ code: "abc" }), backend: AuthBacken
       sessions.push(session);
       return session;
     },
-    prefs: { paused: () => paused, setPaused: (next) => (paused = next) },
+    prefs: { paused: () => paused, setPaused: (next) => (paused = next), owner: () => owner, setOwner: (next) => (owner = next) },
   });
   const seen: AccountStatus[] = [];
   bus.on("account:status", (status) => seen.push(status));
-  return { bus, service, sessions, seen, loopback };
+  return { bus, service, sessions, seen, loopback, owner: () => owner, setOwner: (next: AccountUser) => (owner = next) };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -154,6 +155,24 @@ describe("AccountService", () => {
     await settle();
     expect(sessions[0].running).toBe(false);
     expect(seen.at(-1)).toMatchObject({ phase: "signed-out", sync: { state: "off" } });
+  });
+
+  it("ties this PC's data to the first account that syncs it", async () => {
+    const { bus, service, owner } = setup();
+    await service.start();
+    bus.emit("account:sign-in", {});
+    await settle();
+    expect(owner()).toMatchObject({ id: "u1" });
+  });
+
+  it("never syncs this PC's data into a different account", async () => {
+    const backend = new FakeBackend();
+    backend.current = { id: "u2", email: "someone-else@example.com" };
+    const { service, sessions, setOwner } = setup(new FakeLoopback({}), backend);
+    setOwner(ANSH);
+    await service.start();
+    expect(sessions).toEqual([]);
+    expect(service.status()).toMatchObject({ phase: "signed-in", sync: { state: "blocked", error: expect.stringContaining("learner@example.com") } });
   });
 
   it("resumes a saved session at boot", async () => {

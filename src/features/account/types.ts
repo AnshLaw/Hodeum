@@ -4,7 +4,8 @@ export interface AccountUser {
   name?: string;
 }
 
-export type SyncState = "off" | "idle" | "syncing" | "error";
+/** `blocked`: signed in to an account this PC's data doesn't belong to; nothing syncs. */
+export type SyncState = "off" | "idle" | "syncing" | "error" | "blocked";
 
 export interface SyncStatus {
   state: SyncState;

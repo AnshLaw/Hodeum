@@ -49,4 +49,5 @@ Only after sign-in, and only while sync isn't paused: skills, Hodes and their st
 | "Port 47615 is busy" | Another app holds the port; close it and sign in again |
 | Browser shows a Supabase "redirect URL not allowed" error | Step 2.3: the redirect URL isn't listed |
 | Dashboard: "<PC> didn't answer" | Hodeum isn't running there, isn't signed in, or sync is paused |
+| "This PC's learning belongs to another Hodeum account" | The PC's local data was first synced by a different Google account. Sign in with that one; local data is never uploaded to another account |
 | "Last sync failed: …" in Settings | Network or Supabase error; local data is untouched and the next pass retries |

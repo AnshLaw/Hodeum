@@ -21,5 +21,7 @@ describe("account copy", () => {
     expect(syncDetail(signedIn({ sync: { state: "syncing" } }), NOW)).toBe("Syncing…");
     expect(syncDetail(signedIn({ sync: { state: "error", error: "Failed to fetch" } }), NOW)).toBe("Last sync failed: Failed to fetch. Everything is still on this PC; Hodeum will retry.");
     expect(syncDetail(signedIn({ paused: true, sync: { state: "off" } }), NOW)).toBe("Paused on this PC. Nothing leaves it until you turn sync back on.");
+    expect(syncDetail(signedIn({ sync: { state: "blocked", error: "belongs to another account" } }), NOW)).toBe("belongs to another account");
+    expect(railNote(signedIn({ sync: { state: "blocked" } }))).toBe("Everything stays on this PC");
   });
 });

@@ -15,12 +15,14 @@ export const ACCOUNT_COPY = {
 export function railNote(status: AccountStatus | undefined): string {
   if (status?.phase !== "signed-in") return ACCOUNT_COPY.local;
   if (status.paused) return ACCOUNT_COPY.paused;
+  if (status.sync.state === "blocked") return ACCOUNT_COPY.local;
   return `Syncing to ${status.user?.email ?? status.user?.name ?? "your account"}`;
 }
 
 export function syncDetail(status: AccountStatus, now: Date): string {
   if (status.paused) return "Paused on this PC. Nothing leaves it until you turn sync back on.";
   const { sync } = status;
+  if (sync.state === "blocked") return sync.error ?? "This PC's data belongs to another account, so it won't sync here.";
   if (sync.state === "syncing") return "Syncing…";
   if (sync.state === "error") return `Last sync failed: ${sync.error ?? "unknown error"}. Everything is still on this PC; Hodeum will retry.`;
   if (sync.lastSyncedAt) return `Synced ${timeAgo(sync.lastSyncedAt, now)}.`;

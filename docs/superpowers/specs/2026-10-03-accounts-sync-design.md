@@ -4,6 +4,7 @@
 
 ## Decisions
 
+- A PC's local data belongs to the **first account that syncs it**. Signing in with a different account on that PC syncs nothing (status `blocked`, explained in Settings), so one learner's history and deletions never reach another's account.
 - Signed-out Hodeum is fully local. Signing in with Google turns sync on; the sign-in row says so and Settings has a pause switch (device-local).
 - Synced: skills, Hodes and their events, chats and messages, the settings blob. Never synced: screenshots, audio, transcripts, `step_attempts`.
 - Web → PC is a **cloud command channel** (`pc_commands`), never a socket into the PC. Commands only start or end a Hode; Teach Mode still has the learner do the work.
