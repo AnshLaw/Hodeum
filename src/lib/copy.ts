@@ -40,6 +40,8 @@ export const COPY = {
   allSteps: "All steps",
   modeLabel: "Mode",
   switchToApp: (app: string) => `Open ${app}, or switch to it, and I'll pick up there.`,
+  connectPhone: "Connect your iPhone: open Show iPhone in Hodey's menu and start mirroring. I'll pick up there.",
+  clarifyPhone: "I can't spot that on your iPhone yet. Scroll a little and I'll look again.",
   needVisionToAnswer: "I can only answer that with the local vision model, which isn't ready. Try pointing at the spot with Point & Ask.",
   itsHere: (name: string) => `That's ${name}. I've highlighted it.`,
   noPack: "I don't have a Hode for that yet. Try “make a pivot table” or “zip these files”.",

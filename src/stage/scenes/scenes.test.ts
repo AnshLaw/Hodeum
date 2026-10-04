@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ExcelScene } from "./excel";
 import { ExplorerScene } from "./explorer";
+import { IphoneScene } from "./iphone";
 
 const names = (scene: { snapshot(): { elements: { name: string }[] } }) => scene.snapshot().elements.map((e) => e.name);
 const find = (scene: ExcelScene | ExplorerScene, name: string) => scene.snapshot().elements.find((e) => e.name === name);
@@ -63,5 +64,18 @@ describe("ExplorerScene", () => {
     explorer.press("list", "right");
     explorer.press("menu:Open", "left");
     expect(names(explorer)).not.toContain("Open");
+  });
+});
+
+describe("IphoneScene", () => {
+  it("goes Home → Settings → Display & Brightness → Dark", () => {
+    const phone = new IphoneScene();
+    phone.press("app:Settings", "left");
+    expect(phone.snapshot().elements.some((e) => e.name === "Display & Brightness")).toBe(false);
+    phone.press("list:scroll", "left");
+    phone.press("row:Display & Brightness", "left");
+    expect(phone.snapshot().elements.some((e) => e.name === "APPEARANCE")).toBe(true);
+    phone.press("option:Dark", "left");
+    expect(phone.snapshot().tone).toBe("dark");
   });
 });

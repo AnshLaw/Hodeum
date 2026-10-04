@@ -7,8 +7,8 @@ type RawPack = { steps: Array<{ skill: string; target: Record<string, unknown> }
 const clone = (): RawPack => JSON.parse(JSON.stringify(excelPivot)) as RawPack;
 
 describe("loadTaskPack", () => {
-  it("loads both shipped packs", () => {
-    expect(TASK_PACKS.map((p) => p.id)).toEqual(["excel-pivot", "windows-zip"]);
+  it("loads every shipped pack", () => {
+    expect(TASK_PACKS.map((p) => p.id)).toEqual(["excel-pivot", "windows-zip", "iphone-dark-mode"]);
   });
 
   it("rejects coordinates in a target", () => {
@@ -50,6 +50,8 @@ describe("matchGoal", () => {
     ["Make a PivotTable", "excel-pivot"],
     ["zip these files", "windows-zip"],
     ["how do I compress my photos", "windows-zip"],
+    ["turn on dark mode on my iphone", "iphone-dark-mode"],
+    ["make my phone dark mode", "iphone-dark-mode"],
   ])("matches %j to %s", (goal, id) => {
     expect(matchGoal(goal, TASK_PACKS)?.id).toBe(id);
   });

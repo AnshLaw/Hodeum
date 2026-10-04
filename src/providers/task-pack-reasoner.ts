@@ -39,7 +39,12 @@ function locateTarget(step: TaskStep, elements: UiElement[], focus?: Rect): Acti
 function guideStep(context: TeachingContext, step: TaskStep): TeachingAction {
   const level = context.assistanceLevel;
   const target = locateTarget(step, context.observation.elements, context.focusRegion?.shape.bounds);
-  if (!target) return { kind: "clarify", speech: COPY.clarify, skill: step.skill, assistanceLevel: level };
+  if (!target) {
+    // The correction still helps when the learner has left the page the target is on.
+    if (context.correction) return { kind: "correct", speech: context.correction, skill: step.skill, assistanceLevel: level };
+    const speech = context.pack?.surface === "phone" ? COPY.clarifyPhone : COPY.clarify;
+    return { kind: "clarify", speech, skill: step.skill, assistanceLevel: level };
+  }
   return {
     kind: context.correction ? "correct" : "guide",
     speech: context.correction ?? step.speech[level],

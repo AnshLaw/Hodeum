@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { EXCEL_LAYOUT, type ExcelScene } from "./scenes/excel";
 import { EXPLORER_LAYOUT } from "./scenes/explorer";
+import { PHONE_FRAME, type IphoneScene } from "./scenes/iphone";
 import { rectStyle } from "./MockAppView";
 
 const COLUMNS = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -74,4 +75,9 @@ export function ExplorerBackdrop() {
       </div>
     </>
   );
+}
+
+/** The practice phone's body; the screen follows the scene's tone like real Dark Mode. */
+export function IphoneBackdrop({ scene }: { scene: IphoneScene }) {
+  return <div className="iphone-screen" data-tone={scene.snapshot().tone} style={rectStyle(PHONE_FRAME)} />;
 }

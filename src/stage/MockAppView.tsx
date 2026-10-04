@@ -30,11 +30,11 @@ function MockElement({ element, layer, onPress }: { element: UiElement; layer: n
 }
 
 /** Renders a scripted app from the same element list the Hode runtime observes, so the overlay lines up exactly. */
-export function MockAppView({ app, onPress, children }: { app: MockApp; onPress: (id: string, button: MouseButton) => void; children?: ReactNode }) {
+export function MockAppView({ app, onPress, frame = APP_WINDOW, children }: { app: MockApp; onPress: (id: string, button: MouseButton) => void; frame?: Rect; children?: ReactNode }) {
   const scene = app.snapshot();
   return (
     <>
-      <div className={`mock-window mock-window--${app.id}`} style={rectStyle(APP_WINDOW)}>
+      <div className={`mock-window mock-window--${app.id}`} style={rectStyle(frame)}>
         <div className="mock-window__title">{scene.windowTitle}</div>
       </div>
       {children}

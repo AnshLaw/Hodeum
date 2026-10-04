@@ -1,0 +1,62 @@
+{
+  "id": "iphone-dark-mode",
+  "title": "Turn on Dark Mode on iPhone",
+  "app": "iPhone",
+  "surface": "phone",
+  "goalPhrases": ["iphone dark mode", "dark mode on my iphone", "dark mode on my phone", "dark mode phone"],
+  "prerequisites": ["Mirror your iPhone into Hodey (menu → Show iPhone) and start on the Home Screen, in Light mode."],
+  "steps": [
+    {
+      "id": "open-settings",
+      "objective": "Open Settings",
+      "skill": "ios.settings.open",
+      "target": { "names": ["Settings"], "label": "Settings" },
+      "speech": {
+        "demonstrate": "On your iPhone, tap Settings, the grey gear. I've highlighted it.",
+        "guide": "Tap Settings.",
+        "hint": "Which app holds all of your phone's options?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Settings is where every iPhone option lives, including how the screen looks.",
+      "success": { "kind": "element_visible", "names": ["Airplane Mode"] },
+      "mistakes": []
+    },
+    {
+      "id": "open-display",
+      "objective": "Open Display & Brightness",
+      "skill": "ios.settings.display",
+      "target": { "names": ["Display*Brightness"], "label": "Display & Brightness" },
+      "speech": {
+        "demonstrate": "Scroll down a little and tap Display & Brightness.",
+        "guide": "Tap Display & Brightness.",
+        "hint": "Look for the setting about your screen.",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Display & Brightness controls light and dark appearance, text size and brightness.",
+      "success": { "kind": "element_visible", "names": ["Appearance"] },
+      "mistakes": [
+        { "signal": { "kind": "element_visible", "names": ["*Add New Wallpaper*"] }, "correction": "That's Wallpaper. Tap Settings at the top left to go back, then choose Display & Brightness." }
+      ]
+    },
+    {
+      "id": "choose-dark",
+      "objective": "Choose Dark",
+      "skill": "ios.appearance.dark_mode",
+      "target": { "names": ["Dark"], "label": "Dark" },
+      "speech": {
+        "demonstrate": "Under Appearance, tap Dark. The whole screen will turn dark.",
+        "guide": "Tap Dark.",
+        "hint": "Appearance has two choices. Which one is easier on the eyes at night?",
+        "observe": "",
+        "independent": ""
+      },
+      "explain": "Dark Mode uses light text on dark backgrounds, which is easier on your eyes in low light.",
+      "success": { "kind": "screen_tone", "tone": "dark" },
+      "mistakes": [
+        { "signal": { "kind": "element_visible", "names": ["*Dynamic Type*"] }, "correction": "That opened Text Size. Go back; Dark is under Appearance at the top." }
+      ]
+    }
+  ]
+}
