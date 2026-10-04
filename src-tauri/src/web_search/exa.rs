@@ -3,6 +3,7 @@
 
 use serde_json::{json, Value};
 
+use super::body::{read_capped, MAX_ANSWER_BYTES};
 use super::source::{json_body, SourceError, SourceId};
 use super::text::{clip, squash};
 use super::WebResult;
@@ -61,12 +62,12 @@ pub async fn search(client: &reqwest::Client, query: &str, key: Option<&str>) ->
     }
     let response = request.send().await.map_err(|e| SourceError::from_reqwest(&e))?;
     let status = response.status().as_u16();
-    let body = response.text().await.map_err(|e| SourceError::from_reqwest(&e))?;
+    let body = read_capped(response, MAX_ANSWER_BYTES).await;
     if !(200..300).contains(&status) {
         // The free tier explains its limit in the body as well as with 429.
-        return Err(if limited(&body) { SourceError::RateLimited(id.cooldown()) } else { SourceError::from_status(id, status) });
+        return Err(if body.as_deref().is_ok_and(limited) { SourceError::RateLimited(id.cooldown()) } else { SourceError::from_status(id, status) });
     }
-    parse(&body, id)
+    parse(&body?, id)
 }
 
 #[cfg(test)]

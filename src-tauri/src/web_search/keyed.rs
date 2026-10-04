@@ -4,6 +4,7 @@
 
 use serde_json::{json, Value};
 
+use super::body::{read_capped, MAX_ANSWER_BYTES};
 use super::source::{json_body, with_params, SourceError, SourceId};
 use super::text::{clip, plain, squash};
 use super::WebResult;
@@ -74,10 +75,10 @@ pub fn parse_brave(json: &Value) -> Vec<WebResult> {
 async fn read_json(id: SourceId, request: reqwest::RequestBuilder) -> Result<Value, SourceError> {
     let response = request.header("Accept", "application/json").send().await.map_err(|e| SourceError::from_reqwest(&e))?;
     let status = response.status().as_u16();
-    let body = response.text().await.map_err(|e| SourceError::from_reqwest(&e))?;
     if !(200..300).contains(&status) {
         return Err(SourceError::from_status(id, status));
     }
+    let body = read_capped(response, MAX_ANSWER_BYTES).await?;
     serde_json::from_str(&body).map_err(|e| SourceError::Parse(e.to_string()))
 }
 

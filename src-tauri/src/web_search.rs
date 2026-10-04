@@ -7,6 +7,7 @@
 //! model sees the steps themselves. Answers are remembered for a day; a source that says to slow
 //! down is left alone for a while. The offline help index runs in the webview, before any of this.
 
+mod body;
 mod chain;
 mod ddg;
 mod exa;

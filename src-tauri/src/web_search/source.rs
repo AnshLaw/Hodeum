@@ -75,8 +75,13 @@ pub enum SourceError {
     NothingRelevant,
     /// Still running when the search's time was up.
     TimedOut,
+    /// The answer passed this many bytes, more than any search answer or help page needs.
+    TooLarge(usize),
+    /// A page read directly answered with something other than HTML.
+    NotHtml,
 }
 
+const BYTES_PER_KB: usize = 1_000;
 const HTTP_TOO_MANY: u16 = 429;
 const HTTP_UNAUTHORIZED: u16 = 401;
 const HTTP_FORBIDDEN: u16 = 403;
@@ -123,6 +128,8 @@ impl SourceError {
             SourceError::Parse(why) => format!("sent something unexpected ({why})"),
             SourceError::NothingRelevant => "nothing relevant".into(),
             SourceError::TimedOut => "no answer in time".into(),
+            SourceError::TooLarge(cap) => format!("sent more than {} KB", cap.div_ceil(BYTES_PER_KB)),
+            SourceError::NotHtml => "sent something other than a web page".into(),
         }
     }
 }
@@ -142,5 +149,7 @@ mod tests {
         assert_eq!(SourceError::from_status(SourceId::Tavily, 401), SourceError::KeyRejected(401));
         assert_eq!(failure(SourceId::Exa, &SourceError::RateLimited(EXA_COOLDOWN)), "Exa (free): rate-limited, resting 15 min");
         assert_eq!(failure(SourceId::DuckDuckGo, &SourceError::CoolingDown(Duration::from_secs(20))), "DuckDuckGo: resting (1 min left)");
+        assert_eq!(failure(SourceId::Jina, &SourceError::TooLarge(3_000_000)), "Jina Reader: sent more than 3000 KB");
+        assert_eq!(SourceError::NotHtml.reason(), "sent something other than a web page");
     }
 }

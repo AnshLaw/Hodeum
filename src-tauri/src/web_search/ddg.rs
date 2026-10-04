@@ -3,6 +3,7 @@
 
 use scraper::{Html, Selector};
 
+use super::body::{read_capped, MAX_ANSWER_BYTES};
 use super::source::{with_params, SourceError, SourceId};
 use super::text::{clip, squash};
 use super::WebResult;
@@ -53,11 +54,10 @@ pub fn parse(status: u16, html: &str) -> Result<Vec<WebResult>, SourceError> {
 pub async fn search(client: &reqwest::Client, query: &str) -> Result<Vec<WebResult>, SourceError> {
     let response = client.get(with_params(URL, &[("q", query)])?).header("Accept", "text/html").send().await.map_err(|e| SourceError::from_reqwest(&e))?;
     let status = response.status().as_u16();
-    let html = response.text().await.map_err(|e| SourceError::from_reqwest(&e))?;
     if !(200..300).contains(&status) {
         return Err(SourceError::from_status(SourceId::DuckDuckGo, status));
     }
-    parse(status, &html)
+    parse(status, &read_capped(response, MAX_ANSWER_BYTES).await?)
 }
 
 #[cfg(test)]
