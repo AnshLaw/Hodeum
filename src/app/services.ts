@@ -1,7 +1,8 @@
 import type { Bus } from "../lib/bus";
 import type { TaskPack } from "../lib/types";
 import type { ChatMessage, ChatStore, LearningStore } from "../data/types";
-import type { Settings, SettingsStore } from "../data/settings";
+import type { CloudProvider, Settings, SettingsStore } from "../data/settings";
+import type { KeyPresence } from "../providers/cloud/keys";
 import type { CapturedFrame, VisionStatusSource } from "../providers/vision/types";
 import type { WebSearch, WebSearchSource } from "../providers/web/types";
 import type { NaturalVoice } from "../providers/speech/native-voice";
@@ -35,6 +36,14 @@ export interface VoicePreview {
   preview(voice: Settings["voice"], text: string): Promise<void>;
 }
 
+/** Cloud API keys in Windows Credential Manager. Keys go in; only their presence comes back. */
+export interface CloudKeyService {
+  current(): KeyPresence;
+  refresh(): Promise<KeyPresence>;
+  save(provider: CloudProvider, key: string): Promise<void>;
+  clear(provider: CloudProvider): Promise<void>;
+}
+
 export interface AppWindowControls {
   minimize(): void;
   toggleMaximize(): void;
@@ -55,6 +64,8 @@ export interface AppServices {
   voice?: VoicePreview;
   /** Opt-in (Settings > webSearch); only scrubbed queries leave the PC. */
   web?: WebSearchSource;
+  /** Absent on the web dashboard: keys live on the learner's PC. */
+  cloudKeys?: CloudKeyService;
   window: AppWindowControls;
   /** Why chat or window context isn't available here (e.g. the browser stage has no local model). */
   limitation?: string;

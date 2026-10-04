@@ -11,6 +11,7 @@ import { SqliteChatStore, SqliteLearningStore, SqliteSettingsStore } from "../da
 import { invoke } from "@tauri-apps/api/core";
 import { trackDeletions } from "../features/sync/deletions";
 import { connectAppearance } from "../lib/appearance";
+import { CloudKeys } from "../providers/cloud/keys";
 import { createLocalVoice, voicePreview } from "../providers/speech/local-voice";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import type { Rect } from "../lib/types";
@@ -103,6 +104,7 @@ async function boot(): Promise<void> {
     chat: new QwenChatProvider({ connection: () => connectionOf(vision.current()), unavailableReason: () => unavailableReason(vision.current()) }),
     windows: new TauriWindowSource(bus),
     web: new TauriWebSearch(bus),
+    cloudKeys: new CloudKeys(invoke),
     voice: voicePreview(createLocalVoice({ invoke, listen: (event, handler) => subscribeTauri(event, handler) })),
   };
   mount(<NativeFrame base={base} />);

@@ -35,7 +35,7 @@ export type CloudProvider = (typeof CLOUD_PROVIDERS)[number];
 export const MEMORY_MODES = ["off", "auto", "readonly"] as const;
 export type MemoryMode = (typeof MEMORY_MODES)[number];
 export const MAX_SENSITIVE_APPS = 40;
-const MAX_SENSITIVE_APP = 60;
+export const MAX_SENSITIVE_APP = 60;
 /** Apps and sites matched (case-insensitive) against the active app and window title; cloud stays off there. */
 export const DEFAULT_SENSITIVE_APPS = ["1Password", "Bitwarden", "KeePass", "LastPass", "Dashlane", "Bank", "NetBanking", "PayPal", "Paytm", "PhonePe", "Credential Manager", "Password", "Medical", "Health"];
 

@@ -841,6 +841,11 @@
   background: #111;
 }
 
+.hswitch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .hswitch:focus-visible {
   outline: 2px solid var(--hd-accent);
   outline-offset: 2px;
@@ -1297,4 +1302,50 @@
   display: flex;
   gap: 8px;
   max-width: 420px;
+}
+
+/* ---- Cloud (optional) ---- */
+.hcloud__note {
+  margin-bottom: 6px;
+}
+
+.hcloud__provider {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--happ-line);
+}
+
+.hcloud__key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+}
+
+.hcloud__key .hchip {
+  flex: none;
+}
+
+.hcloud__key .field {
+  min-width: 0;
+  flex: 1;
+}
+
+.hcloud__error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--hd-accent);
+}
+
+.hcloud__sensitive {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--happ-line);
+}
+
+.hcloud__sensitive > .hmuted {
+  margin: -6px 0 0;
+  font-size: 12px;
 }

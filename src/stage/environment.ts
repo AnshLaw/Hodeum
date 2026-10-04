@@ -14,6 +14,7 @@ import { WebSpeechTTSProvider } from "../providers/web-speech-tts";
 import { TASK_PACKS } from "../task-packs";
 import { ExcelScene } from "./scenes/excel";
 import { ExplorerScene } from "./scenes/explorer";
+import { PracticeCloudKeys } from "./practice-cloud-keys";
 import { IphoneScene } from "./scenes/iphone";
 
 export type StageAppId = "excel" | "explorer" | "iphone";
@@ -45,6 +46,7 @@ export function createStageEnvironment(): StageEnvironment {
   const learning = new MemoryLearningStore();
   const settings = new MemorySettingsStore();
   const chats = new MemoryChatStore();
+  const cloudKeys = new PracticeCloudKeys();
   const tts = new WebSpeechTTSProvider();
   const runtime = new HodeRuntime({ perception: withScreenActivity(perception, activity), reasoners: [new TaskPackReasoningProvider()], skills: learning, bus, tts });
   connectHodeBridge({ runtime, bus, log: learning, settings, packs: TASK_PACKS, openGoalsAllowed: () => false, applyVoice: (voice) => {
@@ -66,6 +68,7 @@ export function createStageEnvironment(): StageEnvironment {
       settings,
       bus,
       packs: TASK_PACKS,
+      cloudKeys,
       window: { minimize: close, toggleMaximize: () => undefined, close },
       limitation: STAGE_LIMITATION,
     }),
