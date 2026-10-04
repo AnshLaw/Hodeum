@@ -8,12 +8,12 @@ use std::thread;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewWindow, WindowEvent};
 
 use crate::surfaces::{keep_out_of_occlusion, NOTCH};
 use appbar::AppBar;
 use arrange::Arranged;
-use geometry::{dock_rect, snap_dock, top_rect, Dock, PxRect};
+use geometry::{dock_rect, drop_action, reanchor_top, snap_dock, top_rect, Dock, DropAction, PxRect};
 
 /// ~60 Hz: the window tracks the cursor smoothly while dragging.
 const DRAG_POLL: Duration = Duration::from_millis(16);
@@ -28,6 +28,10 @@ pub struct DockState {
     current: Mutex<Dock>,
     /// The iPhone mirror is open: the top notch window is tall enough to show the whole phone.
     tall: AtomicBool,
+    /// Whether the current side dock reserves its strip (copilot), as last set by the UI.
+    reserve: AtomicBool,
+    /// A top-anchor check is running; the moves it causes don't start another.
+    reanchoring: AtomicBool,
 }
 
 impl DockState {
@@ -113,9 +117,14 @@ fn hold_position(app: AppHandle, rect: PxRect) {
 /// Moves the notch window to a dock; side docks with `reserve` become an app bar (copilot mode).
 #[tauri::command]
 pub fn set_dock(app: AppHandle, dock: Dock, reserve: bool, state: State<'_, DockState>) -> Result<(), String> {
+    apply_dock(&app, &state, dock, reserve)
+}
+
+fn apply_dock(app: &AppHandle, state: &DockState, dock: Dock, reserve: bool) -> Result<(), String> {
     state.dragging.store(false, Ordering::SeqCst);
     state.set_current(dock)?;
-    let window = notch(&app)?;
+    state.reserve.store(reserve, Ordering::SeqCst);
+    let window = notch(app)?;
     if dock == Dock::Top || !reserve {
         state.release_space()?;
         // Read the work area only after giving our strip back, or we'd dock beside our own old reservation.
@@ -153,7 +162,54 @@ pub fn set_notch_tall(app: AppHandle, tall: bool, state: State<'_, DockState>) -
 pub fn set_notch_visible(app: AppHandle, visible: bool) -> Result<(), String> {
     let window = notch(&app)?;
     if visible { window.show() } else { window.hide() }.map_err(|e| e.to_string())?;
-    keep_out_of_occlusion(&window)
+    keep_out_of_occlusion(&window)?;
+    if visible { reanchor(&app) } else { Ok(()) }
+}
+
+fn outer_rect(window: &WebviewWindow) -> Result<PxRect, String> {
+    let position = window.outer_position().map_err(|e| e.to_string())?;
+    let size = window.outer_size().map_err(|e| e.to_string())?;
+    Ok(PxRect { x: position.x, y: position.y, width: size.width, height: size.height })
+}
+
+/// Puts a top-docked notch back at the top centre of its monitor if anything moved or resized it.
+fn reanchor(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<DockState>();
+    if state.dragging.load(Ordering::SeqCst) || state.reanchoring.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let result = (|| {
+        let window = notch(app)?;
+        let (full, work, scale) = monitor_rects(&window)?;
+        let tall = state.tall.load(Ordering::SeqCst);
+        match reanchor_top(state.dock()?, tall, outer_rect(&window)?, full, work, scale) {
+            Some(home) => place_at_once(&window, home),
+            None => Ok(()),
+        }
+    })();
+    state.reanchoring.store(false, Ordering::SeqCst);
+    result
+}
+
+/// Guard: a top-docked notch always lives at the top centre. Whatever moves or resizes it outside a
+/// drag (a show, a style change tao applies, a DPI or monitor change, the shell re-snapping windows)
+/// puts it straight back. Side docks are left to `set_dock` and the app bar.
+pub fn keep_top_anchored(app: &AppHandle) -> Result<(), String> {
+    let handle = app.clone();
+    notch(app)?.on_window_event(move |event| {
+        let moved = matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. });
+        if !moved || handle.state::<DockState>().dragging.load(Ordering::SeqCst) {
+            return;
+        }
+        // Off the event loop: placing the window from inside its own move message would re-enter it.
+        let app = handle.clone();
+        thread::spawn(move || {
+            if let Err(error) = reanchor(&app) {
+                eprintln!("couldn't keep Hodey at the top of the screen: {error}");
+            }
+        });
+    });
+    Ok(())
 }
 
 fn left_button_down() -> bool {
@@ -196,10 +252,16 @@ fn follow_cursor(app: AppHandle, grab: (f64, f64)) {
 }
 
 fn finish_drag(app: &AppHandle) -> Result<(), String> {
-    app.state::<DockState>().dragging.store(false, Ordering::SeqCst);
+    let state = app.state::<DockState>();
+    state.dragging.store(false, Ordering::SeqCst);
     let cursor = app.cursor_position().map_err(|e| e.to_string())?;
     let (full, _, _) = monitor_rects(&notch(app)?)?;
     let dock = snap_dock(cursor.x, full);
+    match drop_action(state.dock()?, dock) {
+        DropAction::ReturnHome => apply_dock(app, &state, dock, state.reserve.load(Ordering::SeqCst))?,
+        // The UI moves it once it hears; until then the top guard mustn't pull it back to the old dock.
+        DropAction::Redock => state.set_current(dock)?,
+    }
     app.emit(SNAPPED_EVENT, Snapped { dock }).map_err(|e| e.to_string())
 }
 
