@@ -1,10 +1,10 @@
 //! UxPlay as an AirPlay receiver: it decrypts the iPhone's mirror and sends H.264 over RTP to a
 //! loopback port; we depacketize it and stream access units to the notch, which decodes them.
-//! UxPlay is GPL and never bundled: it only runs if the learner installed it at a fixed place.
+//! UxPlay is GPL and never bundled: it only runs if the learner put it in Hodeum's own runtime folder.
 
 use std::fs::File;
 use std::io::ErrorKind;
-use std::net::UdpSocket;
+use std::net::{SocketAddr, UdpSocket};
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -21,9 +21,9 @@ use crate::child_job::ChildJob;
 use crate::vlm::local_ai_root;
 
 pub const RECEIVER_NAME: &str = "Hodeum";
-/// Fixed places only, like llama-server: no setting or variable can redirect which receiver binary runs.
+/// One fixed place, like llama-server: no setting or variable can redirect which receiver binary runs,
+/// and shared folders other users can write to (C:\msys64 by default) are never searched.
 pub const LOCAL_RECEIVER: &str = "runtime/uxplay/uxplay.exe";
-const MSYS2_RECEIVER: &str = "C:/msys64/ucrt64/bin/uxplay.exe";
 const LOG_FILE: &str = "runtime/uxplay.log";
 pub const AIRPLAY_MISSING: &str = "AirPlay receiver not installed. See docs/iphone-mirroring.md to install UxPlay.";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -39,7 +39,7 @@ pub fn receiver_args(port: u16) -> Vec<String> {
 }
 
 pub fn receiver_path(root: &Path) -> Option<PathBuf> {
-    [root.join(LOCAL_RECEIVER), PathBuf::from(MSYS2_RECEIVER)].into_iter().find(|p| p.is_file())
+    Some(root.join(LOCAL_RECEIVER)).filter(|p| p.is_file())
 }
 
 pub fn last_line(text: &str) -> Option<&str> {
@@ -85,7 +85,7 @@ fn status(channel: &Channel<InvokeResponseBody>, state: &str, detail: Option<Str
 fn spawn_receiver(root: &Path, exe: &Path, port: u16) -> Result<Child, String> {
     let log = File::create(root.join(LOG_FILE)).map_err(|e| format!("couldn't create {LOG_FILE}: {e}"))?;
     let errors = log.try_clone().map_err(|e| e.to_string())?;
-    // UxPlay loads its GStreamer DLLs from its own folder (MSYS2 ucrt64/bin).
+    // UxPlay loads its GStreamer DLLs from its own folder (a junction to MSYS2's ucrt64/bin).
     let dir = exe.parent().ok_or("the AirPlay receiver path has no folder")?;
     Command::new(exe)
         .args(receiver_args(port))
@@ -102,6 +102,17 @@ fn exit_detail(root: &Path) -> String {
     last_line(&log).map_or_else(|| "The AirPlay receiver stopped.".to_string(), |l| format!("The AirPlay receiver stopped: {l}"))
 }
 
+/// Video is only accepted from the first sender (UxPlay), so other local programs can't inject frames.
+fn accept_from(peer: &mut Option<SocketAddr>, from: SocketAddr) -> bool {
+    match peer {
+        Some(known) => *known == from,
+        None => {
+            *peer = Some(from);
+            true
+        }
+    }
+}
+
 /// One packet in; an access unit out to the notch when a frame completes. False when the notch is gone.
 fn forward(depacketizer: &mut Depacketizer, packet: &[u8], channel: &Channel<InvokeResponseBody>) -> bool {
     let Some(unit) = depacketizer.push(packet) else { return true };
@@ -116,9 +127,11 @@ fn pump(socket: UdpSocket, channel: Channel<InvokeResponseBody>, stop: Arc<Atomi
     let mut depacketizer = Depacketizer::new();
     let mut buffer = vec![0u8; MAX_PACKET];
     let mut streaming = false;
+    let mut sender = None;
     while !stop.load(Ordering::SeqCst) {
-        match socket.recv(&mut buffer) {
-            Ok(n) => {
+        match socket.recv_from(&mut buffer) {
+            Ok((_, from)) if !accept_from(&mut sender, from) => continue,
+            Ok((n, _)) => {
                 if !streaming {
                     streaming = status(&channel, "streaming", None);
                 }
@@ -185,6 +198,16 @@ mod tests {
         std::fs::write(&exe, b"").unwrap();
         assert_eq!(receiver_path(&root).as_deref(), Some(exe.as_path()));
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn only_the_first_sender_may_feed_video() {
+        let uxplay: std::net::SocketAddr = "127.0.0.1:50000".parse().unwrap();
+        let intruder: std::net::SocketAddr = "127.0.0.1:50001".parse().unwrap();
+        let mut peer = None;
+        assert!(accept_from(&mut peer, uxplay));
+        assert!(!accept_from(&mut peer, intruder));
+        assert!(accept_from(&mut peer, uxplay));
     }
 
     #[test]

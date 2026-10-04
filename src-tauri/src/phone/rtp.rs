@@ -9,6 +9,8 @@ const NAL_STAP_A: u8 = 24;
 const NAL_FU_A: u8 = 28;
 const FU_START: u8 = 0x80;
 const START_CODE: [u8; 4] = [0, 0, 0, 1];
+/// Far above any mirrored-screen frame; a unit that never ends (lost marker, junk on the port) is dropped.
+const MAX_ACCESS_UNIT: usize = 4 * 1024 * 1024;
 
 pub struct AccessUnit {
     pub data: Vec<u8>,
@@ -59,6 +61,11 @@ impl Depacketizer {
         }
         self.last_seq = Some(packet.seq);
         self.take_payload(packet.payload);
+        if self.current.len() > MAX_ACCESS_UNIT {
+            self.current.clear();
+            self.broken = true;
+            self.need_key = true;
+        }
         if packet.marker { self.finish() } else { None }
     }
 
@@ -164,6 +171,19 @@ mod tests {
         assert!(d.push(&rtp(4, true, &[0x41, 2])).is_none(), "sequence gap");
         assert!(d.push(&rtp(5, true, &[0x41, 3])).is_none(), "still waiting for a keyframe");
         assert!(d.push(&rtp(6, true, &[0x65, 2])).is_some());
+    }
+
+    #[test]
+    fn drops_an_access_unit_that_never_ends_instead_of_growing_forever() {
+        let mut d = Depacketizer::new();
+        let chunk = vec![0x41; 60_000];
+        let packets = MAX_ACCESS_UNIT / chunk.len() + 2;
+        for seq in 1..=packets as u16 {
+            assert!(d.push(&rtp(seq, false, &chunk)).is_none());
+        }
+        assert!(d.current.len() <= MAX_ACCESS_UNIT);
+        assert!(d.push(&rtp(packets as u16 + 1, true, &[0x65, 1])).is_none(), "the oversized unit is discarded");
+        assert!(d.push(&rtp(packets as u16 + 2, true, &[0x65, 2])).is_some(), "the next keyframe recovers");
     }
 
     #[test]
