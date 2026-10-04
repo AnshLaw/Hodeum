@@ -50,6 +50,7 @@ export const LEVEL_LABELS: Record<AssistanceLevel, string> = {
 
 export const EVENT_LABELS: Record<HodeEventKind, string> = {
   step_done: "Step done",
+  hodey_step: "Hodey did this step",
   mistake: "Hodey corrected you",
   hint: "Asked for a hint",
   stuck: "Hodey stepped in",

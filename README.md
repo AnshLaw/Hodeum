@@ -6,10 +6,12 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 
 ## What works today (sub-projects 1 and 2)
 
-**Learning modes** (pick one when you start a Hode; set the default in Settings; switch anytime from ⋯ or by saying "teach mode", "help mode" or "agent mode"). In every mode you do the clicking:
+**Learning modes** (pick one when you start a Hode; set the default in Settings; switch anytime from ⋯ or by saying "teach mode", "help mode" or "agent mode"). You do the clicking unless you turn on Agent · Do it for me:
 - **Teach** (default): you learn it for good. Each step starts as a question ("Which tab would you use to add something new?"), with no highlight. If you're stuck or ask for a hint, Hodey shows you, then demonstrates and explains why. Upcoming steps stay hidden until you ask for *All steps*.
 - **Help:** you drive. Hodey watches quietly, verifies each step, and steps in only when you're stuck, make a mistake, or ask.
-- **Agent:** Hodey walks you through every step, with instructions and highlights and the whole flow visible.
+- **Agent:** Hodey takes every step with you, in one of two styles (default set in Settings):
+  - **Guide me** (default): instructions and highlights for every step, with the whole flow visible. You do the clicking.
+  - **Do it for me** (opt-in, task-pack Hodes only; open-ended Hodes are always guided): Hodey says and highlights what it's about to click, waits a moment so you can stop it, clicks, and checks the result the same way it checks yours. It pauses at checkpoints (the pack's marked steps, or every 3 steps) so you can check its work: say "continue", or "let me try" to take over. Hodey only ever clicks the step's own target (an element the latest screen read reported, named by the task pack), and Windows re-checks it's still that control, in your app and uncovered, at the moment of the click; only Hodey's notch can request a click. A control it isn't sure about, or a click that fails, is handed back to you as ordinary guidance. Steps Hodey did never count toward your skills. Say "do it for me" or "guide me" to switch mid-Hode.
 
 **Teaching loop**
 - **Hode engine**: a pure, tested state machine covering the assistance ladder (demonstrate → independent), wrong-action correction, the stuck timer, hints, Explain, Let me try, pause/resume, and dropping stale results so the latest learner action wins.

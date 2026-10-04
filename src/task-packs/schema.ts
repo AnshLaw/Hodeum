@@ -34,6 +34,8 @@ const stepSchema = z
     explain: z.string().min(1),
     success: signalSchema,
     mistakes: z.array(z.object({ signal: signalSchema, correction: z.string().min(1) }).strict()),
+    press: z.enum(["left", "right"]).optional(),
+    checkpoint: z.boolean().optional(),
   })
   .strict();
 

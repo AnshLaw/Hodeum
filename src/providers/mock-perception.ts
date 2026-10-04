@@ -1,8 +1,8 @@
 import { intersects } from "../lib/coords";
-import type { LearnerInput, Rect, ScreenObservation, ScreenTone, UiElement } from "../lib/types";
+import type { LearnerInput, MouseButton, PerformRequest, Rect, ScreenObservation, ScreenTone, UiElement } from "../lib/types";
 import type { PerceptionAdapter } from "./interfaces";
 
-export type MouseButton = "left" | "right";
+export type { MouseButton };
 
 export interface MockScene {
   app: string;
@@ -24,6 +24,7 @@ export interface MockApp {
 
 export class MockPerception implements PerceptionAdapter {
   private readonly handlers = new Set<(observation: ScreenObservation) => void>();
+  private readonly pressedListeners = new Set<() => void>();
 
   /** `latencyMs` mimics a real UI Automation read, so the stage shows Hodey's looking state. */
   constructor(
@@ -39,6 +40,22 @@ export class MockPerception implements PerceptionAdapter {
   /** The stage can't switch apps for the learner: report whether the right practice app is showing. */
   async focusApp(app: string): Promise<boolean> {
     return this.currentApp().label.toLowerCase() === app.toLowerCase();
+  }
+
+  /** Agent · Do it for me presses the practice app's control, if it's still where Hodey saw it. */
+  async perform({ target, button, name }: PerformRequest): Promise<void> {
+    const app = this.currentApp();
+    if (!app.snapshot().elements.some((e) => e.id === target.elementId && e.name === name)) throw new Error(`${target.label} isn't on the screen anymore.`);
+    app.press(target.elementId, button);
+    this.pressedListeners.forEach((listener) => listener());
+  }
+
+  /** Hodey pressed something, so the stage redraws the practice app. */
+  onPressed(listener: () => void): () => void {
+    this.pressedListeners.add(listener);
+    return () => {
+      this.pressedListeners.delete(listener);
+    };
   }
 
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void {

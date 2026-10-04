@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { COPY } from "../../lib/copy";
 import { HODEY_KEY_LABELS, KEY_LETTERS, hodeyKeySetting } from "../../lib/keys";
-import { MODE_COPY } from "../../lib/modes";
-import { HODE_MODES, type HodeMode } from "../../lib/types";
+import { AGENT_STYLE_COPY, MODE_COPY } from "../../lib/modes";
+import { AGENT_STYLES, HODE_MODES, type AgentStyle, type HodeMode } from "../../lib/types";
 import type { Dock, DockPrefs, SidebarStyle, Visibility } from "../../features/dock/dock";
 import type { VisionStatus } from "../../providers/vision/types";
 import type { SurfaceProps } from "./surface";
@@ -63,6 +63,8 @@ interface DockMenuProps {
   /** The running Hode's mode; absent when no Hode is running. */
   mode?: HodeMode;
   onModeChange: (mode: HodeMode) => void;
+  agentStyle?: AgentStyle;
+  onAgentStyleChange: (style: AgentStyle) => void;
   /** Absent in the browser stage, which has no local model. */
   vision?: VisionStatus;
   onChange: (change: Partial<DockPrefs>) => void;
@@ -82,13 +84,15 @@ function useHodeyKeyLabel(): string {
 }
 
 const MODE_OPTIONS: [HodeMode, string][] = HODE_MODES.map((mode) => [mode, MODE_COPY[mode].title]);
+const AGENT_STYLE_OPTIONS: [AgentStyle, string][] = AGENT_STYLES.map((style) => [style, AGENT_STYLE_COPY[style].title]);
 
-export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide, phoneOpen, onTogglePhone, onShowSkills }: DockMenuProps) {
+export function DockMenu({ prefs, vision, mode, onModeChange, agentStyle, onAgentStyleChange, onChange, onHide, phoneOpen, onTogglePhone, onShowSkills }: DockMenuProps) {
   const keyLabel = useHodeyKeyLabel();
   const idle = prefs.visibility === "hidden" ? "pinned" : prefs.visibility;
   return (
     <div className="notch__content dock-menu">
       {mode && <Segmented label={COPY.modeLabel} options={MODE_OPTIONS} value={mode} onSelect={onModeChange} />}
+      {mode === "agent" && agentStyle && <Segmented label={COPY.agentStyleLabel} options={AGENT_STYLE_OPTIONS} value={agentStyle} onSelect={onAgentStyleChange} />}
       <Segmented label={COPY.position} options={DOCK_OPTIONS} value={prefs.dock} onSelect={(dock) => onChange({ dock })} />
       {prefs.dock !== "top" && (
         <>
@@ -136,6 +140,8 @@ export function SurfaceMenu(props: SurfaceProps) {
       vision={props.vision}
       mode={props.hodeActive ? props.hodeMode : undefined}
       onModeChange={props.onSetMode}
+      agentStyle={props.hodeAgentStyle}
+      onAgentStyleChange={props.onSetAgentStyle}
       onChange={dock.update}
       onHide={() => dock.update({ visibility: "hidden" })}
       phoneOpen={props.phoneOpen}

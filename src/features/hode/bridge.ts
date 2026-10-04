@@ -1,6 +1,6 @@
 import { replyLanguage } from "../../lib/language";
 import type { Bus, HodeSummary } from "../../lib/bus";
-import type { HodeMode, TaskPack } from "../../lib/types";
+import type { AgentStyle, HodeMode, TaskPack } from "../../lib/types";
 import { HodeRecorder } from "../../data/recorder";
 import type { Settings, SettingsStore } from "../../data/settings";
 import type { HodeLog } from "../../data/types";
@@ -41,8 +41,8 @@ export interface BridgeDeps {
 }
 
 /** A typed goal as an event: its task pack, or (when vision can plan) the app it names. */
-export function goalEvent(goal: string, packs: TaskPack[], openAllowed: boolean, mode?: HodeMode): HodeEvent {
-  return { type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed, app: appFromGoal(goal), mode };
+export function goalEvent(goal: string, packs: TaskPack[], openAllowed: boolean, mode?: HodeMode, agentStyle?: AgentStyle): HodeEvent {
+  return { type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed, app: appFromGoal(goal), mode, agentStyle };
 }
 
 /** Starts a Hode the app asked for, ending whatever is running first. */
@@ -53,7 +53,7 @@ export function startFromApp(runtime: HodeRuntime, goal: string, packs: TaskPack
 }
 
 function applySettings(deps: BridgeDeps, settings: Settings): void {
-  deps.runtime.configure({ mode: settings.mode, stuckMs: settings.stuckSeconds * MS_PER_SECOND, language: replyLanguage(settings.voice.language) });
+  deps.runtime.configure({ mode: settings.mode, agentStyle: settings.agentStyle, stuckMs: settings.stuckSeconds * MS_PER_SECOND, language: replyLanguage(settings.voice.language) });
   deps.runtime.setMuted(!settings.voice.enabled);
   deps.applyVoice(settings.voice);
   deps.applyHodeyKey?.(settings.hodeyKey);

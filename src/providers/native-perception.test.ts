@@ -103,3 +103,13 @@ describe("NativePerception", () => {
     errorLog.mockRestore();
   });
 });
+
+describe("NativePerception.perform", () => {
+  it("asks Windows to click the element from a specific screen read, by id and name", async () => {
+    const { bridge, invoke } = fakeBridge([HOME_SELECTED]);
+    const perception = new NativePerception(bridge);
+    const target = { elementId: "uia:7", bounds: { x: 1, y: 2, width: 3, height: 4 }, confidence: 0.95, label: "Insert" };
+    await perception.perform({ target, button: "right", name: "Insert", observedAt: 42 });
+    expect(invoke).toHaveBeenLastCalledWith("perform_click", { elementId: "uia:7", name: "Insert", observedAt: 42, button: "right" });
+  });
+});

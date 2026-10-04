@@ -75,6 +75,10 @@ export function hodeyMood(s: HodeState, hovered: boolean): HodeyMood {
       return "resting";
     case "recovering":
       return "confused";
+    case "acting":
+      return "guiding";
+    case "checkpoint":
+      return "watching";
     case "success":
       return "celebrating";
   }

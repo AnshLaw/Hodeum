@@ -1,5 +1,6 @@
 import type {
   AssistanceLevel,
+  PerformRequest,
   Rect,
   ScreenObservation,
   SkillRecord,
@@ -59,6 +60,8 @@ export interface PerceptionAdapter {
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void;
   /** Brings an open window of `app` (e.g. "Excel") to the front. False when none is open. */
   focusApp?(app: string): Promise<boolean>;
+  /** Agent · Do it for me: presses a control for the learner. Rejects when it's no longer where it was seen. */
+  perform?(request: PerformRequest): Promise<void>;
 }
 
 export interface SkillStore {

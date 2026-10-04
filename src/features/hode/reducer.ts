@@ -1,4 +1,5 @@
-import { onActionReady, onGoalSubmitted, onSkillLoaded, onStartHode } from "./flow";
+import { onGoalSubmitted, onSkillLoaded, onStartHode } from "./flow";
+import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
 import { onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onStuckTimeout } from "./learner";
 import type { EventOf, HodeEvent, HodeState, Transition } from "./model";
 import {
@@ -7,6 +8,7 @@ import {
   onAnnotationSubmitted,
   onVoiceQuestion,
   onSetMode,
+  onSetAgentStyle,
   onSetLanguage,
   onShowAllSteps,
   onDismiss,
@@ -24,7 +26,9 @@ const handlers: Handlers = {
   GOAL_SUBMITTED: onGoalSubmitted,
   SKILL_LOADED: onSkillLoaded,
   OBSERVED: onObservedStep,
-  ACTION_READY: onActionReady,
+  ACTION_READY: onActionReadyActing,
+  HODEY_ACTED: onHodeyActed,
+  PERFORM_FAILED: onPerformFailed,
   LEARNER_ACTED: onLearnerActed,
   STUCK_TIMEOUT: onStuckTimeout,
   SAID_STUCK: onSaidStuck,
@@ -38,6 +42,7 @@ const handlers: Handlers = {
   ANNOTATION_SUBMITTED: onAnnotationSubmitted,
   VOICE_QUESTION: onVoiceQuestion,
   SET_MODE: onSetMode,
+  SET_AGENT_STYLE: onSetAgentStyle,
   SET_LANGUAGE: onSetLanguage,
   SHOW_ALL_STEPS: onShowAllSteps,
   DISMISS: onDismiss,

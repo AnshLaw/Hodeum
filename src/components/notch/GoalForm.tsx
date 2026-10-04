@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { COPY } from "../../lib/copy";
 import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
-import { MODE_COPY } from "../../lib/modes";
-import { HODE_MODES, type HodeMode, type TaskPack } from "../../lib/types";
+import { AGENT_STYLE_COPY, MODE_COPY } from "../../lib/modes";
+import { AGENT_STYLES, HODE_MODES, type AgentStyle, type HodeMode, type TaskPack } from "../../lib/types";
 import { CloseIcon, IconButton } from "../shared/icons";
 
 interface GoalFormProps {
@@ -11,7 +11,8 @@ interface GoalFormProps {
   shell: NativeShell;
   notice?: string;
   defaultMode: HodeMode;
-  onSubmit: (goal: string, mode: HodeMode) => void;
+  defaultAgentStyle: AgentStyle;
+  onSubmit: (goal: string, mode: HodeMode, agentStyle: AgentStyle) => void;
   onClose: () => void;
 }
 
@@ -31,9 +32,27 @@ function ModePicker({ mode, onChange }: { mode: HodeMode; onChange: (mode: HodeM
   );
 }
 
-export function GoalForm({ packs, shell, notice, defaultMode, onSubmit, onClose }: GoalFormProps) {
+/** Agent mode only: guide every step, or let Hodey do them and stop at checkpoints. */
+function AgentStylePicker({ style, onChange }: { style: AgentStyle; onChange: (style: AgentStyle) => void }) {
+  return (
+    <div className="goal__modes">
+      <div className="segmented" role="radiogroup" aria-label={COPY.agentStyleLabel}>
+        {AGENT_STYLES.map((option) => (
+          <button key={option} type="button" role="radio" aria-checked={style === option} className="segmented__option" onClick={() => onChange(option)}>
+            {AGENT_STYLE_COPY[option].title}
+          </button>
+        ))}
+      </div>
+      <p className="goal__mode-detail">{AGENT_STYLE_COPY[style].detail}</p>
+    </div>
+  );
+}
+
+export function GoalForm({ packs, shell, notice, defaultMode, defaultAgentStyle, onSubmit: submit, onClose }: GoalFormProps) {
   const [goal, setGoal] = useState("");
   const [mode, setMode] = useState(defaultMode);
+  const [agentStyle, setAgentStyle] = useState(defaultAgentStyle);
+  const onSubmit = (text: string, picked: HodeMode) => submit(text, picked, agentStyle);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // The notch normally never takes focus; it may only while the learner is typing a goal.
@@ -76,6 +95,7 @@ export function GoalForm({ packs, shell, notice, defaultMode, onSubmit, onClose 
         </button>
       </div>
       <ModePicker mode={mode} onChange={setMode} />
+      {mode === "agent" && <AgentStylePicker style={agentStyle} onChange={setAgentStyle} />}
       <div className="goal__suggestions">
         {packs.map((pack) => (
           <button key={pack.id} type="button" className="chip" onClick={() => onSubmit(pack.title, mode)}>

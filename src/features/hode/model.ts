@@ -1,9 +1,11 @@
 import type { ReplyLanguage } from "../../lib/language";
 import type {
+  AgentStyle,
   AssistanceLevel,
   HodeMode,
   LearnerAnnotation,
   OverlayPrimitive,
+  PerformRequest,
   Rect,
   ScreenObservation,
   SkillRecord,
@@ -18,6 +20,12 @@ import type { StepAction, StuckSignal } from "./stuck";
 export const STUCK_MS = 12_000;
 export const MAX_WRONG_ACTIONS = 2;
 export const QUESTION_PADDING_PX = 16;
+/** Agent · Do it for me: how long Hodey shows what it's about to press, so the learner can stop it. */
+export const PREVIEW_MS = 1200;
+/** Agent · Do it for me checks in with the learner after this many of its own steps, checkpoint or not. */
+export const CHECKPOINT_EVERY = 3;
+/** Presses of Hodey's own that may fail to finish a step before the learner is asked to do it. */
+export const MAX_HODEY_TRIES = 2;
 
 export type HodePhase =
   | "idle"
@@ -29,6 +37,10 @@ export type HodePhase =
   | "annotating"
   | "paused"
   | "recovering"
+  /** Agent · Do it for me: Hodey is about to press, or is pressing, the step's control. */
+  | "acting"
+  /** Agent · Do it for me: Hodey stopped so the learner can check its work before it carries on. */
+  | "checkpoint"
   | "success";
 
 export interface HodeState {
@@ -63,8 +75,18 @@ export interface HodeState {
   app?: string;
   /** That app, while Hodey waits for the learner to open or switch to it. */
   waitingForApp?: string;
-  /** Teach (learn by doing), help (stand by until asked) or agent (guide every step). */
+  /** Teach (learn by doing), help (stand by until asked) or agent (guide or do every step). */
   mode: HodeMode;
+  /** In agent mode: guide the learner through each step, or do it and stop at checkpoints. */
+  agentStyle: AgentStyle;
+  /** Agent · Do it for me: this step is the learner's, because Hodey couldn't press it safely. */
+  handedBack: boolean;
+  /** Agent · Do it for me: Hodey's presses this step that didn't finish it. */
+  hodeyTries: number;
+  /** Agent · Do it for me: steps Hodey did since the learner last checked its work. */
+  sinceCheckpoint: number;
+  /** Steps Hodey did itself this Hode (they never count as the learner's skills). */
+  hodeyDid: number;
   /** Teach mode keeps upcoming steps hidden unless the learner asks to see the whole flow. */
   showAllSteps: boolean;
   /** What Hodey replies in (Settings > Voice > Language); kept across Hodes. */
@@ -97,6 +119,11 @@ export const initialState: HodeState = {
   reobserved: false,
   learnedSkills: [],
   mode: "teach",
+  agentStyle: "guide",
+  handedBack: false,
+  hodeyTries: 0,
+  sinceCheckpoint: 0,
+  hodeyDid: 0,
   showAllSteps: false,
   open: false,
   language: "en",
@@ -106,11 +133,17 @@ export const initialState: HodeState = {
 export type HodeEvent =
   | { type: "START_HODE" }
   /** `openAllowed`: no pack matched, but the local vision model is ready to plan step by step. */
-  | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean; /** Named in an open goal. */ app?: string; mode?: HodeMode }
+  | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean; /** Named in an open goal. */ app?: string; mode?: HodeMode; agentStyle?: AgentStyle }
   /** `remembered`: where learning memory says to start this skill (nudges the start by one step at most). */
   | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null; remembered?: AssistanceLevel }
   /** Switch teach / help / agent, mid-Hode too. */
   | { type: "SET_MODE"; mode: HodeMode }
+  /** Agent mode's style (switches to agent mode too), mid-Hode too. */
+  | { type: "SET_AGENT_STYLE"; style: AgentStyle }
+  /** Hodey's own press landed and the screen was read again. */
+  | { type: "HODEY_ACTED"; requestId: number; observation: ScreenObservation }
+  /** Hodey's own press couldn't be made (the control moved, or this app can't be driven). */
+  | { type: "PERFORM_FAILED"; requestId: number; message: string }
   /** Settings changed what Hodey replies in. */
   | { type: "SET_LANGUAGE"; language: ReplyLanguage }
   /** Teach mode: show (or hide again) the steps still to come. */
@@ -147,6 +180,8 @@ export type HodeEffect =
   | { type: "loadSkill"; skillId: string }
   | { type: "observe"; region?: Rect }
   | { type: "reason"; requestId: number; context: TeachingContext }
+  /** Press a control after `delayMs`, unless the Hode moved on (another request, or no longer acting). */
+  | { type: "perform"; requestId: number; request: PerformRequest; delayMs: number }
   | { type: "renderOverlay"; primitives: OverlayPrimitive[] }
   | { type: "clearOverlay" }
   | { type: "say"; text: string }

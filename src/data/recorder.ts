@@ -7,7 +7,7 @@ export type LogOp =
   | { op: "event"; event: HodeEventRecord }
   | { op: "end"; id: string; outcome: HodeOutcome; at: string };
 
-const ACTIVE_PHASES = new Set(["observing", "reasoning", "guiding", "answering", "annotating", "paused", "recovering"]);
+const ACTIVE_PHASES = new Set(["observing", "reasoning", "guiding", "answering", "annotating", "paused", "recovering", "acting", "checkpoint"]);
 
 function started(event: HodeEvent, prev: HodeState, next: HodeState): boolean {
   return event.type === "GOAL_SUBMITTED" && prev.phase === "goal_entry" && next.phase === "observing";
@@ -17,6 +17,8 @@ function progressEvents(event: HodeEvent, prev: HodeState, next: HodeState, at: 
   const out: HodeEventRecord[] = [];
   const stepDone = event.type === "LEARNER_ACTED" && prev.pack && (next.stepIndex > prev.stepIndex || next.phase === "success");
   if (stepDone) out.push({ hodeId, kind: "step_done", detail: currentStep(prev)?.objective, at });
+  const hodeyDone = event.type === "HODEY_ACTED" && prev.pack && next.hodeyDid > prev.hodeyDid;
+  if (hodeyDone) out.push({ hodeId, kind: "hodey_step", detail: currentStep(prev)?.objective, at });
   if (next.action?.kind === "correct" && next.action !== prev.action) out.push({ hodeId, kind: "mistake", detail: next.action.speech, at });
   if (event.type === "HINT_REQUESTED" && next !== prev) out.push({ hodeId, kind: "hint", at });
   if (event.type === "STUCK_TIMEOUT" && next !== prev) out.push({ hodeId, kind: "stuck", at });

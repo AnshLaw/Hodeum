@@ -1,6 +1,7 @@
 import { spoken } from "../../lib/spoken";
 import { ASSISTANCE_LEVELS, type ScreenObservation, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
 import { beginStep, inWrongApp, onObserved, requestReason, waitForApp } from "./flow";
+import { takeOver } from "./execute";
 import {
   MAX_WRONG_ACTIONS,
   STUCK_MS,
@@ -217,6 +218,7 @@ export function onLookAgain(s: HodeState): Transition {
 }
 
 export function onLetMeTry(s: HodeState): Transition {
+  if (s.phase === "acting" || s.phase === "checkpoint") return takeOver(s);
   if (s.phase !== "guiding") return noop(s);
   const observeIndex = ASSISTANCE_LEVELS.indexOf("observe");
   const level = ASSISTANCE_LEVELS.indexOf(s.level) < observeIndex ? "observe" : s.level;

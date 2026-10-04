@@ -1,7 +1,7 @@
 import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
-import type { AssistanceLevel, HodeMode, Rect, StepOutcome, TeachingContext } from "../../lib/types";
+import type { AgentStyle, AssistanceLevel, HodeMode, PerformRequest, Rect, StepOutcome, TeachingContext } from "../../lib/types";
 import type { LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { reasonWithFallback } from "../../providers/router";
 import { rememberedLevel } from "../memory/tracker";
@@ -26,6 +26,11 @@ async function* once(text: string): AsyncIterable<string> {
 /** Runs the pure reducer and executes its effects against the adapters. */
 /** Room echo and audio latency: Hodey's last words can reach the mic this long after playback ends. */
 const ECHO_WINDOW_MS = 1500;
+/** After Hodey presses a control, the app gets this long to respond (a menu or dialog opening) before it's read. */
+export const PRESS_SETTLE_MS = 450;
+const CANT_PRESS = "Hodey can't click in this app, so this step is yours.";
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export class HodeRuntime {
   private state: HodeState = initialState;
@@ -41,6 +46,8 @@ export class HodeRuntime {
   private muted = false;
   /** The learner's default mode, used when a goal arrives without one. */
   private defaultMode: HodeMode = "teach";
+  private defaultAgentStyle: AgentStyle = "guide";
+  private pressTimer: ReturnType<typeof setTimeout> | undefined;
   private stuckMs: number | undefined;
   private autoLanguage = false;
   /** What learning memory recalled for the running Hode; skill loads wait for it. */
@@ -76,7 +83,7 @@ export class HodeRuntime {
   dispatch = (incoming: HodeEvent): void => {
     const said = learnerWords(incoming);
     if (said) this.noticeLanguage(said);
-    const event = incoming.type === "GOAL_SUBMITTED" && !incoming.mode ? { ...incoming, mode: this.defaultMode } : incoming;
+    const event = incoming.type === "GOAL_SUBMITTED" ? { ...incoming, mode: incoming.mode ?? this.defaultMode, agentStyle: incoming.agentStyle ?? this.defaultAgentStyle } : incoming;
     const prev = this.state;
     const { state, effects } = step(prev, event);
     if (event.type === "GOAL_SUBMITTED" && prev.phase === "goal_entry" && state.pack) this.recall(state);
@@ -94,9 +101,15 @@ export class HodeRuntime {
     return this.defaultMode;
   }
 
+  /** The learner's default agent style (Settings): guide every step, or do them with checkpoints. */
+  getDefaultAgentStyle(): AgentStyle {
+    return this.defaultAgentStyle;
+  }
+
   /** `language` undefined: follow whatever language the learner speaks (Settings > Voice > Language > Auto). */
-  configure(options: { mode: HodeMode; stuckMs: number; language?: ReplyLanguage }): void {
+  configure(options: { mode: HodeMode; agentStyle?: AgentStyle; stuckMs: number; language?: ReplyLanguage }): void {
     this.defaultMode = options.mode;
+    this.defaultAgentStyle = options.agentStyle ?? "guide";
     this.stuckMs = options.stuckMs;
     this.autoLanguage = options.language === undefined;
     if (options.language) this.setLanguage(options.language);
@@ -124,6 +137,7 @@ export class HodeRuntime {
   dispose(): void {
     this.disposers.forEach((dispose) => dispose());
     this.clearStuckTimer();
+    this.clearPressTimer();
     this.stopSpeech();
   }
 
@@ -137,6 +151,8 @@ export class HodeRuntime {
         return this.observe(effect.region);
       case "reason":
         return this.reason(effect.requestId, effect.context);
+      case "perform":
+        return this.schedulePress(effect.requestId, effect.request, effect.delayMs);
       case "renderOverlay":
         return this.deps.bus.emit("overlay:render", { primitives: effect.primitives, surface: this.state.pack?.surface ?? "windows" });
       case "clearOverlay":
@@ -196,6 +212,44 @@ export class HodeRuntime {
       ({ action, failures }) => this.dispatch({ type: "ACTION_READY", requestId, action, failures }),
       (error) => this.fail("Hodey couldn't work out the next step", error, requestId),
     );
+  }
+
+  /** Still acting on this request: the learner hasn't paused, taken over, asked something, or ended the Hode. */
+  private stillActing(requestId: number): boolean {
+    return this.state.phase === "acting" && this.state.requestId === requestId;
+  }
+
+  /** Waits out the preview, then presses unless the Hode moved on meanwhile. */
+  private schedulePress(requestId: number, request: PerformRequest, delayMs: number): void {
+    this.clearPressTimer();
+    this.pressTimer = setTimeout(() => {
+      this.pressTimer = undefined;
+      if (this.stillActing(requestId)) this.press(requestId, request);
+    }, delayMs);
+  }
+
+  private press(requestId: number, request: PerformRequest): void {
+    const perception = this.deps.perception;
+    if (!perception.perform) {
+      this.dispatch({ type: "PERFORM_FAILED", requestId, message: CANT_PRESS });
+      return;
+    }
+    perception
+      .perform(request)
+      .then(() => wait(PRESS_SETTLE_MS))
+      .then(() => perception.observe())
+      .then(
+        (observation) => this.dispatch({ type: "HODEY_ACTED", requestId, observation }),
+        (error) => {
+          console.error(`Hodey couldn't press ${request.target.label}`, error);
+          this.dispatch({ type: "PERFORM_FAILED", requestId, message: errorMessage(error) });
+        },
+      );
+  }
+
+  private clearPressTimer(): void {
+    if (this.pressTimer !== undefined) clearTimeout(this.pressTimer);
+    this.pressTimer = undefined;
   }
 
   private recordOutcome(skillId: string, outcome: StepOutcome): void {

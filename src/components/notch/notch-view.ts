@@ -1,5 +1,5 @@
 import { COPY } from "../../lib/copy";
-import { MODE_COPY } from "../../lib/modes";
+import { AGENT_STYLE_COPY, MODE_COPY } from "../../lib/modes";
 import { currentStep, type HodeState } from "../../features/hode/model";
 import { skillName } from "../../features/skills/graph";
 
@@ -19,7 +19,11 @@ export type NotchControl =
   | "cancel_annotate"
   | "repeat"
   | "look_again"
-  | "all_steps";
+  | "all_steps"
+  /** Agent · Do it for me: carry on past a checkpoint. */
+  | "approve"
+  /** Agent · Do it for me: the learner does it from here, with guidance. */
+  | "take_over";
 
 export interface NotchView {
   mode: NotchMode;
@@ -80,7 +84,7 @@ function guidanceView(s: HodeState): NotchView {
   const total = s.pack?.steps.length ?? 0;
   const silent = s.level === "observe" || s.level === "independent";
   // A step just done right is acknowledged here too, so it's seen when Hodey is muted.
-  const eyebrow = s.ack ?? `${COPY.stepOf(s.stepIndex + 1, total)} · ${MODE_COPY[s.mode].title}`;
+  const eyebrow = s.ack ?? stepEyebrow(s);
   if (s.mode === "help" && silent && !s.correction) return standingByView(s, eyebrow, total);
   const speech = s.action?.speech ?? "";
   const showObjective = speech === "" || (silent && s.action?.kind === "guide");
@@ -97,6 +101,45 @@ function guidanceView(s: HodeState): NotchView {
     hintLabel: QUIET_LEVELS.has(s.level) ? COPY.needHint : COPY.hint,
     // Agent shows the whole flow; Teach only once the learner asks for All steps.
     steps: s.mode === "agent" || s.showAllSteps ? stepItems(s) : undefined,
+  };
+}
+
+function stepEyebrow(s: HodeState): string {
+  const mode = s.mode === "agent" ? `${MODE_COPY.agent.title} · ${AGENT_STYLE_COPY[s.agentStyle].title}` : MODE_COPY[s.mode].title;
+  if (s.open) return `${COPY.openHode(s.goal)} · ${mode}`;
+  return `${COPY.stepOf(Math.min(s.stepIndex + 1, s.pack?.steps.length ?? 0), s.pack?.steps.length ?? 0)} · ${mode}`;
+}
+
+/** Agent · Do it for me, about to press: what Hodey is pressing, with time to stop it. */
+function actingView(s: HodeState): NotchView {
+  const target = s.action?.target;
+  const right = currentStep(s)?.press === "right";
+  return {
+    mode: "guidance",
+    size: "guidance",
+    eyebrow: stepEyebrow(s),
+    title: target ? COPY.acting(target.label, right) : (s.action?.speech ?? ""),
+    detail: s.notice ?? COPY.actingDetail,
+    progress: s.pack ? { current: s.stepIndex, total: s.pack.steps.length } : undefined,
+    busy: true,
+    controls: ["take_over", "pause", "end"],
+    steps: s.pack ? stepItems(s) : undefined,
+  };
+}
+
+/** Agent · Do it for me, at a checkpoint: Hodey waits for the learner to check its work. */
+function checkpointView(s: HodeState): NotchView {
+  const finished = s.pack?.steps[s.stepIndex - 1];
+  return {
+    mode: "guidance",
+    size: "guidance",
+    eyebrow: stepEyebrow(s),
+    title: COPY.checkpointTitle,
+    detail: finished ? COPY.checkpointDetail(finished.objective) : undefined,
+    progress: s.pack ? { current: s.stepIndex, total: s.pack.steps.length } : undefined,
+    busy: false,
+    controls: ["approve", "take_over", "point", "end"],
+    steps: s.pack ? stepItems(s) : undefined,
   };
 }
 
@@ -133,8 +176,12 @@ export function notchView(s: HodeState): NotchView {
       return { mode: "paused", size: "compact", title: COPY.paused, busy: false, controls: ["resume", "end"] };
     case "recovering":
       return { mode: "error", size: "guidance", eyebrow: COPY.idleTitle, title: COPY.somethingWrong, detail: s.notice, busy: false, controls: ["retry", "look_again", "end"] };
+    case "acting":
+      return actingView(s);
+    case "checkpoint":
+      return checkpointView(s);
     case "success":
-      return { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail: COPY.skillLearned, busy: false, controls: [], skills: s.learnedSkills.map(skillLabel) };
+      return successView(s);
   }
 }
 
@@ -153,6 +200,13 @@ export interface PeekContext {
 /** Whether the card shrinks to a slim bar so the learner can see the target under it; hovering brings it back. */
 export function shouldPeek({ mode, covering, hovered, menuOpen, skillsOpen }: PeekContext): boolean {
   return covering && !hovered && !menuOpen && !skillsOpen && PEEK_MODES.has(mode);
+}
+
+/** Steps Hodey did aren't the learner's skills: then the card says Hodey clicked, and to check the result. */
+function successView(s: HodeState): NotchView {
+  const hodeyOnly = s.hodeyDid > 0 && s.learnedSkills.length === 0;
+  const detail = hodeyOnly ? COPY.hodeyDidIt : COPY.skillLearned;
+  return { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail, busy: false, controls: [], skills: s.learnedSkills.map(skillLabel) };
 }
 
 export interface IslandContext {

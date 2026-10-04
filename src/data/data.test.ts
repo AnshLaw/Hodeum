@@ -46,6 +46,23 @@ describe("HodeRecorder", () => {
     expect(detail?.events[2].detail).toBe("Open the Insert tab");
   });
 
+  it("records steps Hodey did as Hodey's, never as the learner's", async () => {
+    const store = new MemoryLearningStore();
+    const recorder = new HodeRecorder(store, undefined, () => "h1", () => "2026-10-03T10:00:00.000Z");
+    const state = drive(recorder, [
+      { type: "START_HODE" },
+      { type: "GOAL_SUBMITTED", goal: "pivot table", pack: PACK, mode: "agent", agentStyle: "execute" },
+      { type: "SKILL_LOADED", skillId: "excel.navigation.insert_tab", record: null },
+      { type: "OBSERVED", observation: HOME_SELECTED },
+      { type: "ACTION_READY", requestId: 1, action: guideAction(), failures: [] },
+    ]);
+    drive(recorder, [{ type: "HODEY_ACTED", requestId: state.requestId, observation: INSERT_SELECTED }, { type: "END_HODE" }], state);
+    await recorder.flushed();
+    const detail = await store.getHode("h1");
+    expect(detail?.events.map((e) => e.kind)).toEqual(["hodey_step"]);
+    expect(detail).toMatchObject({ outcome: "ended" });
+  });
+
   it("logs what made Hodey decide the learner was stuck", async () => {
     const store = new MemoryLearningStore();
     const recorder = new HodeRecorder(store, undefined, () => "h1", () => "2026-10-03T10:00:00.000Z");

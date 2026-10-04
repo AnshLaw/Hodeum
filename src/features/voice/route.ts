@@ -26,6 +26,8 @@ const COMMANDS: [RegExp, HodeEvent][] = [
   [/^(?:(?:switch to |go to |use )?teach(?:ing)? mode)$/, { type: "SET_MODE", mode: "teach" }],
   [/^(?:(?:switch to |go to |use )?help mode|just help me if i'?m stuck)$/, { type: "SET_MODE", mode: "help" }],
   [/^(?:(?:switch to |go to |use )?agent mode|(?:guide|walk) me through (?:every|each) step|(?:guide|walk) me through it)$/, { type: "SET_MODE", mode: "agent" }],
+  [/^(?:do it(?: for me)?|you do it|do (?:it|this|the clicking) for me|you do the clicking|(?:switch to )?do it for me mode)$/, { type: "SET_AGENT_STYLE", style: "execute" }],
+  [/^(?:(?:just )?guide me|i'?ll do the clicking|let me do the clicking)$/, { type: "SET_AGENT_STYLE", style: "guide" }],
   [/^(?:show (?:me )?(?:all )?(?:the )?steps|show (?:me )?all (?:of )?the steps|show (?:me )?the whole (?:flow|thing)|what are the steps)$/, { type: "SHOW_ALL_STEPS" }],
 ];
 
@@ -48,6 +50,8 @@ const HINDI_COMMANDS: [string, HodeEvent][] = [
   ["टीच मोड(?: (?:में|पर) (?:जाओ|चलो))?", { type: "SET_MODE", mode: "teach" }],
   ["हेल्प मोड(?: (?:में|पर) (?:जाओ|चलो))?", { type: "SET_MODE", mode: "help" }],
   ["एजेंट मोड(?: (?:में|पर) (?:जाओ|चलो))?|हर स्टेप (?:में|पर) (?:गाइड करो|बताओ)", { type: "SET_MODE", mode: "agent" }],
+  ["(?:आप|तुम|आप ही|तुम ही) कर दो|(?:आप|तुम) कर दीजिए|मेरे लिए कर दो", { type: "SET_AGENT_STYLE", style: "execute" }],
+  ["(?:बस )?(?:गाइड|बताते) (?:करो|करते रहो|जाओ)|क्लिक मैं (?:करूंगा|करूँगा|करूंगी|करूँगी)", { type: "SET_AGENT_STYLE", style: "guide" }],
   ["(?:सारे|सभी|पूरे) स्टेप(?:्स)? दिखाओ|पूरा तरीका दिखाओ", { type: "SHOW_ALL_STEPS" }],
 ];
 /** Hinglish controls typed or heard in English letters. */
@@ -62,6 +66,8 @@ const ROMAN_HINGLISH: [RegExp, HodeEvent][] = [
   [/^(?:aage badho|aage badhiye|chalo aage|continue karo)$/, { type: "RESUME" }],
   [/^(?:band karo|band kijiye|khatam karo|bas karo)$/, { type: "END_HODE" }],
   [/^(?:theek hai|thik hai|accha|acha|samajh (?:gaya|gayi))$/, { type: "DISMISS" }],
+  [/^(?:(?:aap|tum|aap hi|tum hi) kar do|(?:aap|tum) kar dijiye|mere liye kar do)$/, { type: "SET_AGENT_STYLE", style: "execute" }],
+  [/^(?:(?:bas )?guide karo|click main karunga|click main karungi)$/, { type: "SET_AGENT_STYLE", style: "guide" }],
   [/^(?:(?:sare|saare|sabhi|poore) steps dikhao|poora tarika dikhao)$/, { type: "SHOW_ALL_STEPS" }],
 ];
 const POLITE_HINDI =/कृपया|प्लीज़?|ज़रा/g;
