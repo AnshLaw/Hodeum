@@ -136,6 +136,8 @@ pub fn spawn(app: AppHandle, last_external: Arc<AtomicIsize>) {
         loop {
             let now = current_learner_window(&last_external, &mut memo);
             if reported.as_ref() != Some(&now) {
+                // First, so the overlay is on the window's monitor by the time the pages hear of it.
+                crate::topmost::on_learner_window(&app, now.as_ref());
                 match app.emit(LEARNER_WINDOW_EVENT, &now) {
                     Ok(()) => reported = Some(now),
                     Err(error) => eprintln!("couldn't report the learner's window: {error}"),

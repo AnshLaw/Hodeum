@@ -97,6 +97,18 @@ Turn every cloud provider off in Settings → Cloud, so the run proves the local
 2. Start the PivotTable Hode, then disconnect Wi-Fi after the first step.
 3. **Pass:** the next step still arrives, with at most a single delay of about the request timeout, and the Hode completes. Repeat the same check with ElevenLabs voice: Hodey keeps speaking in the local voice.
 
+## Also check: the notch and overlay stay above every app
+
+**Automated:** the Rust tests in `src-tauri/src/topmost/` check the z-order against real (invisible, off-screen) windows, and which monitor the overlay picks.
+
+**Live:**
+1. In Edge or Chrome, pop a video out with **Picture in picture** (an always-on-top window), drag it over the notch and click it.
+2. Watch a video full screen in the browser, then start a PowerPoint slide show.
+3. With a Hode showing a highlight, drag the app to the second monitor (if there is one).
+4. **Pass:** the notch comes back above the picture-in-picture video, the full-screen video and the slide show within about 1.5 s (at once when they take focus), typing still goes to the app, and a notch hidden with the Hodey key + H stays hidden. On the second monitor the highlight is drawn there, lined up with its control (if that monitor has another scale, the app resizes, so the highlight comes back on Hodey's next look). `hodeum.log` shows `keeping the notch and overlay above other windows` once at startup and no `SetWindowPos couldn't put` warnings.
+
+Don't test with Task Manager's **Always on top**: Windows can place it in a z-band above every app, like Start, Search, the touch keyboard and Magnifier, so it may stay over the notch. Exclusive-fullscreen games are out of scope.
+
 ## Results
 
 | Gate | Date | Machine | Result | Measurement / notes |
