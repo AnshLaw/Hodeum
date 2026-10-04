@@ -227,6 +227,13 @@ export function onHintRequested(s: HodeState): Transition {
   return withLeadingEffects(requestReason(raiseHelp({ ...s, prompted: true }, { countsAsMistake: false })), [CANCEL_TIMER]);
 }
 
+/** "Show me": the learner asked for the answer, so the step is demonstrated in full (and won't count as done unaided). */
+export function onShowMe(s: HodeState): Transition {
+  if (s.phase !== "guiding") return noop(s);
+  const shown: HodeState = { ...s, level: MOST_HELP, escalated: true, neededHelp: true, prompted: true, toppedOut: false };
+  return withLeadingEffects(requestReason(shown), [CANCEL_TIMER]);
+}
+
 /** "Where?", "I don't see it": the same ladder as the stuck timer, never a pause. */
 export function onSaidStuck(s: HodeState): Transition {
   if (s.phase !== "guiding") return noop(s);

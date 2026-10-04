@@ -199,6 +199,8 @@ export type HodeEvent =
   /** The learner said they can't find it ("where?", "I don't see it", "कहाँ है"). */
   | { type: "SAID_STUCK" }
   | { type: "HINT_REQUESTED" }
+  /** "Show me": straight to a full demonstration of the step. */
+  | { type: "SHOW_ME" }
   | { type: "EXPLAIN_REQUESTED" }
   /** Speak the current instruction or answer again. */
   | { type: "REPEAT" }
