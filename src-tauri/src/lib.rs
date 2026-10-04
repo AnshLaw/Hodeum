@@ -6,6 +6,7 @@ mod dock;
 mod hit_test;
 mod hodey_key;
 mod perception;
+mod phone;
 mod surfaces;
 mod tray;
 mod vlm;
@@ -49,6 +50,7 @@ pub fn run() {
             surfaces::monitor_info,
             perception::observe,
             perception::capture_active_window,
+            phone::ocr_frame,
             dock::set_dock,
             dock::set_notch_visible,
             dock::begin_notch_drag,

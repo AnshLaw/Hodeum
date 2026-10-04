@@ -24,7 +24,7 @@ reqwest = { version = "0.13", features = ["gzip"] }
 regex = "1"
 sherpa-onnx = { version = "1.13.8", default-features = false, features = ["shared"] }
 rodio = "0.22"
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_UI_Shell", "Win32_System_LibraryLoader", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_System_JobObjects", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_UI_Shell", "Win32_System_LibraryLoader", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_System_JobObjects", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_System_Com"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
