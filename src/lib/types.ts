@@ -82,7 +82,11 @@ export interface TaskStep {
   id: string;
   objective: string;
   skill: string;
-  target: { names: string[]; role?: string; label?: string };
+  /**
+   * `prefer: "selected"` points at a selected item inside the matched container (one of the files
+   * the learner selected) instead of the whole container; the container stays the fallback.
+   */
+  target: { names: string[]; role?: string; label?: string; prefer?: "selected" };
   speech: Record<AssistanceLevel, string>;
   explain: string;
   success: StateSignal;
@@ -170,6 +174,7 @@ export interface StepOutcome {
 
 export type OverlayPrimitive =
   | { kind: "spotlight"; bounds: Rect }
-  | { kind: "highlight"; bounds: Rect; label?: string; emphasis: "precise" | "broad" }
+  /** `keepClear`: nearby on-screen text (headings, neighbouring rows) the label shouldn't cover. */
+  | { kind: "highlight"; bounds: Rect; label?: string; emphasis: "precise" | "broad"; keepClear?: Rect[] }
   | { kind: "arrow"; to: Rect }
   | { kind: "pin"; bounds: Rect };

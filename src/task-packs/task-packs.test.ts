@@ -17,6 +17,19 @@ describe("loadTaskPack", () => {
     expect(() => loadTaskPack(raw)).toThrow(/Invalid task pack/);
   });
 
+  it("accepts a target that prefers a selected item, and nothing else there", () => {
+    const raw = clone();
+    raw.steps[0].target.prefer = "selected";
+    expect(loadTaskPack(raw).steps[0].target.prefer).toBe("selected");
+    raw.steps[0].target.prefer = "biggest";
+    expect(() => loadTaskPack(raw)).toThrow(/Invalid task pack/);
+  });
+
+  it("the Zip pack's first step points at a selected file, not the whole list", () => {
+    const zip = TASK_PACKS.find((p) => p.id === "windows-zip");
+    expect(zip?.steps[0].target.prefer).toBe("selected");
+  });
+
   it("rejects a pack without steps", () => {
     const raw = clone();
     raw.steps = [];
