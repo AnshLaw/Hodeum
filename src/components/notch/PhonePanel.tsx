@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Bus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
-import type { OverlayPrimitive } from "../../lib/types";
+import type { OverlayPrimitive, Rect, Size } from "../../lib/types";
 import { listCameras, type CameraInfo } from "../../features/phone/camera-source";
 import type { PhoneMirror } from "../../features/phone/phone-mirror";
 import type { PhoneSourceKind, PhoneSourceStatus } from "../../features/phone/phone-source";
 import { loadPhonePrefs, savePhonePrefs } from "../../features/phone/prefs";
+import { markRect } from "./phone-layout";
+
+/** Highlight corner radius in CSS px of the drawn screen. */
+const MARK_RADIUS = 6;
 
 const SOURCES: [PhoneSourceKind, string][] = [
   ["camera", COPY.phoneSourceCamera],
@@ -33,12 +37,15 @@ function usePhonePrimitives(bus: Bus): OverlayPrimitive[] {
   return primitives;
 }
 
-function Highlights({ primitives, width, height }: { primitives: OverlayPrimitive[]; width: number; height: number }) {
+/** Hodey's highlights, mapped from frame pixels onto the screen as drawn (it scales with the notch). */
+function Highlights({ primitives, toFrame, frame, display }: { primitives: OverlayPrimitive[]; toFrame: (bounds: Rect) => Rect; frame: Size; display: Size }) {
   return (
-    <svg className="phone-panel__marks" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
-      {primitives.map((p, i) =>
-        p.kind === "highlight" ? <rect key={i} className={`phone-mark phone-mark--${p.emphasis}`} x={p.bounds.x} y={p.bounds.y} width={p.bounds.width} height={p.bounds.height} rx={12} /> : null,
-      )}
+    <svg className="phone-panel__marks" viewBox={`0 0 ${display.width} ${display.height}`} preserveAspectRatio="none" aria-hidden="true">
+      {primitives.map((p, i) => {
+        if (p.kind !== "highlight") return null;
+        const box = markRect(toFrame(p.bounds), frame, display);
+        return <rect key={i} className={`phone-mark phone-mark--${p.emphasis}`} x={box.x} y={box.y} width={box.width} height={box.height} rx={MARK_RADIUS} />;
+      })}
     </svg>
   );
 }
@@ -57,17 +64,27 @@ function StatusCard({ status, kind, onRetry }: { status: PhoneSourceStatus; kind
   return <div className="phone-panel__card" role="status"><p>{text}</p></div>;
 }
 
-function PhoneScreen({ mirror, status, kind, primitives }: { mirror: PhoneMirror; status: PhoneSourceStatus; kind?: PhoneSourceKind; primitives: OverlayPrimitive[] }) {
+interface PhoneScreenProps {
+  mirror: PhoneMirror;
+  status: PhoneSourceStatus;
+  kind?: PhoneSourceKind;
+  primitives: OverlayPrimitive[];
+  /** The drawn screen's size in CSS px; CSS falls back to a fixed size until the room is measured. */
+  screen?: Size;
+}
+
+function PhoneScreen({ mirror, status, kind, primitives, screen }: PhoneScreenProps) {
   const holder = useRef<HTMLDivElement>(null);
   const canvas = mirror.surface.element;
   useEffect(() => {
     if (canvas && holder.current && canvas.parentElement !== holder.current) holder.current.appendChild(canvas);
   }, [canvas]);
-  const size = mirror.surface.size;
+  const frame = mirror.surface.size;
+  const style: CSSProperties | undefined = screen && { width: screen.width, height: screen.height };
   return (
-    <div className="phone-panel__screen" data-live={status.state === "live"}>
+    <div className="phone-panel__screen" data-live={status.state === "live"} style={style}>
       <div ref={holder} className="phone-panel__canvas" />
-      {status.state === "live" && size && <Highlights primitives={primitives} width={size.width} height={size.height} />}
+      {status.state === "live" && frame && screen && <Highlights primitives={primitives} toFrame={mirror.toFrame} frame={frame} display={screen} />}
       {status.state !== "live" && <StatusCard status={status} kind={kind} onRetry={() => void mirror.retry()} />}
     </div>
   );
@@ -108,12 +125,12 @@ function SourceBar({ mirror, kind }: { mirror: PhoneMirror; kind?: PhoneSourceKi
 }
 
 /** The enlarged notch with the iPhone: live mirror (and Hodey's highlights) on the left, guidance on the right. */
-export function PhonePanel({ mirror, bus, stacked = false, children }: { mirror: PhoneMirror; bus: Bus; stacked?: boolean; children: ReactNode }) {
+export function PhonePanel({ mirror, bus, stacked = false, screen, children }: { mirror: PhoneMirror; bus: Bus; stacked?: boolean; screen?: Size; children: ReactNode }) {
   const { status, kind } = usePhoneMirror(mirror);
   const primitives = usePhonePrimitives(bus);
   return (
     <div className={stacked ? "phone-panel phone-panel--stacked" : "phone-panel"}>
-      <PhoneScreen mirror={mirror} status={status} kind={kind} primitives={primitives} />
+      <PhoneScreen mirror={mirror} status={status} kind={kind} primitives={primitives} screen={screen} />
       <div className="phone-panel__side">
         <SourceBar mirror={mirror} kind={kind} />
         {children}

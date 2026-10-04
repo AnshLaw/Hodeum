@@ -3,6 +3,7 @@ pub mod arrange;
 pub mod geometry;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -12,7 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, 
 use crate::surfaces::NOTCH;
 use appbar::AppBar;
 use arrange::Arranged;
-use geometry::{dock_rect, snap_dock, Dock, PxRect};
+use geometry::{dock_rect, snap_dock, top_rect, Dock, PxRect};
 
 /// ~60 Hz: the window tracks the cursor smoothly while dragging.
 const DRAG_POLL: Duration = Duration::from_millis(16);
@@ -23,9 +24,22 @@ pub struct DockState {
     appbar: AppBar,
     arranged: Arranged,
     dragging: AtomicBool,
+    /// Where the notch window is docked now.
+    current: Mutex<Dock>,
+    /// The iPhone mirror is open: the top notch window is tall enough to show the whole phone.
+    tall: AtomicBool,
 }
 
 impl DockState {
+    fn dock(&self) -> Result<Dock, String> {
+        self.current.lock().map(|dock| *dock).map_err(|e| e.to_string())
+    }
+
+    fn set_current(&self, dock: Dock) -> Result<(), String> {
+        *self.current.lock().map_err(|e| e.to_string())? = dock;
+        Ok(())
+    }
+
     /// Gives the sidebar's screen space back and returns moved windows to where they were.
     pub fn release_space(&self) -> Result<(), String> {
         self.appbar.release()?;
@@ -67,6 +81,12 @@ fn place(window: &WebviewWindow, rect: PxRect) -> Result<(), String> {
     window.set_position(PhysicalPosition::new(rect.x, rect.y)).map_err(|e| e.to_string())
 }
 
+/// Moves and resizes in one step, so the centred notch never jumps sideways between the two.
+fn place_at_once(window: &WebviewWindow, rect: PxRect) -> Result<(), String> {
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+    arrange::set_rect(windows::Win32::Foundation::HWND(hwnd as *mut _), rect)
+}
+
 /// How long, and how often, to keep the window where we put it while the shell applies a work-area change.
 const HOLD_FOR: Duration = Duration::from_millis(1500);
 const HOLD_POLL: Duration = Duration::from_millis(40);
@@ -94,12 +114,13 @@ fn hold_position(app: AppHandle, rect: PxRect) {
 #[tauri::command]
 pub fn set_dock(app: AppHandle, dock: Dock, reserve: bool, state: State<'_, DockState>) -> Result<(), String> {
     state.dragging.store(false, Ordering::SeqCst);
+    state.set_current(dock)?;
     let window = notch(&app)?;
     if dock == Dock::Top || !reserve {
         state.release_space()?;
         // Read the work area only after giving our strip back, or we'd dock beside our own old reservation.
         let (full, work, scale) = monitor_rects(&window)?;
-        let rect = dock_rect(dock, full, work, scale);
+        let rect = if dock == Dock::Top { top_rect(state.tall.load(Ordering::SeqCst), full, work, scale) } else { dock_rect(dock, full, work, scale) };
         place(&window, rect)?;
         hold_position(app.clone(), rect);
         return Ok(());
@@ -113,6 +134,19 @@ pub fn set_dock(app: AppHandle, dock: Dock, reserve: bool, state: State<'_, Dock
     let strip = PxRect { y: work.y, height: work.height, ..granted };
     hold_position(app.clone(), granted);
     state.arranged.make_room(strip, free_beside(dock, work, strip))
+}
+
+/// Grows the top notch window to hold the whole iPhone mirror, or shrinks it back once the mirror's
+/// closing animation is done. Side docks already span the work area and keep their size.
+#[tauri::command]
+pub fn set_notch_tall(app: AppHandle, tall: bool, state: State<'_, DockState>) -> Result<(), String> {
+    state.tall.store(tall, Ordering::SeqCst);
+    if state.dock()? != Dock::Top || state.dragging.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    let window = notch(&app)?;
+    let (full, work, scale) = monitor_rects(&window)?;
+    place_at_once(&window, top_rect(tall, full, work, scale))
 }
 
 #[tauri::command]

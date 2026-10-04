@@ -1,3 +1,4 @@
+import type { Rect } from "../../lib/types";
 import type { CapturedFrame } from "../../providers/vision/types";
 import type { FrameSurface, PhoneSource, PhoneSourceKind, PhoneSourceStatus } from "./phone-source";
 
@@ -14,9 +15,14 @@ export class PhoneMirror {
   private readonly liveHandlers = new Set<() => void>();
   private readonly offlineHandlers = new Set<() => void>();
 
+  /**
+   * `toFrame` places a phone-surface highlight in frame pixels. Phone perception already reports frame
+   * pixels; the practice stage's phone lives on the page, so it maps page coordinates onto its mirror.
+   */
   constructor(
     readonly surface: FrameSurface,
     private readonly create: (kind: PhoneSourceKind) => PhoneSource,
+    readonly toFrame: (bounds: Rect) => Rect = (bounds) => bounds,
   ) {}
 
   isOpen = (): boolean => this.source !== undefined;

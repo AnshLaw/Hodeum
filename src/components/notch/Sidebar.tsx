@@ -1,4 +1,5 @@
-import type { Ref } from "react";
+import { useRef, type Ref } from "react";
+import type { Size } from "../../lib/types";
 import { COPY } from "../../lib/copy";
 import { HodeyFace } from "../hodey/HodeyFace";
 import { CheckIcon, CrosshairIcon, ExpandIcon, IconButton, MoreIcon, MutedIcon, VolumeIcon } from "../shared/icons";
@@ -9,6 +10,7 @@ import { Grip, LocalBadge, MicButton, NotchContent, PrivacyDots, StepList } from
 import type { SurfaceProps } from "./surface";
 import { PhonePanel } from "./PhonePanel";
 import { sidebarPanelOpen } from "./sidebar-view";
+import { usePhoneScreen } from "./use-phone";
 
 const HODEY_TAB_SIZE = 42;
 const HODEY_BAR_SIZE = 40;
@@ -32,10 +34,10 @@ function IdleStart({ onControl, notice }: Pick<SurfaceProps, "onControl"> & { no
 }
 
 /** With the iPhone mirror open, the side panel stacks the phone above Hodey's guidance. */
-function SidebarContent(props: SurfaceProps) {
+function SidebarContent(props: SurfaceProps & { phoneScreen?: Size }) {
   if (!props.phoneOpen || !props.phone || props.menuOpen || props.skills?.open) return <SidebarBody {...props} />;
   return (
-    <PhonePanel mirror={props.phone} bus={props.bus} stacked>
+    <PhonePanel mirror={props.phone} bus={props.bus} stacked screen={props.phoneScreen}>
       <SidebarBody {...props} />
     </PhonePanel>
   );
@@ -70,13 +72,15 @@ function SidebarBody(props: SurfaceProps) {
 /** Side dock: a slim tab when idle, a full-height panel while a Hode runs (or always, as a pinned copilot). */
 export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceRef: Ref<HTMLElement> }) {
   const { side, view, hovered, menuOpen, revealed, muted, surfaceRef } = props;
+  const stageRef = useRef<HTMLDivElement>(null);
+  const phoneScreen = usePhoneScreen(props.phone, stageRef, "stacked");
   const { sidebar: style, visibility } = props.dock.prefs;
   const panelOpen = sidebarPanelOpen({ mode: view.mode, listening: props.micStatus === "listening", style, visibility, phoneOpen: props.phoneOpen === true });
   const skillsOpen = props.skills?.open === true;
   const collapsed = !panelOpen && !hovered && !menuOpen && !skillsOpen;
   const classes = ["sidebar", `sidebar--${side}`, `sidebar--${style}`, collapsed ? "sidebar--collapsed" : "", panelOpen ? "sidebar--active" : "", revealed ? "" : "sidebar--tucked"];
   return (
-    <div className={`sidebar-stage sidebar-stage--${side}`}>
+    <div ref={stageRef} className={`sidebar-stage sidebar-stage--${side}`}>
       <aside ref={surfaceRef} className={classes.filter(Boolean).join(" ")} aria-label={COPY.idleTitle}>
         {collapsed ? (
           <Grip onGrip={props.onGrip}>
@@ -118,7 +122,7 @@ export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceR
               </p>
             )}
             <div className="sidebar__body" aria-live="polite">
-              <SidebarContent {...props} />
+              <SidebarContent {...props} phoneScreen={phoneScreen} />
             </div>
           </>
         )}

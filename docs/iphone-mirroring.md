@@ -1,6 +1,6 @@
 # Mirroring your iPhone into Hodey
 
-Hodey can show your iPhone's screen in the enlarged notch and teach you on it. The first iPhone Hode is "Turn on Dark Mode".
+Hodey can show your iPhone's screen in the enlarged notch and teach you on it. While the mirror is open, the notch grows to fit the whole phone screen, uncropped, in the shape of the incoming picture: as tall as your screen's work area allows beside Hodey's guidance (top notch), or above it in the sidebar. Closing the mirror shrinks it back. The first iPhone Hode is "Turn on Dark Mode".
 
 There are three ways to get the screen onto the laptop. Hodeum only reads what arrives. Frames stay in memory on this PC, text is read by Windows' built-in OCR, and nothing is uploaded or saved.
 
@@ -55,7 +55,7 @@ If AirPlay stops, the notch shows the reason. The full log is `runtime\uxplay.lo
 
 ## Rehearse without a phone
 
-Run `npm run dev` and open the **iPhone** tab on the practice stage. Then start a Hode with "turn on dark mode on my iphone".
+Run `npm run dev` and open the **iPhone** tab on the practice stage. Then start a Hode with "turn on dark mode on my iphone". The notch mirrors the practice iPhone (it opens on its own, or from ⋯ → **Show iPhone**), so you can check the enlarged notch and Hodey's highlights on the mirror.
 
 ## Troubleshooting
 

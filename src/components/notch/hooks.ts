@@ -30,10 +30,13 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
     observer.observe(element);
     // Sliding in and out of auto-hide is a transform, which ResizeObserver doesn't see.
     element.addEventListener("transitionend", report);
+    // The window growing or shrinking around the iPhone mirror moves the centred surface without resizing it.
+    window.addEventListener("resize", report);
     report();
     return () => {
       observer.disconnect();
       element.removeEventListener("transitionend", report);
+      window.removeEventListener("resize", report);
       cancelAnimationFrame(frame);
     };
   }, [ref, shell, layoutKey]);

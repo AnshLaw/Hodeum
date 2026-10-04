@@ -59,7 +59,7 @@ fn outer_rect(visible: PxRect, insets: Insets) -> PxRect {
     }
 }
 
-fn set_rect(hwnd: HWND, r: PxRect) -> Result<(), String> {
+pub(super) fn set_rect(hwnd: HWND, r: PxRect) -> Result<(), String> {
     // SAFETY: a stale handle simply fails; no z-order or activation change.
     unsafe { SetWindowPos(hwnd, None, r.x, r.y, r.width as i32, r.height as i32, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER) }
         .map_err(|e| e.to_string())

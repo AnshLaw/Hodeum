@@ -19,6 +19,8 @@ export interface NativeShell {
   /** Moves the notch window to a dock; side docks with `reserve` claim screen space as an app bar. */
   setDock(dock: Dock, reserve: boolean): Promise<void>;
   setNotchVisible(visible: boolean): Promise<void>;
+  /** Grows the top notch window to hold the whole iPhone mirror, or shrinks it back. Side docks ignore it. */
+  setNotchTall(tall: boolean): Promise<void>;
   /** Starts a native drag; the shell reports the dock to snap to via `onDockSnapped`. */
   beginNotchDrag(): Promise<void>;
   onDockSnapped(handler: (dock: Dock) => void): () => void;
@@ -40,6 +42,8 @@ export class BrowserShell implements NativeShell {
   async setOverlayInteractive(): Promise<void> {}
   async setDock(): Promise<void> {}
   async setNotchVisible(): Promise<void> {}
+  /** The stage's notch layer already spans the desktop. */
+  async setNotchTall(): Promise<void> {}
   async beginNotchDrag(): Promise<void> {}
 
   /** The stage shows the app in-page; it listens via `onOpenApp`. */

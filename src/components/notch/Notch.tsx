@@ -27,7 +27,9 @@ import type { ActivityState, ActivityTracker } from "../../lib/activity";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
 import type { PhoneMirror } from "../../features/phone/phone-mirror";
 import { PhonePanel } from "./PhonePanel";
-import { usePhoneControls } from "./use-phone";
+import { usePhoneControls, usePhoneScreen, useTallNotch } from "./use-phone";
+import { phoneNotchWidth } from "./phone-layout";
+import type { Size } from "../../lib/types";
 import { PrivacyDots } from "./NotchParts";
 import "../hodey/hodey-face.css";
 import "./notch.css";
@@ -47,7 +49,7 @@ export interface NotchProps {
   speech: SpeechInput;
   /** How Hindi words are shown (Settings > Voice): Devanagari, or English letters. */
   script?: () => HindiScript;
-  /** The iPhone mirror (desktop app only). */
+  /** The iPhone mirror: the desktop app's, or the practice stage's mirror of its practice iPhone. */
   phone?: PhoneMirror;
   /** The learner's skills, read from the same local store the runtime saves progress to. */
   skills?: SkillSource;
@@ -152,9 +154,16 @@ function topBody(props: SurfaceProps, view: NotchView, size: NotchSize, peek: bo
   return <NotchContent view={view} expanded={EXPANDED_SIZES.includes(size)} fallbackDetail={props.bootNotice} onControl={onControl} extra={successExtra(props)} />;
 }
 
+/** Width per size; holding the iPhone, as wide as the phone drawn at full size plus the guidance column. */
+function notchWidth(size: NotchSize, phoneScreen: Size | undefined): number {
+  return size === "phone" && phoneScreen ? phoneNotchWidth(phoneScreen) : NOTCH_WIDTHS[size];
+}
+
 /** The dynamic island: one surface that morphs between pill, orb, bar and card as Hodey works. */
 function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering: boolean }) {
   const { menuOpen, hovered, revealed } = props;
+  const stageRef = useRef<HTMLDivElement>(null);
+  const phoneScreen = usePhoneScreen(props.phone, stageRef, "beside");
   const settled = useSettled(props.view.size === "orb", ORB_DELAY_MS);
   // Step aside to a slim bar while the highlighted control sits under the card; hovering brings it back.
   const skillsOpen = props.skills?.open === true;
@@ -162,10 +171,10 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
   const listening = props.micStatus === "listening";
   const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening, phone: props.phoneOpen === true, skills: skillsOpen });
   const view = skillsOpen ? { ...props.view, eyebrow: COPY.yourSkills, progress: undefined, controls: [] } : peek ? { ...props.view, controls: [] } : props.view;
-  const style = { "--notch-width": `${NOTCH_WIDTHS[size]}px` } as CSSProperties;
+  const style = { "--notch-width": `${notchWidth(size, phoneScreen)}px` } as CSSProperties;
   const classes = ["notch", `notch--${size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
   return (
-    <div className="notch-stage">
+    <div ref={stageRef} className="notch-stage">
       <section ref={props.surfaceRef} className={classes.filter(Boolean).join(" ")} style={style} aria-label={COPY.idleTitle}>
         {size === "orb" ? (
           <Orb mood={props.mood} label={view.title} activity={props.activity} />
@@ -176,7 +185,7 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
             {listening && <HeardLine heard={props.heard} />}
             <div aria-live="polite">
               {size === "phone" && props.phone ? (
-                <PhonePanel mirror={props.phone} bus={props.bus}>
+                <PhonePanel mirror={props.phone} bus={props.bus} screen={phoneScreen}>
                   {topBody(props, view, size, peek)}
                 </PhonePanel>
               ) : (
@@ -244,6 +253,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   const activity = useActivity(tracker);
   const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
   const { phoneOpen, onTogglePhone } = usePhoneControls(phone, state, () => setMenuOpen(false));
+  useTallNotch(shell, dock.prefs.dock === "top" && phoneOpen);
 
   const props: SurfaceProps = {
     view,
