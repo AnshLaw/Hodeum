@@ -1,6 +1,9 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { createNonce, desktopSignInUrl } from "./google-identity";
 import type { AuthBackend } from "./service";
-import type { AccountUser } from "./types";
+import type { AccountUser, GoogleCallback } from "./types";
+
+const STATE_BYTES = 16;
 
 export function accountUser(user: User | undefined | null): AccountUser | undefined {
   if (!user) return undefined;
@@ -8,9 +11,19 @@ export function accountUser(user: User | undefined | null): AccountUser | undefi
   return { id: user.id, email: user.email, name: meta?.full_name ?? meta?.name };
 }
 
-/** Google sign-in through Supabase Auth (PKCE: the verifier stays in this window's storage). */
+const randomState = () => [...crypto.getRandomValues(new Uint8Array(STATE_BYTES))].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/**
+ * Desktop sign-in: the browser signs in with Google on Hodeum's site, which hands the ID token
+ * back to this PC; Supabase checks it (and the nonce inside it) with `signInWithIdToken`.
+ */
 export class SupabaseAuth implements AuthBackend {
-  constructor(private readonly client: SupabaseClient) {}
+  private attempt: { state: string; rawNonce: string } | undefined;
+
+  constructor(
+    private readonly client: SupabaseClient,
+    private readonly siteUrl: string,
+  ) {}
 
   async user(): Promise<AccountUser | undefined> {
     const { data, error } = await this.client.auth.getSession();
@@ -25,13 +38,16 @@ export class SupabaseAuth implements AuthBackend {
   }
 
   async authorizeUrl(redirectTo: string): Promise<string> {
-    const { data, error } = await this.client.auth.signInWithOAuth({ provider: "google", options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: "select_account" } } });
-    if (error) throw error;
-    return data.url;
+    const nonce = await createNonce();
+    this.attempt = { state: randomState(), rawNonce: nonce.raw };
+    return desktopSignInUrl(this.siteUrl, { redirect: redirectTo, nonceHash: nonce.hashed, state: this.attempt.state });
   }
 
-  async exchangeCode(code: string): Promise<void> {
-    const { error } = await this.client.auth.exchangeCodeForSession(code);
+  async finish(callback: GoogleCallback): Promise<void> {
+    const attempt = this.attempt;
+    this.attempt = undefined;
+    if (!attempt || callback.state !== attempt.state) throw new Error("The sign-in that came back didn't match this one. Try again from Hodeum.");
+    const { error } = await this.client.auth.signInWithIdToken({ provider: "google", token: callback.idToken, nonce: attempt.rawNonce });
     if (error) throw error;
   }
 

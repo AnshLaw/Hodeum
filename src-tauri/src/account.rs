@@ -28,17 +28,21 @@ const SHELL_EXECUTE_OK: isize = 32;
 
 static LISTENING: AtomicBool = AtomicBool::new(false);
 
+/// What Hodeum's sign-in page sends back: Google's ID token and the state the notch gave it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Callback {
     #[serde(skip_serializing_if = "Option::is_none")]
-    code: Option<String>,
+    id_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
 }
 
 impl Callback {
     fn failed(error: &str) -> Self {
-        Self { code: None, error: Some(error.to_string()) }
+        Self { id_token: None, state: None, error: Some(error.to_string()) }
     }
 }
 
@@ -46,7 +50,7 @@ fn redirect_url() -> String {
     format!("http://127.0.0.1:{CALLBACK_PORT}{CALLBACK_PATH}")
 }
 
-/// Reads `GET /auth/callback?code=…` (or `?error=…`). `None` for any other path, e.g. a favicon.
+/// Reads `GET /auth/callback?id_token=…&state=…` (or `?error=…`). `None` for any other path, e.g. a favicon.
 pub fn parse_callback(request_line: &str) -> Option<Callback> {
     let mut parts = request_line.split_whitespace();
     if parts.next() != Some("GET") {
@@ -56,11 +60,11 @@ pub fn parse_callback(request_line: &str) -> Option<Callback> {
     if url.path() != CALLBACK_PATH {
         return None;
     }
-    let param = |name: &str| url.query_pairs().find(|(key, _)| key == name).map(|(_, value)| value.into_owned());
-    if let Some(code) = param("code").filter(|code| !code.is_empty()) {
-        return Some(Callback { code: Some(code), error: None });
+    let param = |name: &str| url.query_pairs().find(|(key, _)| key == name).map(|(_, value)| value.into_owned()).filter(|value| !value.is_empty());
+    if let (Some(id_token), Some(state)) = (param("id_token"), param("state")) {
+        return Some(Callback { id_token: Some(id_token), state: Some(state), error: None });
     }
-    let error = param("error_description").or_else(|| param("error")).unwrap_or_else(|| "The browser came back without a sign-in code.".into());
+    let error = param("error").unwrap_or_else(|| "The browser came back without a Google sign-in.".into());
     Some(Callback::failed(&error))
 }
 
@@ -170,27 +174,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_the_authorization_code() {
-        let callback = parse_callback("GET /auth/callback?code=abc-123&state=x HTTP/1.1");
-        assert_eq!(callback, Some(Callback { code: Some("abc-123".into()), error: None }));
+    fn reads_the_google_id_token_and_state() {
+        let callback = parse_callback("GET /auth/callback?id_token=eyJ.a.b&state=s-1 HTTP/1.1");
+        assert_eq!(callback, Some(Callback { id_token: Some("eyJ.a.b".into()), state: Some("s-1".into()), error: None }));
     }
 
     #[test]
-    fn reads_the_providers_error() {
-        let callback = parse_callback("GET /auth/callback?error=access_denied&error_description=The+user+denied+access HTTP/1.1");
-        assert_eq!(callback, Some(Callback::failed("The user denied access")));
+    fn reads_the_sign_in_pages_error() {
+        let callback = parse_callback("GET /auth/callback?error=The+user+closed+Google&state=s-1 HTTP/1.1");
+        assert_eq!(callback, Some(Callback::failed("The user closed Google")));
     }
 
     #[test]
     fn ignores_other_paths_and_methods() {
         assert_eq!(parse_callback("GET /favicon.ico HTTP/1.1"), None);
-        assert_eq!(parse_callback("POST /auth/callback?code=abc HTTP/1.1"), None);
+        assert_eq!(parse_callback("POST /auth/callback?id_token=abc&state=s HTTP/1.1"), None);
         assert_eq!(parse_callback(""), None);
     }
 
     #[test]
-    fn a_callback_without_a_code_is_an_error() {
-        assert!(parse_callback("GET /auth/callback HTTP/1.1").is_some_and(|c| c.code.is_none() && c.error.is_some()));
+    fn a_token_without_its_state_is_an_error() {
+        assert!(parse_callback("GET /auth/callback?id_token=eyJ.a.b HTTP/1.1").is_some_and(|c| c.id_token.is_none() && c.error.is_some()));
+        assert!(parse_callback("GET /auth/callback HTTP/1.1").is_some_and(|c| c.id_token.is_none() && c.error.is_some()));
     }
 
     #[test]

@@ -11,7 +11,9 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:site": "vite build --config vite.site.config.ts",
+    "deploy:site": "npm run build:site && node -e \"require('fs').cpSync('.vercel','dist-site/.vercel',{recursive:true})\" && vercel deploy --prod --yes --cwd dist-site"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

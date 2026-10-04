@@ -3,5 +3,5 @@ import { NotConfigured, WebApp } from "../web/WebApp";
 import { mount } from "./mount";
 
 const config = supabaseConfig();
-// The Google redirect lands back here with ?code=…; supabase-js exchanges it (PKCE).
-mount(config ? <WebApp client={createSupabase(config, { detectSessionInUrl: true })} /> : <NotConfigured />);
+// Sign-in is Google's button on this page (ID token -> Supabase), so there's no redirect to detect.
+mount(config ? <WebApp client={createSupabase(config, { detectSessionInUrl: false })} /> : <NotConfigured />);

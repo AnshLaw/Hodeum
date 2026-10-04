@@ -7,7 +7,7 @@ import { SyncEngine } from "../sync/engine";
 import { SqliteSyncSource } from "../sync/local";
 import { BrowserSyncState, recordDeletions } from "../sync/state";
 import { SupabaseCloud } from "../sync/supabase-cloud";
-import { createSupabase, supabaseConfig } from "./config";
+import { createSupabase, siteUrl, supabaseConfig } from "./config";
 import { AccountService, type AccountPrefs, type SyncSession } from "./service";
 import { SupabaseAuth } from "./supabase-auth";
 import { TauriLoopback, type TauriLoopbackDeps } from "./tauri-loopback";
@@ -104,7 +104,7 @@ export async function connectAccount(deps: ConnectAccountDeps): Promise<AccountS
       subscribe: (listener) => engine.subscribe(listener),
     };
   };
-  const service = new AccountService({ backend: client && new SupabaseAuth(client), loopback: new TauriLoopback(deps), bus, session, prefs: browserPrefs });
+  const service = new AccountService({ backend: client && new SupabaseAuth(client, siteUrl()), loopback: new TauriLoopback(deps), bus, session, prefs: browserPrefs });
   await service.start();
   return service;
 }

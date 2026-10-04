@@ -8,9 +8,11 @@ import { HomePage } from "../app/pages/HomePage";
 import { LearningPage } from "../app/pages/LearningPage";
 import type { AppServices } from "../app/services";
 import { HodeumMark } from "../components/shared/icons";
+import { googleClientId } from "../features/account/config";
 import { accountUser } from "../features/account/supabase-auth";
 import type { DeviceRow } from "../features/sync/types";
 import { isOnline } from "./devices";
+import { GoogleButton } from "./GoogleButton";
 import { useDashboard, useSession, type Dashboard } from "./use-dashboard";
 import "../app/app.css";
 import "./web.css";
@@ -27,15 +29,12 @@ const NO_WINDOW: AppServices["window"] = { minimize: () => {}, toggleMaximize: (
 
 function SignIn({ client }: { client: SupabaseClient }) {
   const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const signIn = async () => {
-    setBusy(true);
+  const signIn = async (idToken: string, rawNonce?: string) => {
     setError(undefined);
-    const { error: failed } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${location.origin}${location.pathname}`, queryParams: { prompt: "select_account" } } });
+    const { error: failed } = await client.auth.signInWithIdToken({ provider: "google", token: idToken, nonce: rawNonce });
     if (failed) {
       console.error("Google sign-in failed", failed);
       setError(failed.message);
-      setBusy(false);
     }
   };
   return (
@@ -43,9 +42,7 @@ function SignIn({ client }: { client: SupabaseClient }) {
       <HodeumMark size={40} />
       <h1>Your Hodes, from anywhere</h1>
       <p className="hmuted">See what you've learned and start a Hode on your PC. Sign in with the Google account you use in the Hodeum app.</p>
-      <button type="button" className="btn btn--primary" onClick={() => void signIn()} disabled={busy}>
-        {busy ? "Opening Google…" : "Sign in with Google"}
-      </button>
+      <GoogleButton clientId={googleClientId()} onCredential={(token, nonce) => void signIn(token, nonce)} />
       {error && (
         <p className="hchat__error" role="alert">
           Sign-in didn't start: {error}

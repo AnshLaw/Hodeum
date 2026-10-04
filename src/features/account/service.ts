@@ -1,13 +1,14 @@
 import type { Bus } from "../../lib/bus";
-import type { AccountStatus, AccountUser, SyncStatus } from "./types";
+import type { AccountStatus, AccountUser, GoogleCallback, SyncStatus } from "./types";
 
 /** Supabase Auth, narrowed to what the desktop needs. */
 export interface AuthBackend {
   user(): Promise<AccountUser | undefined>;
   onUserChange(listener: (user?: AccountUser) => void): () => void;
-  /** The Google authorize URL, PKCE verifier kept locally. */
+  /** Hodeum's sign-in page for this attempt; the nonce and state stay here. */
   authorizeUrl(redirectTo: string): Promise<string>;
-  exchangeCode(code: string): Promise<void>;
+  /** Checks the state and signs in to Supabase with Google's ID token. */
+  finish(callback: GoogleCallback): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -15,8 +16,8 @@ export interface AuthBackend {
 export interface Loopback {
   /** Starts listening; returns the redirect URL to give Supabase. */
   listen(): Promise<string>;
-  /** The authorization code from the browser, or a rejection with the provider's error. */
-  waitForCode(): Promise<string>;
+  /** What the sign-in page sent back, or a rejection with its error. */
+  waitForCallback(): Promise<GoogleCallback>;
   openBrowser(url: string): Promise<void>;
 }
 
@@ -93,10 +94,10 @@ export class AccountService {
     this.update({ phase: "signing-in", error: undefined });
     try {
       const redirect = await loopback.listen();
-      const code = loopback.waitForCode();
+      const callback = loopback.waitForCallback();
       await loopback.openBrowser(await backend.authorizeUrl(redirect));
-      const received = await code;
-      if (attempt === this.attempt) await backend.exchangeCode(received);
+      const received = await callback;
+      if (attempt === this.attempt) await backend.finish(received);
     } catch (error) {
       console.error("Google sign-in failed", error);
       if (attempt === this.attempt) this.update({ phase: "signed-out", error: errorText(error) });

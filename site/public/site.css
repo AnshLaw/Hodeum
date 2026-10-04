@@ -1,0 +1,174 @@
+:root {
+  --bg: #0a0a0b;
+  --card: #141416;
+  --line: rgb(255 255 255 / 0.08);
+  --text: #f2f2f2;
+  --muted: #a3a3a3;
+  --accent: #ffb224;
+  --accent-ink: #1f1300;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f6f7;
+    --card: #ffffff;
+    --line: rgb(0 0 0 / 0.08);
+    --text: #17171a;
+    --muted: #5b5b64;
+    color-scheme: light;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font: 16px/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+a {
+  color: inherit;
+}
+
+.top,
+main,
+footer {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 72px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.brand img {
+  border-radius: 7px;
+}
+
+nav {
+  display: flex;
+  gap: 20px;
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+nav a:hover,
+nav a[aria-current="page"] {
+  color: var(--text);
+}
+
+.hero {
+  padding: 72px 0 48px;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(36px, 7vw, 60px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.lead {
+  max-width: 40rem;
+  margin: 20px 0 0;
+  font-size: 18px;
+  color: var(--muted);
+}
+
+.actions {
+  margin: 32px 0 0;
+}
+
+.button {
+  display: inline-block;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  text-decoration: none;
+  background: var(--accent);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  padding-bottom: 64px;
+}
+
+.grid article {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.grid h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.grid p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.prose {
+  max-width: 44rem;
+  padding-top: 32px;
+  padding-bottom: 64px;
+}
+
+.prose h1 {
+  font-size: 40px;
+}
+
+.prose h2 {
+  margin: 32px 0 6px;
+  font-size: 20px;
+}
+
+.prose li {
+  margin: 6px 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+footer {
+  padding-top: 24px;
+  padding-bottom: 40px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+}

@@ -27,3 +27,8 @@ runtime/
 
 # Supabase CLI cache
 supabase/.temp/
+
+# Public site build and its logo
+dist-site/
+!site/public/*.png
+.vercel/

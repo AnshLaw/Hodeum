@@ -14,12 +14,14 @@
 
 The account and sync engine live in the **notch window** (always running, already owns the runtime). The app window talks to it over the bus: `account:status` (broadcast), `account:status-request`, `account:sign-in`, `account:sign-out`, `account:pause`.
 
-Sign-in uses PKCE in the system browser:
+Sign-in is Google Identity Services on Hodeum's own site (`hodeum.vercel.app`), so Google's screen names Hodeum rather than the Supabase project, then `signInWithIdToken`:
 
 1. Rust `auth_listen` binds `127.0.0.1:47615` and returns `http://127.0.0.1:47615/auth/callback`.
-2. supabase-js builds the Google authorize URL (`skipBrowserRedirect`); Rust `open_url` opens it (https only).
-3. The browser lands on the loopback; Rust answers with a "return to Hodeum" page and emits `account:callback { code | error }`.
-4. supabase-js exchanges the code (the verifier never left the notch window's storage). Times out after 5 minutes.
+2. The notch makes a random `state` and nonce, and Rust `open_url` (https only) opens `/signin.html?redirect=…&nonce=<sha256>&state=…`.
+3. The page shows Google's button and sends the ID token back only to a loopback `/auth/callback`; Rust answers with a "return to Hodeum" page and emits `account:callback { idToken, state | error }`.
+4. The notch checks `state`, then signs in with the token and the raw nonce (one use per attempt). Times out after 5 minutes.
+
+The web dashboard uses the same button directly.
 
 ## Sync engine
 

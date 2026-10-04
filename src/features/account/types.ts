@@ -1,3 +1,9 @@
+/** What Hodeum's sign-in page sends back to the desktop: Google's ID token and the state it was given. */
+export interface GoogleCallback {
+  idToken: string;
+  state: string;
+}
+
 export interface AccountUser {
   id: string;
   email?: string;

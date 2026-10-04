@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LocalBus } from "../../lib/bus";
 import { AccountService, type AuthBackend, type Loopback, type SyncSession } from "./service";
-import type { AccountStatus, AccountUser, SyncStatus } from "./types";
+import type { AccountStatus, AccountUser, GoogleCallback, SyncStatus } from "./types";
 
 const ANSH: AccountUser = { id: "u1", email: "learner@example.com", name: "Learner" };
 const REDIRECT = "http://127.0.0.1:47615/auth/callback";
@@ -19,11 +19,11 @@ class FakeBackend implements AuthBackend {
     return () => (this.listener = undefined);
   }
   async authorizeUrl(redirectTo: string) {
-    return `https://project.supabase.co/auth/v1/authorize?redirect_to=${redirectTo}`;
+    return `https://hodeum.vercel.app/signin.html?redirect=${redirectTo}`;
   }
-  async exchangeCode(code: string) {
-    if (code === "bad") throw new Error("invalid code");
-    this.exchanged.push(code);
+  async finish(callback: GoogleCallback) {
+    if (callback.idToken === "bad") throw new Error("invalid token");
+    this.exchanged.push(callback.idToken);
     this.current = ANSH;
     this.listener?.(ANSH);
   }
@@ -39,9 +39,9 @@ class FakeLoopback implements Loopback {
   async listen() {
     return REDIRECT;
   }
-  async waitForCode() {
+  async waitForCallback(): Promise<GoogleCallback> {
     if (this.outcome.error) throw new Error(this.outcome.error);
-    return this.outcome.code ?? "";
+    return { idToken: this.outcome.code ?? "", state: "s-1" };
   }
   async openBrowser(url: string) {
     this.opened.push(url);
@@ -119,16 +119,16 @@ describe("AccountService", () => {
   });
 
   it("can stop waiting for the browser, and ignores a code that arrives afterwards", async () => {
-    let deliver: (code: string) => void = () => {};
+    let deliver: (callback: GoogleCallback) => void = () => {};
     const loopback = new FakeLoopback({});
-    loopback.waitForCode = () => new Promise<string>((resolve) => (deliver = resolve));
+    loopback.waitForCallback = () => new Promise<GoogleCallback>((resolve) => (deliver = resolve));
     const { bus, service, sessions, seen } = setup(loopback);
     await service.start();
     bus.emit("account:sign-in", {});
     await settle();
     bus.emit("account:cancel", {});
     expect(seen.at(-1)).toMatchObject({ phase: "signed-out" });
-    deliver("late");
+    deliver({ idToken: "late", state: "s-1" });
     await settle();
     expect(service.status().phase).toBe("signed-out");
     expect(sessions).toEqual([]);
