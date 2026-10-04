@@ -52,7 +52,7 @@ pub fn parse(status: u16, html: &str) -> Result<Vec<WebResult>, SourceError> {
 }
 
 pub async fn search(client: &reqwest::Client, query: &str) -> Result<Vec<WebResult>, SourceError> {
-    let response = client.get(with_params(URL, &[("q", query)])?).header("Accept", "text/html").send().await.map_err(|e| SourceError::from_reqwest(&e))?;
+    let response = client.get(with_params(URL, &[("q", query)])?).header("Accept", "text/html").send().await.map_err(SourceError::from_reqwest)?;
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(SourceError::from_status(SourceId::DuckDuckGo, status));

@@ -97,13 +97,13 @@ impl SourceError {
         }
     }
 
-    pub fn from_reqwest(error: &reqwest::Error) -> SourceError {
+    pub fn from_reqwest(error: reqwest::Error) -> SourceError {
         if error.is_timeout() {
             SourceError::Network("timed out".into())
         } else if error.is_connect() {
             SourceError::Network("couldn't connect".into())
         } else {
-            SourceError::Network(error.to_string())
+            SourceError::Network(describe(error))
         }
     }
 
@@ -134,6 +134,19 @@ impl SourceError {
     }
 }
 
+/// A request's error with its causes ("error sending request: …") but never its URL, whose `?q=`
+/// carries the learner's query into the reasons the learner sees and the log keeps.
+fn describe(error: reqwest::Error) -> String {
+    let error = error.without_url();
+    let mut message = error.to_string();
+    let mut cause = std::error::Error::source(&error);
+    while let Some(inner) = cause {
+        message = format!("{message}: {inner}");
+        cause = inner.source();
+    }
+    message
+}
+
 /// One line per source that didn't answer, e.g. "DuckDuckGo: blocked automated searches".
 pub fn failure(id: SourceId, error: &SourceError) -> String {
     format!("{}: {}", id.label(), error.reason())
@@ -151,5 +164,17 @@ mod tests {
         assert_eq!(failure(SourceId::DuckDuckGo, &SourceError::CoolingDown(Duration::from_secs(20))), "DuckDuckGo: resting (1 min left)");
         assert_eq!(failure(SourceId::Jina, &SourceError::TooLarge(3_000_000)), "Jina Reader: sent more than 3000 KB");
         assert_eq!(SourceError::NotHtml.reason(), "sent something other than a web page");
+    }
+
+    /// reqwest names the request's URL in its errors, and a search URL carries the query (`?q=…`).
+    #[test]
+    fn a_failed_request_never_names_its_query() {
+        let client = reqwest::Client::builder().https_only(true).build().expect("a test client");
+        let url = with_params("http://html.duckduckgo.com/html/", &[("q", "jane doe salary")]).expect("a test URL");
+        let error = tauri::async_runtime::block_on(client.get(url).send()).expect_err("plain http is refused");
+        assert!(error.to_string().contains("salary"), "the raw error names the URL: {error}");
+        let reason = failure(SourceId::DuckDuckGo, &SourceError::from_reqwest(error));
+        assert!(!reason.contains("salary") && !reason.contains("q="), "{reason}");
+        assert!(reason.starts_with("DuckDuckGo: unreachable ("), "{reason}");
     }
 }

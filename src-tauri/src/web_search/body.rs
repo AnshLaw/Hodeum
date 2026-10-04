@@ -46,7 +46,7 @@ impl Capped {
 /// The response body as text, read chunk by chunk and refused past `cap` bytes.
 pub async fn read_capped(mut response: reqwest::Response, cap: usize) -> Result<String, SourceError> {
     let mut body = Capped::new(cap, response.content_length())?;
-    while let Some(chunk) = response.chunk().await.map_err(|e| SourceError::from_reqwest(&e))? {
+    while let Some(chunk) = response.chunk().await.map_err(SourceError::from_reqwest)? {
         body.push(&chunk)?;
     }
     Ok(body.text())

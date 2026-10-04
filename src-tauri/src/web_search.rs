@@ -46,6 +46,8 @@ const MIN_READ_TIME: Duration = Duration::from_millis(800);
 const DDG_MIN_GAP: Duration = Duration::from_secs(20);
 /// Identifies the app, not the person: no version, machine or account details.
 const USER_AGENT: &str = "Hodeum";
+/// Stands in for the query in the log, which never keeps what the learner asked.
+const QUERY_PLACEHOLDER: &str = "[query]";
 
 /// Mirrors `WebResult` in `src/providers/web/types.ts`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -137,6 +139,16 @@ fn readable(failures: &Failures) -> Vec<String> {
     failures.iter().map(|(id, error)| failure(*id, error)).collect()
 }
 
+/// `line` for the log, with any copy of the query blanked out: a service's own error message (Exa's
+/// is passed on as the reason) could repeat it.
+fn without_query(line: &str, query: &str) -> String {
+    if query.is_empty() {
+        line.to_string()
+    } else {
+        line.replace(query, QUERY_PLACEHOLDER)
+    }
+}
+
 /// No hit: an empty answer if any source answered at all, otherwise an error naming every reason.
 fn without_hit(query: &str, failures: Failures) -> Result<WebSearch, String> {
     let reasons = readable(&failures);
@@ -152,7 +164,7 @@ pub async fn search(client: &'static reqwest::Client, query: &str) -> Result<Web
     let owned = query.to_string();
     let (hit, failures) = first_hit(&chain_ids(), HEDGE, SEARCH_BUDGET, move |id| ask(client, id, owned.clone())).await;
     for line in readable(&failures) {
-        eprintln!("web search: {line}");
+        log::warn!("web search: {}", without_query(&line, query));
     }
     let Some(hit) = hit else { return without_hit(query, failures) };
     let mut reasons = readable(&failures);
@@ -208,6 +220,14 @@ mod tests {
         let json = serde_json::to_value(&result).unwrap();
         assert!(json.get("body").is_none());
         assert_eq!(json["source"], "Exa");
+    }
+
+    #[test]
+    fn logged_failures_never_carry_the_query() {
+        let echoed = "Exa (free): sent something unexpected (no results for excel freeze panes)";
+        assert_eq!(without_query(echoed, "excel freeze panes"), "Exa (free): sent something unexpected (no results for [query])");
+        assert_eq!(without_query("DuckDuckGo: blocked automated searches", "excel freeze panes"), "DuckDuckGo: blocked automated searches");
+        assert_eq!(without_query("Stack Exchange: answered 503", ""), "Stack Exchange: answered 503");
     }
 
     #[test]

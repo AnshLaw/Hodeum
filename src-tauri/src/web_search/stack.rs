@@ -29,7 +29,7 @@ pub struct Question {
 pub fn rest_asked(json: &Value) -> Option<Duration> {
     if let Some(quota) = json.get("quota_remaining").and_then(Value::as_u64) {
         if quota < LOW_QUOTA {
-            eprintln!("Stack Exchange quota is low: {quota} calls left today");
+            log::warn!("Stack Exchange quota is low: {quota} calls left today");
         }
         if quota == 0 {
             return Some(SourceId::StackExchange.cooldown());
@@ -64,7 +64,7 @@ pub fn parse_answers(json: &Value, questions: &[Question]) -> Vec<WebResult> {
 }
 
 async fn get(client: &reqwest::Client, url: &str, params: &[(&str, &str)]) -> Result<Value, SourceError> {
-    let response = client.get(with_params(url, params)?).header("Accept", "application/json").send().await.map_err(|e| SourceError::from_reqwest(&e))?;
+    let response = client.get(with_params(url, params)?).header("Accept", "application/json").send().await.map_err(SourceError::from_reqwest)?;
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(SourceError::from_status(SourceId::StackExchange, status));

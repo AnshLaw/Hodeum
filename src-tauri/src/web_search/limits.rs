@@ -64,7 +64,7 @@ pub struct Memory {
 pub fn memory() -> MutexGuard<'static, Memory> {
     static MEMORY: OnceLock<Mutex<Memory>> = OnceLock::new();
     MEMORY.get_or_init(Mutex::default).lock().unwrap_or_else(|poisoned| {
-        eprintln!("web search memory was poisoned by a panic; carrying on with it");
+        log::warn!("web search memory was poisoned by a panic; carrying on with it");
         poisoned.into_inner()
     })
 }

@@ -100,7 +100,7 @@ fn reader() -> Result<&'static reqwest::Client, String> {
 /// Only official help sites are fetched directly; any other result is read through its own text or Jina.
 async fn fetch_direct(url: &reqwest::Url) -> Result<String, SourceError> {
     let client = reader().map_err(SourceError::Parse)?;
-    let response = client.get(url.clone()).header("Accept", "text/html").send().await.map_err(|e| SourceError::from_reqwest(&e))?;
+    let response = client.get(url.clone()).header("Accept", "text/html").send().await.map_err(SourceError::from_reqwest)?;
     Ok(page_text(&page_html(response).await?).1)
 }
 
@@ -111,7 +111,7 @@ async fn fetch_jina(client: &reqwest::Client, url: &reqwest::Url) -> Result<Stri
     let request = client.get(format!("{JINA_URL}{url}")).header("X-Retain-Images", "none").header("X-Remove-Selector", JINA_REMOVE);
     let outcome = match request.send().await {
         Ok(response) => body_of(response, Some(SourceId::Jina)).await,
-        Err(e) => Err(SourceError::from_reqwest(&e)),
+        Err(e) => Err(SourceError::from_reqwest(e)),
     };
     if let Some(rest) = outcome.as_ref().err().and_then(SourceError::rest) {
         memory().cooldowns.rest(SourceId::Jina, Instant::now(), rest);

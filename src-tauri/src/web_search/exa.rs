@@ -60,7 +60,7 @@ pub async fn search(client: &reqwest::Client, query: &str, key: Option<&str>) ->
     if let Some(key) = key {
         request = request.header("x-api-key", key);
     }
-    let response = request.send().await.map_err(|e| SourceError::from_reqwest(&e))?;
+    let response = request.send().await.map_err(SourceError::from_reqwest)?;
     let status = response.status().as_u16();
     let body = read_capped(response, MAX_ANSWER_BYTES).await;
     if !(200..300).contains(&status) {

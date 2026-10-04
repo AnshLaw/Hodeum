@@ -21,7 +21,7 @@ fn stored(provider: &str) -> Option<String> {
     let entry = match keyring::Entry::new(SERVICE, provider) {
         Ok(entry) => entry,
         Err(e) => {
-            eprintln!("couldn't open the credential store for {provider}: {e}");
+            log::warn!("couldn't open the credential store for {provider}: {e}");
             return None;
         }
     };
@@ -29,7 +29,7 @@ fn stored(provider: &str) -> Option<String> {
         Ok(key) => Some(key),
         Err(keyring::Error::NoEntry) => None,
         Err(e) => {
-            eprintln!("reading the {provider} search key failed: {e}");
+            log::warn!("reading the {provider} search key failed: {e}");
             None
         }
     }
@@ -73,7 +73,7 @@ pub fn parse_brave(json: &Value) -> Vec<WebResult> {
 }
 
 async fn read_json(id: SourceId, request: reqwest::RequestBuilder) -> Result<Value, SourceError> {
-    let response = request.header("Accept", "application/json").send().await.map_err(|e| SourceError::from_reqwest(&e))?;
+    let response = request.header("Accept", "application/json").send().await.map_err(SourceError::from_reqwest)?;
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(SourceError::from_status(id, status));
