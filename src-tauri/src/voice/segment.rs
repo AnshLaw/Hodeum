@@ -9,6 +9,11 @@ pub trait Recognizer {
     fn feed(&mut self, samples: &[f32]) -> String;
     /// Ends the utterance and returns its final text.
     fn finish(&mut self) -> String;
+    /// Why the engine stopped working while listening, if it did (it then returns empty text).
+    fn failure(&self) -> Option<&str> {
+        None
+    }
+    fn clear_failure(&mut self) {}
 }
 
 #[derive(Debug, PartialEq)]
@@ -45,6 +50,14 @@ impl<R: Recognizer> Segmenter<R> {
             (true, true) => self.partial(frame).into_iter().collect(),
             (true, false) => self.end(frame),
         }
+    }
+
+    pub fn recognizer(&self) -> &R {
+        &self.recognizer
+    }
+
+    pub fn recognizer_mut(&mut self) -> &mut R {
+        &mut self.recognizer
     }
 
     /// Ends an utterance in progress right now (the talk key was released) and returns its text.

@@ -11,7 +11,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use super::listen::{open_mic, vad_step, Engines, ListenCommand, AUDIO_POLL, SAMPLE_RATE, VAD_WINDOW};
-use super::segment::SpeechEvent;
+use super::segment::{Recognizer, SpeechEvent};
 use super::set_standby;
 
 /// Speech that might be for Hodey; the frontend checks it against the wake words. Partial text lets
@@ -41,6 +41,8 @@ pub enum Outcome {
     Command(ListenCommand),
     /// Hands-free was switched off.
     Off,
+    /// The speech engine failed: switch engines, then carry on.
+    EngineFailed,
     /// The app is shutting down.
     Closed,
 }
@@ -99,6 +101,9 @@ fn wait(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComman
             Ok(chunk) => overheard.push(engines, &resampler.resample(&chunk, false)).into_iter().for_each(|text| emit_candidate(app, text)),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return Err("The microphone stopped.".into()),
+        }
+        if engines.segmenter.recognizer().failure().is_some() {
+            return Ok(Outcome::EngineFailed);
         }
     }
 }

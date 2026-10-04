@@ -11,6 +11,7 @@ export interface VoiceStatus {
   listening: boolean;
   /** Hands-free: the mic is on, waiting for "Hey Hodey". */
   standby: boolean;
+  /** Why the mic can't be used, what it's doing, or (while ready) that the Whisper backup engine is listening. */
   detail: string | null;
   tts_detail: string | null;
   /** Hodey's natural voices on this PC (Kokoro first, then Supertonic). */

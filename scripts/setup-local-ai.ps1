@@ -1,6 +1,9 @@
 # Downloads the local vision model and llama.cpp (CUDA) into models/ and runtime/llama/, and the
 # local voice models (Silero VAD, NVIDIA Nemotron ASR, Supertonic TTS) into models/voice/.
 # Both folders are git-ignored. Re-running skips files that are already present.
+# Also fetches multilingual Whisper base (int8, ~200 MB), the backup speech engine used when Nemotron
+# is missing or fails; pass -SkipWhisper to leave it out.
+param([switch]$SkipWhisper)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $llamaBuild = "b11380"
@@ -43,6 +46,10 @@ $packs = @(
   # Kokoro-82M: Hodey's most natural local voice (about 50 voices, full precision).
   @{ Name = "kokoro-multi-lang-v1_0"; Url = "$sherpa/tts-models/kokoro-multi-lang-v1_0.tar.bz2" }
 )
+if (-not $SkipWhisper) {
+  # Must match WHISPER_SIZE in src-tauri/src/voice/models.rs. Multilingual (not ".en"), so it hears Hindi.
+  $packs += @{ Name = "sherpa-onnx-whisper-base"; Url = "$sherpa/asr-models/sherpa-onnx-whisper-base.tar.bz2" }
+}
 foreach ($pack in $packs) {
   $dir = Join-Path $voiceDir $pack.Name
   if (Test-Path $dir) { Write-Host "have  models/voice/$($pack.Name)"; continue }

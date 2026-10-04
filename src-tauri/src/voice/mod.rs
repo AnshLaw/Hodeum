@@ -1,6 +1,7 @@
-//! Hodey's local voice: NVIDIA Nemotron speech recognition with Silero voice activity detection, and
-//! Supertonic speech, all on the CPU through sherpa-onnx. Nothing is recorded or leaves the PC.
+//! Hodey's local voice: NVIDIA Nemotron speech recognition (Whisper as the backup) with Silero voice
+//! activity detection, and Kokoro/Supertonic speech, all on the CPU through sherpa-onnx. Nothing is recorded or leaves the PC.
 
+pub mod asr;
 pub mod cache;
 pub mod echo_mic;
 pub mod listen;
@@ -25,14 +26,14 @@ const STATUS_EVENT: &str = "voice:status";
 /// Mirrors `VoiceStatus` in `src/providers/speech/native-voice.ts`.
 #[derive(Debug, Clone, Serialize)]
 pub struct VoiceStatus {
-    /// "ready" when the speech-recognition models are installed, else "missing".
+    /// "ready" when a speech-recognition engine (Nemotron or the Whisper backup) is installed, else "missing".
     pub asr: &'static str,
     /// "loading", "ready" or "missing".
     pub tts: &'static str,
     pub listening: bool,
     /// Hands-free: the mic is on, waiting for "Hey Hodey".
     pub standby: bool,
-    /// Why the mic can't be used, or what it's doing ("Loading…").
+    /// Why the mic can't be used, or what it's doing ("Loading…"), or which backup engine is listening.
     pub detail: Option<String>,
     pub tts_detail: Option<String>,
     /// Hodey's natural voices (Kokoro first, then Supertonic).
@@ -89,7 +90,7 @@ pub(crate) fn set_tts_voices(app: &AppHandle, voices: Result<Vec<voices::VoiceOp
 /// Starts the listener and speaker threads. Models load lazily (listener) or right away (speaker).
 pub fn start(app: &AppHandle) {
     let root = models::voice_root();
-    let (asr, detail) = match models::asr_files(&root) {
+    let (asr, detail) = match models::asr_installed(&root) {
         Ok(_) => ("ready", None),
         Err(reason) => ("missing", Some(reason)),
     };
@@ -225,6 +226,32 @@ mod tests {
         let heard = transcribe(&mut engines, &audio).join(" ").to_lowercase();
         println!("asr: {heard:?} in {:?}", started.elapsed());
         assert!(heard.starts_with("teach me") && heard.contains("pivot table"), "heard {heard:?}");
+    }
+
+    /// The backup engine (needs the VAD and the Whisper pack, which ships sample recordings): through
+    /// the same VAD segmenting as live speech. `cargo test --lib -- --ignored whisper_backup --nocapture`.
+    #[test]
+    #[ignore]
+    fn whisper_backup_round_trip() {
+        let root = voice_root();
+        let wav = root.join(format!("sherpa-onnx-whisper-{}/test_wavs/0.wav", super::models::WHISPER_SIZE));
+        let wave = sherpa_onnx::Wave::read(&wav.to_string_lossy()).expect("the pack's sample recording");
+        let mut audio = vec![0.0; ASR_RATE as usize / 2];
+        audio.extend(LinearResampler::create(wave.sample_rate(), ASR_RATE).unwrap().resample(wave.samples(), true));
+        let started = std::time::Instant::now();
+        let mut engines = super::listen::load_whisper_engines(&root).unwrap();
+        println!("whisper loaded in {:?}", started.elapsed());
+        let started = std::time::Instant::now();
+        let heard = transcribe(&mut engines, &audio).join(" ").to_lowercase();
+        println!("whisper: {heard:?} in {:?} ({:.1}s of audio)", started.elapsed(), audio.len() as f32 / ASR_RATE as f32);
+        assert!(heard.contains("yellow lamps"), "heard {heard:?}");
+        // Auto: Whisper rebuilds for auto-detect and still hears English.
+        super::listen::set_language("auto").unwrap();
+        let started = std::time::Instant::now();
+        let heard = transcribe(&mut engines, &audio).join(" ").to_lowercase();
+        super::listen::set_language("en").unwrap();
+        println!("whisper (auto-detect): {heard:?} in {:?}", started.elapsed());
+        assert!(heard.contains("yellow lamps"), "heard {heard:?}");
     }
 
     /// Same as above for Kokoro, Hodey's preferred natural voice ("Heart", speaker 3).

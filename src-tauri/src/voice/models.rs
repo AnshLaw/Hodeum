@@ -8,14 +8,26 @@ const VAD_FILE: &str = "silero_vad.onnx";
 const ASR_PACK: &str = "sherpa-onnx-nemotron";
 const TTS_PACK: &str = "sherpa-onnx-supertonic";
 const KOKORO_PACK: &str = "kokoro-multi-lang";
+/// The backup speech engine's size. The PRD prefers small when latency allows; base is the default
+/// because it stays quick on older laptop CPUs (about 4x less work per utterance than small).
+pub const WHISPER_SIZE: &str = "base";
+/// The multilingual pack, named exactly: "…-base.en" is English-only and can't hear Hindi.
+const WHISPER_PACK: &str = "sherpa-onnx-whisper-";
 pub const SETUP_HINT: &str = "Run scripts/setup-local-ai.ps1 to install Hodey's local voice.";
 
 #[derive(Debug)]
 pub struct AsrFiles {
-    pub vad: PathBuf,
     pub encoder: PathBuf,
     pub decoder: PathBuf,
     pub joiner: PathBuf,
+    pub tokens: PathBuf,
+}
+
+/// Multilingual Whisper (sherpa-onnx export), the backup speech engine.
+#[derive(Debug)]
+pub struct WhisperFiles {
+    pub encoder: PathBuf,
+    pub decoder: PathBuf,
     pub tokens: PathBuf,
 }
 
@@ -73,19 +85,48 @@ fn find(dir: &Path, stem: &str, ext: &str) -> Result<PathBuf, String> {
     matches.into_iter().next().ok_or_else(|| format!("{SETUP_HINT} Missing: {}/{stem}*{ext}", dir.display()))
 }
 
-pub fn asr_files(root: &Path) -> Result<AsrFiles, String> {
+/// Silero VAD, shared by both speech engines.
+pub fn vad_file(root: &Path) -> Result<PathBuf, String> {
     let vad = root.join(VAD_FILE);
-    if !vad.is_file() {
-        return Err(format!("{SETUP_HINT} Missing: {VAD_FILE}"));
+    if vad.is_file() {
+        Ok(vad)
+    } else {
+        Err(format!("{SETUP_HINT} Missing: {VAD_FILE}"))
     }
+}
+
+pub fn asr_files(root: &Path) -> Result<AsrFiles, String> {
+    vad_file(root)?;
     let dir = pack_dir(root, ASR_PACK)?;
     Ok(AsrFiles {
-        vad,
         encoder: find(&dir, "encoder", ".onnx")?,
         decoder: find(&dir, "decoder", ".onnx")?,
         joiner: find(&dir, "joiner", ".onnx")?,
         tokens: find(&dir, "tokens", ".txt")?,
     })
+}
+
+pub fn whisper_files(root: &Path) -> Result<WhisperFiles, String> {
+    let name = format!("{WHISPER_PACK}{WHISPER_SIZE}");
+    let dir = root.join(&name);
+    if !dir.is_dir() {
+        return Err(format!("{SETUP_HINT} Missing: {name}"));
+    }
+    Ok(WhisperFiles {
+        encoder: find(&dir, &format!("{WHISPER_SIZE}-encoder"), ".onnx")?,
+        decoder: find(&dir, &format!("{WHISPER_SIZE}-decoder"), ".onnx")?,
+        tokens: find(&dir, &format!("{WHISPER_SIZE}-tokens"), ".txt")?,
+    })
+}
+
+/// Whether Hodey can hear: the voice activity detector plus Nemotron or Whisper. Err: Nemotron's
+/// problem, since that's the engine the setup script installs first.
+pub fn asr_installed(root: &Path) -> Result<(), String> {
+    vad_file(root)?;
+    match asr_files(root) {
+        Ok(_) => Ok(()),
+        Err(problem) => whisper_files(root).map(|_| ()).map_err(|_| problem),
+    }
 }
 
 pub fn tts_files(root: &Path) -> Result<TtsFiles, String> {
@@ -139,6 +180,34 @@ mod tests {
         let files = asr_files(&root).unwrap();
         assert!(files.encoder.ends_with("encoder.int8.onnx"));
         assert!(tts_files(&root).unwrap_err().contains("setup-local-ai"));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn finds_the_multilingual_whisper_files_preferring_int8() {
+        let root = std::env::temp_dir().join(format!("hodeum-whisper-test-{}", std::process::id()));
+        touch(&root, &["silero_vad.onnx"]);
+        assert!(whisper_files(&root).unwrap_err().contains("setup-local-ai"));
+        touch(&root.join("sherpa-onnx-whisper-base.en"), &["base.en-encoder.int8.onnx", "base.en-decoder.int8.onnx", "base.en-tokens.txt"]);
+        assert!(whisper_files(&root).is_err(), "the English-only pack can't hear Hindi");
+        let pack = root.join("sherpa-onnx-whisper-base");
+        touch(&pack, &["base-encoder.onnx", "base-encoder.int8.onnx", "base-decoder.onnx", "base-decoder.int8.onnx", "base-tokens.txt"]);
+        let files = whisper_files(&root).unwrap();
+        assert!(files.encoder.ends_with("sherpa-onnx-whisper-base/base-encoder.int8.onnx"));
+        assert!(files.decoder.ends_with("base-decoder.int8.onnx"));
+        assert!(files.tokens.ends_with("base-tokens.txt"));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn speech_recognition_is_installed_when_either_engine_is() {
+        let root = std::env::temp_dir().join(format!("hodeum-any-asr-test-{}", std::process::id()));
+        touch(&root, &["silero_vad.onnx"]);
+        assert!(asr_installed(&root).unwrap_err().contains("setup-local-ai"));
+        touch(&root.join("sherpa-onnx-whisper-base"), &["base-encoder.int8.onnx", "base-decoder.int8.onnx", "base-tokens.txt"]);
+        assert!(asr_installed(&root).is_ok(), "Whisper alone is enough");
+        fs::remove_file(root.join("silero_vad.onnx")).unwrap();
+        assert!(asr_installed(&root).is_err(), "both engines need the voice activity detector");
         fs::remove_dir_all(&root).unwrap();
     }
 }
