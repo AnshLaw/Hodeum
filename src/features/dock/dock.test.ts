@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_PREFS, applyCommand, loadPrefs, reservesSpace, savePrefs, shouldReveal } from "./dock";
+import { DEFAULT_PREFS, applyCommand, loadPrefs, notchWindow, reservesSpace, savePrefs, shouldReveal } from "./dock";
 
 const storage = (value: string | null) => ({ getItem: () => value });
 
@@ -70,5 +70,24 @@ describe("visibility rules", () => {
 
   it("a floating sidebar never reserves space", () => {
     expect(reservesSpace({ dock: "right", visibility: "pinned", sidebar: "floating" }, "guiding")).toBe(false);
+  });
+});
+
+describe("notchWindow while the Hodeum app is open", () => {
+  const copilot = { dock: "left", visibility: "pinned", sidebar: "copilot" } as const;
+
+  it("hides the notch and gives back its screen space while the app is open", () => {
+    expect(notchWindow(copilot, "guiding", "open")).toEqual({ visible: false, reserve: false });
+  });
+
+  it("shows the notch as the app folds back, but reserves space only once it's gone", () => {
+    expect(notchWindow(copilot, "guiding", "closing")).toEqual({ visible: true, reserve: false });
+    expect(notchWindow(copilot, "guiding", "closed")).toEqual({ visible: true, reserve: true });
+  });
+
+  it("restores the learner's own choice afterwards, including a hidden notch", () => {
+    expect(notchWindow({ ...copilot, visibility: "hidden" }, "idle", "closed")).toEqual({ visible: false, reserve: false });
+    expect(notchWindow({ ...copilot, visibility: "hidden" }, "idle", "closing")).toEqual({ visible: false, reserve: false });
+    expect(notchWindow({ ...copilot, dock: "top" }, "idle", "closed")).toEqual({ visible: true, reserve: false });
   });
 });

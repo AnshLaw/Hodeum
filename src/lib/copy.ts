@@ -96,6 +96,7 @@ export const COPY = {
   repeat: "Say that again",
   lookAgain: "Look again",
   openApp: "Open Hodeum",
+  backToNotch: "Back to notch",
   mic: "Talk to Hodey",
   micStop: "Stop listening",
   listening: "Hodey is listening…",

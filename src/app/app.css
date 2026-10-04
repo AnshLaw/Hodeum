@@ -100,6 +100,40 @@
   font-weight: 600;
 }
 
+.happ__titlebar-fill {
+  flex: 1;
+  align-self: stretch;
+}
+
+.happ__to-notch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin-right: 8px;
+  padding: 0 12px 0 8px;
+  border: 1px solid var(--happ-line);
+  border-radius: 999px;
+  color: var(--hd-text-2);
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.happ__to-notch:hover {
+  color: var(--hd-text);
+  border-color: var(--hd-accent);
+  background: rgb(var(--hd-fg-rgb) / 0.06);
+}
+
+.happ__to-notch:focus-visible,
+.happ__window-controls button:focus-visible {
+  outline: 2px solid var(--hd-accent);
+  outline-offset: -2px;
+}
+
 .happ__window-controls {
   display: flex;
   height: 100%;
@@ -940,6 +974,11 @@
   overflow: hidden;
   border: 1px solid var(--happ-line);
   border-radius: 10px;
+}
+
+.native-app[data-maximized="true"] {
+  border: 0;
+  border-radius: 0;
 }
 
 /* ---- Settings controls ---- */

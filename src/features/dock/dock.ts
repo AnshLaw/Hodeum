@@ -96,3 +96,24 @@ export function reservesSpace(prefs: DockPrefs, phase: HodePhase): boolean {
   if (prefs.dock === "top" || prefs.sidebar !== "copilot") return false;
   return prefs.visibility === "pinned" || (prefs.visibility === "auto" && hodeActive(phase));
 }
+
+/** The Hodeum app around the notch: on screen (the notch steps aside), folding back into it, or gone. */
+export type AppPresence = "open" | "closing" | "closed";
+
+export interface NotchWindow {
+  visible: boolean;
+  reserve: boolean;
+}
+
+/**
+ * What the notch window should be, given the learner's prefs and the app. The prefs are never changed
+ * while the app is open, so closing it restores exactly what the learner had. The notch reappears as the
+ * app folds into it, but a copilot strip is reserved again only once the app is gone, so windows moved
+ * aside never jump under the fold.
+ */
+export function notchWindow(prefs: DockPrefs, phase: HodePhase, presence: AppPresence): NotchWindow {
+  return {
+    visible: presence !== "open" && prefs.visibility !== "hidden",
+    reserve: presence === "closed" && reservesSpace(prefs, phase),
+  };
+}

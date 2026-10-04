@@ -36,7 +36,7 @@ impl NotchHitRect {
         Ok(())
     }
 
-    fn get(&self) -> Result<HitRect, String> {
+    pub fn get(&self) -> Result<HitRect, String> {
         self.0.lock().map(|rect| *rect).map_err(|e| e.to_string())
     }
 }

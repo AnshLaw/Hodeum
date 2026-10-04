@@ -47,7 +47,10 @@ export interface CloudKeyService {
 export interface AppWindowControls {
   minimize(): void;
   toggleMaximize(): void;
+  /** Folds the app back into the notch and hides it; the notch comes back. Hodey keeps running. */
   close(): void;
+  /** Maximized or not, for the maximize/restore button; absent where the window can't maximize. */
+  onMaximizedChange?(listener: (maximized: boolean) => void): () => void;
 }
 
 /** Everything the desktop app (and later the web app) needs; swapped for in-memory versions in the stage. */
