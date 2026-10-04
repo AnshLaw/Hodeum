@@ -71,9 +71,14 @@ function fit(words: string[], app: string | undefined, pack: TaskPack): Fit | un
 /** The pack a goal asks for, or undefined: a goal that only shares a word or two with a pack isn't its lesson. */
 /** "Switch from light mode to dark mode" is about where it goes: what it switches from is left out. */
 const SWITCHED_FROM = /\bfrom\b.*?\bto\b/i;
+/**
+ * The same in Hinglish and Hindi, "X se Y mein/pe" or "X से Y में/पर": the words up to "se"/"से" are what it switches
+ * from. Devanagari needs space boundaries: \b never matches next to it.
+ */
+const SWITCHED_FROM_HI = /^.*?(?:^|\s)(?:se|से)\s+(?=.*\s(?:mein|me|pe|par|में|पर)(?:\s|$))/i;
 
 export function matchGoal(goal: string, packs: TaskPack[]): TaskPack | undefined {
-  const words = [...new Set(taskWords(goal.replace(SWITCHED_FROM, " to ")))];
+  const words = [...new Set(taskWords(goal.replace(SWITCHED_FROM, " to ").replace(SWITCHED_FROM_HI, " ")))];
   const app = appFromGoal(goal);
   const fits = packs.map((pack) => fit(words, app, pack)).filter((f): f is Fit => f !== undefined);
   return fits.sort((a, b) => b.coverage - a.coverage || b.phrase - a.phrase)[0]?.pack;
