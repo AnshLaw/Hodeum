@@ -8,6 +8,7 @@ import { observeShellTargets } from "./shell";
 import { rememberedLevel } from "../memory/tracker";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState } from "./model";
 import { step } from "./reducer";
+import { wantedNames } from "./wanted";
 
 export interface RuntimeDeps {
   perception: PerceptionAdapter;
@@ -78,6 +79,8 @@ export class HodeRuntime {
   private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
   /** The reasoning in flight, called off as soon as the Hode's request id moves past it. */
   private reasoning: { requestId: number; controller: AbortController } | undefined;
+  /** The step's controls perception was last told, for its reads after the learner's own actions. */
+  private wanted: string[] = [];
 
   constructor(private readonly deps: RuntimeDeps) {
     this.disposers = [
@@ -116,6 +119,7 @@ export class HodeRuntime {
     if (state !== prev) {
       this.state = state;
       this.abandonStaleReasoning();
+      this.shareWanted();
       this.listeners.forEach((listener) => listener());
     }
     this.transitionListeners.forEach((listener) => listener(event, prev, state));
@@ -175,6 +179,16 @@ export class HodeRuntime {
     this.clearStuckTimer();
     this.clearPressTimer();
     this.stopSpeech();
+    this.wanted = [];
+    this.deps.perception.setWanted?.([]);
+  }
+
+  /** Reads after the learner's own actions look for the current step's controls too (see `wantedNames`). */
+  private shareWanted(): void {
+    const names = wantedNames(this.state);
+    if (sameNames(names, this.wanted)) return;
+    this.wanted = names;
+    this.deps.perception.setWanted?.(names);
   }
 
   private run(effect: HodeEffect): void {
@@ -275,8 +289,10 @@ export class HodeRuntime {
     );
   }
 
+  /** A read for the state that asked for it, looking for that step's controls. */
   private observe(region?: Rect): void {
-    this.focusing.then(() => this.deps.perception.observe(region)).then(
+    const want = wantedNames(this.state);
+    this.focusing.then(() => this.deps.perception.observe(region, want)).then(
       (observation) => this.dispatch({ type: "OBSERVED", observation }),
       (error) => this.fail("Couldn't read the screen", error),
     );
@@ -351,7 +367,7 @@ export class HodeRuntime {
     perception
       .perform(request)
       .then(() => wait(PRESS_SETTLE_MS))
-      .then(() => perception.observe())
+      .then(() => perception.observe(undefined, wantedNames(this.state)))
       .then(
         (observation) => this.dispatch({ type: "HODEY_ACTED", requestId, observation }),
         (error) => {
@@ -460,6 +476,10 @@ function withDefaults(event: HodeEvent, mode: HodeMode, agentStyle: AgentStyle):
   if (event.type === "GOAL_SUBMITTED") return { ...event, mode: event.mode ?? mode, agentStyle: event.agentStyle ?? agentStyle };
   if (event.type === "OPEN_APP") return { ...event, mode: event.mode ?? mode };
   return event;
+}
+
+function sameNames(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((name, i) => name === b[i]);
 }
 
 /** Rejects with `message` if `work` hasn't settled in `ms`. */
