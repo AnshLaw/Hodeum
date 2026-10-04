@@ -101,7 +101,8 @@ async function boot(): Promise<void> {
   showStandbyDot(voice.status, activity);
   const cloud = connectCloud({ invoke, bus, activeApp: () => runtime.getState().observation });
   // Gemini only when opted in and allowed for this app; local always answers last.
-  const gemini = new GatedReasoner(new GeminiReasoningProvider({ invoke }), "gemini", cloud.policy, activity);
+  const geminiProvider = new GeminiReasoningProvider({ invoke });
+  const gemini = new GatedReasoner(geminiProvider, "gemini", cloud.policy, activity);
   // ElevenLabs first when Settings > Cloud allows it right now; the local voice says anything it skips or fails.
   const elevenlabs = new ElevenLabsTTSProvider(invoke);
   const lessonLines = lessonCorpus(TASK_PACKS);
@@ -133,7 +134,12 @@ async function boot(): Promise<void> {
       invoke<void>("set_speech_language", { language: asrLanguage(settings.language) }).catch((error) => console.error("Couldn't set the speech language", error));
       voice.speech.setHandsFree(settings.handsFree, settings.wakeWords).catch((error) => console.error("Couldn't switch hands-free listening", error));
     },
-    applyCloud: (settings) => cloud.apply(settings),
+    applyCloud: (settings) => {
+      cloud.apply(settings);
+      geminiProvider.model = settings.geminiModel;
+      elevenlabs.model = settings.elevenlabsModel;
+      elevenlabs.voiceId = settings.elevenlabsVoice;
+    },
     applyHodeyKey: (key) => {
       hodeyKeySetting.set(key);
       invoke<void>("set_hodey_key", { key }).catch((error) => console.error("Couldn't set the Hodey key", error));

@@ -109,7 +109,7 @@ export function SettingsPage({ services }: { services: AppServices }) {
           )
         }
       />
-      {settings && <CloudSettings cloud={settings.cloud} keys={services.cloudKeys} bus={services.bus} onChange={(cloud) => update({ ...settings, cloud })} />}
+      {settings && <CloudSettings cloud={settings.cloud} keys={services.cloudKeys} catalog={services.cloudCatalog} openLink={services.openLink} bus={services.bus} onChange={(cloud) => update({ ...settings, cloud })} />}
       <AccountSettings bus={services.bus} />
     </div>
   );

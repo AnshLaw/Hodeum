@@ -22,11 +22,13 @@ use crate::voice::Voice;
 
 const PROVIDER: &str = "elevenlabs";
 const API_BASE: &str = "https://api.elevenlabs.io/v1/text-to-speech";
-/// The PRD's low-latency multilingual model; `ELEVENLABS_MODEL` overrides it.
+/// The PRD's low-latency multilingual model. Must match `DEFAULT_ELEVENLABS_MODEL` in src/data/settings.ts.
 const DEFAULT_MODEL: &str = "eleven_flash_v2_5";
+/// Dev builds only: overrides the model chosen in Settings > Cloud.
 const MODEL_ENV: &str = "ELEVENLABS_MODEL";
-/// "Sarah", a stock ElevenLabs voice every account has; `ELEVENLABS_VOICE_ID` overrides it.
+/// "Sarah", a stock voice every account has. Must match `DEFAULT_ELEVENLABS_VOICE` in src/data/settings.ts.
 const DEFAULT_VOICE_ID: &str = "EXAVITQu4vr4xnSDxMaL";
+/// Dev builds only: overrides the voice chosen in Settings > Cloud.
 const VOICE_ENV: &str = "ELEVENLABS_VOICE_ID";
 /// Raw 16-bit little-endian mono PCM at 24 kHz: no decoder needed, straight into the speaker.
 const OUTPUT_FORMAT: &str = "pcm_24000";
@@ -69,23 +71,37 @@ pub fn request(voice_id: &str, model: &str, text: &str, speed: f32) -> Result<Tt
     Ok(TtsRequest { url: format!("{API_BASE}/{voice_id}/stream?output_format={OUTPUT_FORMAT}"), body: body.to_string() })
 }
 
-fn pick(env: Option<String>, default: &str, extra: &[char], name: &str) -> String {
-    match env.map(|v| v.trim().to_string()).filter(|v| !v.is_empty()) {
-        Some(value) if plain_id(&value, extra) => value,
-        Some(value) => {
-            eprintln!("ignoring {name}=\"{value}\": not a plain id; using {default}");
-            default.to_string()
+/// Voice ids go into the URL path: letters and digits only.
+pub fn valid_voice(id: &str) -> bool {
+    plain_id(id, &[])
+}
+
+pub fn valid_model(id: &str) -> bool {
+    plain_id(id, &['_'])
+}
+
+/// A malformed dev override is ignored; a malformed choice from Settings is an error (the local voice speaks).
+fn choose(setting: Option<String>, env: Option<String>, dev: bool, default: &str, valid: fn(&str) -> bool, what: &str) -> Result<String, String> {
+    let clean = |v: Option<String>| v.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    if let Some(value) = clean(env).filter(|_| dev) {
+        if valid(&value) {
+            return Ok(value);
         }
-        None => default.to_string(),
+        eprintln!("ignoring the ElevenLabs {what} override \"{value}\": not a plain id");
+    }
+    match clean(setting) {
+        Some(value) if valid(&value) => Ok(value),
+        Some(value) => Err(format!("\"{value}\" isn't an ElevenLabs {what} id.")),
+        None => Ok(default.to_string()),
     }
 }
 
-pub fn pick_voice(env: Option<String>) -> String {
-    pick(env, DEFAULT_VOICE_ID, &[], VOICE_ENV)
+pub fn pick_voice(setting: Option<String>, env: Option<String>, dev: bool) -> Result<String, String> {
+    choose(setting, env, dev, DEFAULT_VOICE_ID, valid_voice, "voice")
 }
 
-pub fn pick_model(env: Option<String>) -> String {
-    pick(env, DEFAULT_MODEL, &['_'], MODEL_ENV)
+pub fn pick_model(setting: Option<String>, env: Option<String>, dev: bool) -> Result<String, String> {
+    choose(setting, env, dev, DEFAULT_MODEL, valid_model, "model")
 }
 
 /// Turns the byte stream into samples; a sample split across two network chunks is carried over.
@@ -148,9 +164,24 @@ async fn played_out(stop: &StopSwitch, generation: u64) -> Result<bool, String> 
     }
 }
 
-async fn speak(text: &str, speed: f32, stop: &StopSwitch, generation: u64) -> Result<bool, String> {
+/// What to say and how: the learner's model and voice from Settings > Cloud (None means the default).
+pub struct Utterance {
+    pub text: String,
+    pub speed: f32,
+    pub model: Option<String>,
+    pub voice_id: Option<String>,
+}
+
+fn build(utterance: &Utterance) -> Result<TtsRequest, String> {
+    let dev = cfg!(debug_assertions);
+    let voice_id = pick_voice(utterance.voice_id.clone(), std::env::var(VOICE_ENV).ok(), dev)?;
+    let model = pick_model(utterance.model.clone(), std::env::var(MODEL_ENV).ok(), dev)?;
+    request(&voice_id, &model, &utterance.text, utterance.speed)
+}
+
+async fn speak(utterance: &Utterance, stop: &StopSwitch, generation: u64) -> Result<bool, String> {
+    let request = build(utterance)?;
     let key = keys::read(PROVIDER).ok_or("No ElevenLabs key is saved.")?;
-    let request = request(&pick_voice(std::env::var(VOICE_ENV).ok()), &pick_model(std::env::var(MODEL_ENV).ok()), text, speed)?;
     let response = open_stream(request, &key).await?;
     if stream_into(response, stop, generation).await? {
         return Ok(true);
@@ -161,10 +192,10 @@ async fn speak(text: &str, speed: f32, stop: &StopSwitch, generation: u64) -> Re
 /// Says one of Hodey's sentences with ElevenLabs. Resolves when it has played (true if interrupted).
 /// An error means the caller says it with the local voice instead; any partial audio is cleared first.
 #[tauri::command]
-pub async fn elevenlabs_speak(text: String, speed: f32, voice: State<'_, Voice>) -> Result<bool, String> {
+pub async fn elevenlabs_speak(text: String, speed: f32, model: Option<String>, voice_id: Option<String>, voice: State<'_, Voice>) -> Result<bool, String> {
     let stop: Arc<StopSwitch> = voice.stop_switch();
     let generation = stop.current();
-    let result = speak(&text, speed, &stop, generation).await;
+    let result = speak(&Utterance { text, speed, model, voice_id }, &stop, generation).await;
     if let Err(reason) = &result {
         eprintln!("ElevenLabs voice failed: {reason}");
         if let Err(e) = stop.restart_if_current(generation) {
@@ -212,13 +243,23 @@ mod tests {
     }
 
     #[test]
-    fn env_overrides_the_voice_and_model_only_when_they_look_right() {
-        assert_eq!(pick_voice(None), DEFAULT_VOICE_ID);
-        assert_eq!(pick_voice(Some(" JBFqnCBsd6RMkjVDRZzb ".into())), "JBFqnCBsd6RMkjVDRZzb");
-        assert_eq!(pick_voice(Some("bad/id".into())), DEFAULT_VOICE_ID);
-        assert_eq!(pick_model(None), DEFAULT_MODEL);
-        assert_eq!(pick_model(Some("eleven_turbo_v2_5".into())), "eleven_turbo_v2_5");
-        assert_eq!(pick_model(Some("x&y=z".into())), DEFAULT_MODEL);
+    fn settings_choose_the_voice_and_model() {
+        assert_eq!(pick_voice(None, None, false), Ok(DEFAULT_VOICE_ID.to_string()));
+        assert_eq!(pick_voice(Some(" JBFqnCBsd6RMkjVDRZzb ".into()), None, false), Ok("JBFqnCBsd6RMkjVDRZzb".to_string()));
+        assert!(pick_voice(Some("bad/id".into()), None, false).is_err());
+        assert_eq!(pick_model(None, None, false), Ok(DEFAULT_MODEL.to_string()));
+        assert_eq!(pick_model(Some("eleven_multilingual_v2".into()), None, false), Ok("eleven_multilingual_v2".to_string()));
+        assert!(pick_model(Some("x&y=z".into()), None, false).is_err());
+        assert!(pick_model(Some("m".repeat(MAX_ID_CHARS + 1)), None, false).is_err());
+    }
+
+    #[test]
+    fn env_overrides_only_in_dev_builds_and_only_when_it_looks_right() {
+        let chosen = Some("eleven_multilingual_v2".to_string());
+        assert_eq!(pick_model(chosen.clone(), Some("eleven_turbo_v2_5".into()), true), Ok("eleven_turbo_v2_5".to_string()));
+        assert_eq!(pick_model(chosen.clone(), Some("eleven_turbo_v2_5".into()), false), Ok("eleven_multilingual_v2".to_string()));
+        assert_eq!(pick_model(chosen, Some("x&y=z".into()), true), Ok("eleven_multilingual_v2".to_string()));
+        assert_eq!(pick_voice(None, Some("bad/id".into()), true), Ok(DEFAULT_VOICE_ID.to_string()));
     }
 
     #[test]

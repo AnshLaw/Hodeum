@@ -8,6 +8,7 @@ import { SqliteChatStore, SqliteLearningStore, SqliteSettingsStore } from "../da
 import { invoke } from "@tauri-apps/api/core";
 import { trackDeletions } from "../features/sync/deletions";
 import { connectAppearance } from "../lib/appearance";
+import { TauriCloudCatalog } from "../providers/cloud/catalog";
 import { CloudKeys } from "../providers/cloud/keys";
 import { createLocalVoice, voicePreview } from "../providers/speech/local-voice";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
@@ -54,6 +55,8 @@ async function boot(): Promise<void> {
     windows: new TauriWindowSource(bus),
     web: new TauriWebSearch(bus),
     cloudKeys: new CloudKeys(invoke),
+    cloudCatalog: new TauriCloudCatalog(invoke),
+    openLink: (url) => invoke<void>("open_url", { url }),
     voice: voicePreview(createLocalVoice({ invoke, listen: (event, handler) => subscribeTauri(event, handler) })),
   };
   mount(<NativeFrame base={base} />);

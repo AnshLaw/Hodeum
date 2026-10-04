@@ -1,3 +1,4 @@
+import { DEFAULT_GEMINI_MODEL } from "../../data/settings";
 import type { ActionTarget, StateSignal, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
 import type { ReasoningProvider } from "../interfaces";
 import { LANGUAGE_LINES, selectCandidates, untrusted } from "../vision/prompt";
@@ -115,6 +116,8 @@ export function toGeminiAction(reply: VisionReply, candidates: UiElement[], cont
 /** Opt-in Gemini over the Rust bridge (the key never reaches the webview). Text context only. */
 export class GeminiReasoningProvider implements ReasoningProvider {
   readonly id = "gemini";
+  /** The model chosen in Settings > Cloud; Rust checks it before it goes into the URL. */
+  model: string = DEFAULT_GEMINI_MODEL;
 
   constructor(private readonly bridge: { invoke: Invoke }) {}
 
@@ -129,7 +132,7 @@ export class GeminiReasoningProvider implements ReasoningProvider {
     // An open goal has no lesson: its only description is the learner's own words.
     if (context.openGoal || !context.pack) throw new CloudSkipped("gemini", "open-ended goals stay on this PC");
     const { request, candidates } = this.request(context);
-    const raw = await this.bridge.invoke<unknown>("gemini_reason", { request });
+    const raw = await this.bridge.invoke<unknown>("gemini_reason", { request, model: this.model });
     return toGeminiAction(validateReply(raw, "Gemini"), candidates, context);
   }
 

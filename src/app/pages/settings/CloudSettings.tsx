@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { CloudProvider, CloudSettings as Cloud, MemoryMode } from "../../../data/settings";
 import type { Bus } from "../../../lib/bus";
+import type { CloudCatalog } from "../../../providers/cloud/catalog";
 import type { KeyPresence } from "../../../providers/cloud/keys";
 import type { CloudKeyService } from "../../services";
 import { CLOUD_ROWS, MEMORY_OPTIONS, controlEnabled, keyDraftError, keyErrorMessage, keyStatusLabel, withKeyCleared, withProvider, type CloudRow } from "./cloud-settings";
+import { KeyLink, ProviderPickers } from "./CloudPickers";
 import { Row, Segmented } from "./controls";
 import { SensitiveApps } from "./SensitiveApps";
 import { SECTION_ID } from "./sections";
@@ -98,12 +100,15 @@ function KeyForm({ row, present, keys, onCleared, onKeysChanged }: KeyFormProps)
 interface CloudSettingsProps {
   cloud: Cloud;
   keys?: CloudKeyService;
+  /** Model and voice lists; absent where keys aren't kept (the web dashboard). */
+  catalog?: CloudCatalog;
+  openLink?: (url: string) => Promise<void>;
   bus: Bus;
   onChange: (cloud: Cloud) => void;
 }
 
 /** Opt-in cloud providers: keys go to Windows Credential Manager, settings sync like the rest. */
-export function CloudSettings({ cloud, keys, bus, onChange }: CloudSettingsProps) {
+export function CloudSettings({ cloud, keys, catalog, openLink, bus, onChange }: CloudSettingsProps) {
   const [presence, refresh] = useKeyPresence(keys, bus);
   const keysChanged = () => {
     refresh();
@@ -120,6 +125,8 @@ export function CloudSettings({ cloud, keys, bus, onChange }: CloudSettingsProps
             <ProviderControl row={row} cloud={cloud} enabled={controlEnabled(presence, row.provider)} onChange={onChange} />
           </Row>
           {keys && <KeyForm row={row} present={controlEnabled(presence, row.provider)} keys={keys} onCleared={(provider) => onChange(withKeyCleared(cloud, provider))} onKeysChanged={keysChanged} />}
+          {keys && <KeyLink row={row} openLink={openLink} />}
+          {catalog && <ProviderPickers row={row} cloud={cloud} catalog={catalog} present={controlEnabled(presence, row.provider)} reloadKey={presence} onChange={onChange} />}
         </div>
       ))}
       <SensitiveApps apps={cloud.sensitiveApps} onChange={(sensitiveApps) => onChange({ ...cloud, sensitiveApps })} />

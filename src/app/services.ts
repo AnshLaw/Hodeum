@@ -2,6 +2,7 @@ import type { Bus } from "../lib/bus";
 import type { TaskPack } from "../lib/types";
 import type { ChatMessage, ChatStore, LearningStore } from "../data/types";
 import type { CloudProvider, Settings, SettingsStore } from "../data/settings";
+import type { CloudCatalog } from "../providers/cloud/catalog";
 import type { KeyPresence } from "../providers/cloud/keys";
 import type { CapturedFrame, VisionStatusSource } from "../providers/vision/types";
 import type { WebSearch, WebSearchSource } from "../providers/web/types";
@@ -69,6 +70,10 @@ export interface AppServices {
   web?: WebSearchSource;
   /** Absent on the web dashboard: keys live on the learner's PC. */
   cloudKeys?: CloudKeyService;
+  /** Models and voices for Settings > Cloud, listed with the saved keys; absent where keys aren't. */
+  cloudCatalog?: CloudCatalog;
+  /** Opens an https page in the default browser; absent where a plain link already does that. */
+  openLink?: (url: string) => Promise<void>;
   window: AppWindowControls;
   /** Why chat or window context isn't available here (e.g. the browser stage has no local model). */
   limitation?: string;

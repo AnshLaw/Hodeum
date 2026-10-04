@@ -1387,6 +1387,46 @@
   color: var(--hd-accent);
 }
 
+.hcloud__getkey {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.hcloud__getkey a {
+  color: var(--hd-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.hcloud__picker {
+  display: grid;
+  gap: 4px;
+  max-width: 560px;
+}
+
+.hcloud__pick {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hcloud__pick-label {
+  min-width: 96px;
+  font-size: 13px;
+}
+
+.hcloud__pick .hselect {
+  min-width: 0;
+  flex: 1;
+  max-width: 320px;
+}
+
+.hcloud__status {
+  margin: 0;
+  font-size: 12px;
+}
+
 .hcloud__sensitive {
   display: grid;
   gap: 10px;
