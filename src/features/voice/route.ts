@@ -25,6 +25,7 @@ const COMMANDS: [RegExp, HodeEvent][] = [
   [/^(?:look again|check again|i did it|done|i'?m done|finished)$/, { type: "LOOK_AGAIN" }],
   [/^(?:let me try|i'?ll try|i will try)$/, { type: "LET_ME_TRY" }],
   [/^(?:skip|skip (?:it|this|that|this step|the step)|next step|move on)$/, { type: "SKIP_STEP" }],
+  [/^(?:practi[cs]e(?: (?:again|it|alone|on my own))?|let me practi[cs]e(?: (?:again|it|alone|on my own))?|again on my own)$/, { type: "PRACTICE_AGAIN" }],
   [/^(?:pause|wait|hold on)$/, { type: "PAUSE" }],
   [/^(?:resume|continue|go on|keep going|carry on)$/, { type: "RESUME" }],
   [/^(?:stop|end|cancel|quit|end (?:the )?hode|stop (?:the )?hode)$/, { type: "END_HODE" }],
@@ -136,6 +137,9 @@ export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], ope
   if (s.phase === "goal_entry") return [goalEvent(text, packs, openAllowed)];
   if (s.phase === "annotating") return [];
   const acknowledged = isAcknowledgement(text);
+  // The closing question is open: anything said is an answer to it, even one word ("Insert").
+  const answering = s.phase === "success" && s.review !== undefined && s.review.picked === undefined;
+  if (answering && !acknowledged) return [asCommand(text) ?? { type: "REVIEW_ANSWERED", said: text }];
   if (s.phase !== "idle") {
     if (acknowledged && s.phase === "answering") return [{ type: "DISMISS" }];
     const command = asCommand(text);

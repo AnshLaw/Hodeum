@@ -6,6 +6,8 @@
   "goalPhrases": ["pivot table", "pivottable", "pivot", "summarize data in excel", "पिवट टेबल", "पिवोट टेबल", "पाइवट टेबल"],
   "prerequisites": ["Maximize Excel, then click any cell inside the sales table."],
   "concept": "A PivotTable turns a long list of rows into quick totals, like sales for each region, without a single formula.",
+  "recap": "You built a PivotTable: Insert, then PivotTable, OK, and then the fields.",
+  "check": {"question": "Quick check: which tab do you start a PivotTable from?", "options": ["Insert", "Data", "Home"], "answer": 0, "explain": "Insert holds everything you add to a sheet."},
   "steps": [
     {
       "id": "open-insert",

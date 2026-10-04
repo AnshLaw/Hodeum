@@ -6,6 +6,8 @@
   "goalPhrases": ["iphone dark", "phone dark"],
   "prerequisites": ["Mirror your iPhone into Hodey (menu → Show iPhone) and start on the Home Screen, in Light mode."],
   "concept": "Dark Mode shows light text on a dark background, which is easier on your eyes at night.",
+  "recap": "You turned on Dark Mode: Settings, Display & Brightness, then Dark.",
+  "check": {"question": "Quick check: where do you find Dark Mode?", "options": ["Display & Brightness", "Wallpaper", "Sounds"], "answer": 0, "explain": "Display & Brightness controls how the screen looks."},
   "steps": [
     {
       "id": "open-settings",

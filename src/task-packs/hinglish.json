@@ -3,6 +3,8 @@
     "title": "PivotTable बनाना",
     "prerequisites": ["Excel को maximize कीजिए, फिर sales table के अंदर किसी भी cell पर click कीजिए।"],
     "concept": "PivotTable लंबी list को झट से totals में बदल देती है, जैसे हर region की sales, बिना किसी formula के।",
+    "recap": "आपने PivotTable बना ली: Insert, फिर PivotTable, OK, और फिर fields।",
+    "check": {"question": "Quick check: PivotTable किस tab से शुरू होती है?", "options": ["Insert", "Data", "Home"], "explain": "Insert में वो सब है जो आप sheet में add करते हैं।"},
     "steps": {
       "open-insert": {
         "objective": "Insert tab खोलिए",
@@ -63,6 +65,8 @@
     "title": "Files zip करना",
     "prerequisites": ["File Explorer खोलिए और जिन files को zip करना है, उन्हें select कीजिए।"],
     "concept": "ZIP file कई files को एक छोटी file में pack कर देती है, जिसे email या share करना आसान होता है।",
+    "recap": "आपने files zip कर लीं: right-click, Compress to, फिर ZIP File।",
+    "check": {"question": "Quick check: Compress to वाला menu कैसे खुलता है?", "options": ["Files पर right-click", "Files पर double-click", "Delete दबाकर"], "explain": "Right-click से उस चीज़ के actions का menu खुलता है।"},
     "steps": {
       "open-menu": {
         "objective": "Selected files पर right-click कीजिए",
@@ -102,6 +106,8 @@
       "अपने iPhone को Hodey में mirror कीजिए (menu → Show iPhone) और Light mode में Home Screen से start कीजिए।"
     ],
     "concept": "Dark Mode में dark background पर light text दिखता है, जो रात में आँखों के लिए आसान है।",
+    "recap": "आपने Dark Mode on कर दिया: Settings, Display & Brightness, फिर Dark।",
+    "check": {"question": "Quick check: Dark Mode कहाँ मिलता है?", "options": ["Display & Brightness", "Wallpaper", "Sounds"], "explain": "Display & Brightness से तय होता है कि screen कैसी दिखे।"},
     "steps": {
       "open-settings": {
         "objective": "Settings खोलिए",

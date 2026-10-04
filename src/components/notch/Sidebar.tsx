@@ -66,7 +66,7 @@ function SidebarBody(props: SurfaceProps) {
   return (
     <>
       {/* The panel has its own step list below; don't repeat it inside the card, but keep its toggle lit. */}
-      <NotchContent view={{ ...view, steps: undefined }} expanded onControl={onControl} extra={successExtra(props)} active={view.steps ? ["all_steps"] : []} />
+      <NotchContent view={{ ...view, steps: undefined }} expanded onControl={onControl} extra={successExtra(props)} active={view.steps ? ["all_steps"] : []} onChoice={props.onAnswer} />
       {props.steps.length > 0 && <StepList steps={props.steps} />}
     </>
   );

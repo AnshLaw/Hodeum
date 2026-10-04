@@ -143,12 +143,15 @@ describe("Hinglish speech", () => {
     const lines: string[] = [];
     for (const pack of TASK_PACKS) {
       const local = localizePack(pack, "hinglish");
-      lines.push(local.title, ...local.prerequisites);
+      lines.push(local.title, ...local.prerequisites, local.concept ?? "", local.recap ?? "");
+      // The answers are read on the card; only the right one is ever said, inside a Hinglish sentence.
+      if (local.check) lines.push(local.check.question, local.check.explain, spoken("hinglish").reviewWrong(local.check.options[local.check.answer]));
       for (const s of local.steps) lines.push(s.objective, s.speech.demonstrate, s.speech.guide, s.speech.hint, s.explain, ...s.mistakes.map((m) => m.correction));
     }
     const say = spoken("hinglish");
     lines.push(say.clarify, ...say.acks, ...say.stepDone, ...say.stepDoneLight, say.needVisionToAnswer, say.noPack, say.hodeCompleteSpeech, say.nothingMarked, say.neededForThisStep);
     lines.push(say.repeatedClick("Data"), say.menuLoop("Insert"), say.undoLoop, say.surpriseDialog("Excel"), say.targetMissing("Insert"));
+    lines.push(say.youDoTheClicking, say.gotTheHang, say.cantSeeItDone, ...say.reviewRight, say.reviewWrong("Insert"), say.pickAnAnswer, say.practiceIntro, say.didItAlone);
     expect(lines.flatMap(latinLeft)).toEqual([]);
   });
 });

@@ -17,7 +17,7 @@ import {
 } from "./model";
 import { diffScreens, isUnchanged, summarizeActions } from "./change";
 import { neighboursOf } from "./neighbours";
-import { confidenceBand, nudgeStartLevel, overlayFor } from "./policy";
+import { confidenceBand, nudgeStartLevel, overlayFor, quieterOf } from "./policy";
 import { regionAround } from "./region";
 
 /** Open-ended Hodes have no saved skill: the vision model phrases each step at the mode's level. */
@@ -109,9 +109,11 @@ export function onSkillLoaded(s: HodeState, e: EventOf<"SKILL_LOADED">): Transit
   if (s.phase !== "observing" || currentStep(s)?.skill !== e.skillId) return noop(s);
   // Memory nudges a skill's first step in a Hode only; later steps follow this Hode's own record.
   const remembered = s.learnedSkills.includes(e.skillId) ? undefined : e.remembered;
-  const level = nudgeStartLevel(s.mode, e.record, remembered);
+  // A practice round starts every step with Hodey only watching, however much help the skill last needed.
+  const nudged = nudgeStartLevel(s.mode, e.record, remembered);
+  const level = s.practice === true ? quieterOf(nudged, "observe") : nudged;
   // A learner who already does this with Hodey only watching doesn't need the idea explained again.
-  const pendingIntro = level === "observe" || level === "independent" ? undefined : s.pendingIntro;
+  const pendingIntro = (level === "observe" || level === "independent") && s.practice !== true ? undefined : s.pendingIntro;
   return { state: { ...s, level, pendingIntro, freshRead: false }, effects: [{ type: "observe" }] };
 }
 

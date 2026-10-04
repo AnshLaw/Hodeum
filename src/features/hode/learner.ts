@@ -3,6 +3,7 @@ import { ASSISTANCE_LEVELS, type ActionVerdict, type ScreenObservation, type Ste
 import { assessAction, mattered } from "./change";
 import { beginStep, inWrongApp, onObserved, onSkillLoaded, requestReason, waitForApp } from "./flow";
 import { takeOver } from "./execute";
+import { finishHode } from "./closing";
 import {
   MAX_WRONG_ACTIONS,
   STUCK_MS,
@@ -29,6 +30,7 @@ function escalateState(s: HodeState, options: { correction?: string; countsAsMis
     ack: undefined,
     level: escalate(s.level),
     escalated: true,
+    neededHelp: true,
     mistakes: s.mistakes + (options.countsAsMistake ? 1 : 0),
     correction: options.correction,
     wrongActions: 0,
@@ -139,12 +141,7 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
   const done: HodeEffect[] = [CANCEL_TIMER, { type: "clearOverlay" }, { type: "recordOutcome", skillId: step.skill, outcome }];
   const finished: HodeState = { ...s, learnedSkills, ack: undefined, pendingAck: undefined, reason: undefined, pendingReason: undefined };
   const nextIndex = s.stepIndex + 1;
-  if (!s.pack || nextIndex >= s.pack.steps.length) {
-    return {
-      state: { ...finished, phase: "success", action: undefined },
-      effects: [...done, { type: "say", text: spoken(s.language).hodeCompleteSpeech }],
-    };
-  }
+  if (!s.pack || nextIndex >= s.pack.steps.length) return withLeadingEffects(finishHode(finished), done);
   // Said with the next step's guidance, so the next instruction doesn't cut the acknowledgement off.
   const ack = acknowledgement(s);
   const acknowledged: HodeState = ack ? { ...finished, pendingAck: ack, lastAck: ack, pendingReason: reasonFor(s, step) } : finished;
@@ -282,9 +279,7 @@ export function onSkipStep(s: HodeState): Transition {
   const moved: HodeState = { ...s, ack: undefined, pendingAck: undefined, reason: undefined, pendingReason: undefined, pendingNote: undefined };
   const done: HodeEffect[] = [CANCEL_TIMER, { type: "clearOverlay" }];
   const nextIndex = s.stepIndex + 1;
-  if (!s.pack || nextIndex >= s.pack.steps.length) {
-    return { state: { ...moved, phase: "success", action: undefined }, effects: [...done, { type: "say", text: spoken(s.language).hodeCompleteSpeech }] };
-  }
+  if (!s.pack || nextIndex >= s.pack.steps.length) return withLeadingEffects(finishHode(moved), done);
   return withLeadingEffects(beginStep(moved, nextIndex), done);
 }
 

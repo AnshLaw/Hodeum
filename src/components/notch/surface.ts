@@ -30,6 +30,8 @@ export interface SurfaceProps {
   bootNotice?: string;
   vision?: VisionStatus;
   onControl: (control: NotchControl) => void;
+  /** An answer to the closing question was tapped. */
+  onAnswer?: (option: number) => void;
   onToggleMute: () => void;
   onToggleMenu: () => void;
   onGrip: () => void;

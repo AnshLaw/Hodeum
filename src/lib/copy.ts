@@ -130,6 +130,8 @@ export const COPY = {
   repeat: "Say that again",
   lookAgain: "Look again",
   skipStep: "Skip step",
+  practiceAlone: "Practice on your own",
+  quickCheck: "Quick check",
   openApp: "Open Hodeum",
   backToNotch: "Back to notch",
   mic: "Talk to Hodey",

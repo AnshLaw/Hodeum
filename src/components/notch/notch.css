@@ -276,6 +276,31 @@
   color: var(--hd-accent);
 }
 
+/* The closing question's answers: tap one; once picked, the right answer and a wrong pick show. */
+.notch__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  animation: notch-swap 320ms var(--hd-ease) 80ms both;
+}
+
+.notch__choice:disabled {
+  cursor: default;
+}
+
+.notch__choice[data-state="right"],
+.notch__choice[data-state="answer"] {
+  border-color: var(--hd-ok);
+  color: var(--hd-ok);
+}
+
+.notch__choice[data-state="wrong"] {
+  border-color: var(--hd-accent);
+  color: var(--hd-text-2);
+  text-decoration: line-through;
+}
+
 .notch__subline {
   margin: -6px 0 0;
   padding: 0 14px 10px 37px;

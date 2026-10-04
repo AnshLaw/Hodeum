@@ -10,7 +10,10 @@ export type LogOp =
 const ACTIVE_PHASES = new Set(["observing", "reasoning", "guiding", "answering", "annotating", "paused", "recovering", "acting", "checkpoint"]);
 
 function started(event: HodeEvent, prev: HodeState, next: HodeState): boolean {
-  return event.type === "GOAL_SUBMITTED" && prev.phase === "goal_entry" && next.phase === "observing";
+  const fromGoal = event.type === "GOAL_SUBMITTED" && prev.phase === "goal_entry";
+  // A practice round is a Hode of its own, started from the finished one.
+  const practice = event.type === "PRACTICE_AGAIN" && prev.phase === "success";
+  return (fromGoal || practice) && next.phase === "observing";
 }
 
 function progressEvents(event: HodeEvent, prev: HodeState, next: HodeState, at: string, hodeId: string): HodeEventRecord[] {

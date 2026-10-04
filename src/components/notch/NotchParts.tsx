@@ -5,7 +5,7 @@ import { COPY } from "../../lib/copy";
 import { HodeyFace } from "../hodey/HodeyFace";
 import type { HodeyMood } from "../hodey/mood";
 import { CheckIcon, ChevronDownIcon, CloseIcon, CrosshairIcon, ExpandIcon, EyeIcon, IconButton, ListIcon, MicIcon, MoreIcon, MutedIcon, PauseIcon, RepeatIcon, VolumeIcon } from "../shared/icons";
-import { providerBadge, type NotchControl, type NotchView, type StepItem } from "./notch-view";
+import { providerBadge, type Choice, type NotchControl, type NotchView, type StepItem } from "./notch-view";
 import { useEnhanced } from "./cloud-context";
 
 const LABELS: Record<NotchControl, string> = {
@@ -27,11 +27,12 @@ const LABELS: Record<NotchControl, string> = {
   take_over: COPY.takeOver,
   stop_search: COPY.stop,
   skip: COPY.skipStep,
+  practice: COPY.practiceAlone,
 };
 /** Hodey's face in the notch bar, in CSS px. */
 /** Fits the bar with room for Hodey's z's and sound waves, so nothing is clipped. */
 const HODEY_BAR_SIZE = 34;
-const PRIMARY = new Set<NotchControl>(["start", "resume", "retry", "dismiss", "approve"]);
+const PRIMARY = new Set<NotchControl>(["start", "resume", "retry", "dismiss", "approve", "practice"]);
 
 function iconFor(control: NotchControl): ReactNode {
   switch (control) {
@@ -169,6 +170,21 @@ export function StepList({ steps }: { steps: StepItem[] }) {
   );
 }
 
+/** The closing question's answers: tap one; once picked, the right one and a wrong pick are marked. */
+export function Choices({ choices, onChoice }: { choices: Choice[]; onChoice?: (index: number) => void }) {
+  const answered = choices.some((choice) => choice.state !== "open");
+  return (
+    <div className="notch__choices" role="group" aria-label={COPY.quickCheck}>
+      {choices.map((choice, index) => (
+        <button key={choice.label} type="button" className="btn notch__choice" data-state={choice.state} disabled={answered || !onChoice} onClick={() => onChoice?.(index)}>
+          {choice.state === "right" || choice.state === "answer" ? <CheckIcon /> : null}
+          {choice.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function SkillChips({ skills }: { skills: string[] }) {
   return (
     <ul className="skill-chips">
@@ -300,9 +316,11 @@ interface NotchContentProps {
   extra?: ReactNode;
   /** Toggles that are on; by default, the step list while the view carries it. */
   active?: NotchControl[];
+  /** An answer to the closing question was tapped. */
+  onChoice?: (index: number) => void;
 }
 
-export function NotchContent({ view, expanded, fallbackDetail, onControl, extra, active = view.steps ? ["all_steps"] : [] }: NotchContentProps) {
+export function NotchContent({ view, expanded, fallbackDetail, onControl, extra, active = view.steps ? ["all_steps"] : [], onChoice }: NotchContentProps) {
   const detail = view.detail ?? (view.mode === "idle" ? fallbackDetail : undefined);
   if (!expanded) return detail ? <p className="notch__subline">{detail}</p> : null;
   return (
@@ -319,6 +337,7 @@ export function NotchContent({ view, expanded, fallbackDetail, onControl, extra,
           {detail}
         </p>
       )}
+      {view.choices && <Choices choices={view.choices} onChoice={onChoice} />}
       {extra ?? (view.skills && <SkillChips skills={view.skills} />)}
       {view.steps && <StepList steps={view.steps} />}
       {view.controls.length > 0 && <ControlButtons controls={view.controls} hintLabel={view.hintLabel} onControl={onControl} spread active={active} />}

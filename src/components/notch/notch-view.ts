@@ -28,7 +28,15 @@ export type NotchControl =
   /** Stop the app's web search and answer. */
   | "stop_search"
   /** Past a step Hodey can't see done. */
-  | "skip";
+  | "skip"
+  /** The same Teach Hode again, with Hodey only watching. */
+  | "practice";
+
+/** One answer to the closing question: still to pick, picked right or wrong, or the right one shown after a wrong pick. */
+export interface Choice {
+  label: string;
+  state: "open" | "right" | "wrong" | "answer";
+}
 
 export interface NotchView {
   mode: NotchMode;
@@ -43,6 +51,8 @@ export interface NotchView {
   skills?: string[];
   /** The whole flow, when the learner asked to see it. */
   steps?: StepItem[];
+  /** The closing question's answers to pick from. */
+  choices?: Choice[];
 }
 
 /** Pill widths in CSS px, per PRD §8.2. Height follows content. */
@@ -58,7 +68,8 @@ const clip = (text: string) => (text.length > QUESTION_CHARS ? `${text.slice(0, 
 /** The view's words as the learner reads them (Hindi in Devanagari, or in English letters). */
 export function inScript(view: NotchView, show: (text: string) => string): NotchView {
   const optional = (text?: string) => (text === undefined ? undefined : show(text));
-  return { ...view, title: show(view.title), eyebrow: optional(view.eyebrow), detail: optional(view.detail), hintLabel: optional(view.hintLabel) };
+  const choices = view.choices?.map((choice) => ({ ...choice, label: show(choice.label) }));
+  return { ...view, title: show(view.title), eyebrow: optional(view.eyebrow), detail: optional(view.detail), hintLabel: optional(view.hintLabel), choices };
 }
 
 export function isExpanded(view: NotchView): boolean {
@@ -227,9 +238,30 @@ export function shouldPeek({ mode, covering, hovered, menuOpen, skillsOpen }: Pe
 function successView(s: HodeState): NotchView {
   const hodeyOnly = s.hodeyDid > 0 && s.learnedSkills.length === 0;
   // No skill to claim (an open-ended Hode, or every step skipped): just "Hode complete".
-  const detail = hodeyOnly ? COPY.hodeyDidIt : s.learnedSkills.length > 0 ? COPY.skillLearned : undefined;
-  return { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail, busy: false, controls: [], skills: s.learnedSkills.map(skillLabel) };
+  const learned = hodeyOnly ? COPY.hodeyDidIt : s.learnedSkills.length > 0 ? COPY.skillLearned : undefined;
+  // A finished Teach lesson can be done again with Hodey only watching.
+  const controls: NotchControl[] = s.mode === "teach" && s.pack && !s.open ? ["practice"] : [];
+  const base: NotchView = { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail: learned, busy: false, controls, skills: s.learnedSkills.map(skillLabel) };
+  return s.review ? { ...base, ...reviewView(s, s.review) } : base;
 }
+
+/** The closing question: asked, then answered with its idea. */
+function reviewView(s: HodeState, review: NonNullable<HodeState["review"]>): Pick<NotchView, "detail" | "choices"> {
+  const { check, picked } = review;
+  const words = spoken(s.language);
+  const choiceState = (index: number): Choice["state"] => {
+    if (picked === undefined) return "open";
+    if (index === picked) return picked === check.answer ? "right" : "wrong";
+    return index === check.answer ? "answer" : "open";
+  };
+  const choices = check.options.map((label, index) => ({ label, state: choiceState(index) }));
+  if (picked === undefined) return { detail: check.question, choices };
+  const verdict = picked === check.answer ? words.reviewRight[0] : words.reviewWrong(check.options[check.answer]);
+  return { detail: `${verdict} ${check.explain}`, choices };
+}
+
+/** Holding the closing question open: the success card waits for an answer. */
+export const awaitingAnswer = (view: NotchView): boolean => view.choices?.some((choice) => choice.state !== "open") === false;
 
 export interface IslandContext {
   /** Hodey has been busy long enough that shrinking won't flicker. */

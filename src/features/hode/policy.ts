@@ -31,7 +31,8 @@ export function relax(level: AssistanceLevel): AssistanceLevel {
 
 const indexOf = (level: AssistanceLevel) => ASSISTANCE_LEVELS.indexOf(level);
 /** Of two levels, the one giving less help. */
-const quieter = (a: AssistanceLevel, b: AssistanceLevel) => (indexOf(a) >= indexOf(b) ? a : b);
+export const quieterOf = (a: AssistanceLevel, b: AssistanceLevel) => (indexOf(a) >= indexOf(b) ? a : b);
+const quieter = quieterOf;
 /** Of two levels, the one giving more help. */
 const moreHelp = (a: AssistanceLevel, b: AssistanceLevel) => (indexOf(a) <= indexOf(b) ? a : b);
 

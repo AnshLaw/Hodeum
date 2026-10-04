@@ -39,6 +39,14 @@ const stepSchema = z
   })
   .strict();
 
+/** Most answers a recall question offers: more would crowd the notch. */
+const MAX_CHECK_OPTIONS = 4;
+
+const checkSchema = z
+  .object({ question: z.string().min(1), options: z.array(z.string().min(1)).min(2).max(MAX_CHECK_OPTIONS), answer: z.number().int().min(0), explain: z.string().min(1) })
+  .strict()
+  .refine((check) => check.answer < check.options.length, "a check's answer must be one of its options");
+
 const packSchema = z
   .object({
     id: z.string().min(1),
@@ -50,6 +58,8 @@ const packSchema = z
     notFor: names.optional(),
     prerequisites: z.array(z.string().min(1)),
     concept: z.string().min(1).optional(),
+    recap: z.string().min(1).optional(),
+    check: checkSchema.optional(),
     steps: z.array(stepSchema).min(1),
   })
   .strict();

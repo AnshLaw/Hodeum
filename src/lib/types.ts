@@ -120,6 +120,16 @@ export interface AppLaunch {
   sample?: string;
 }
 
+/** A recall question: retrieving a move from memory is what makes it stick. */
+export interface RecallCheck {
+  question: string;
+  /** Two to four short answers; `answer` is the right one's index. */
+  options: string[];
+  answer: number;
+  /** Said after the learner answers, right or wrong: the idea behind the answer. */
+  explain: string;
+}
+
 export interface TaskPack {
   id: string;
   title: string;
@@ -133,6 +143,10 @@ export interface TaskPack {
   prerequisites: string[];
   /** Teach mode's opening: what the learner is about to make and why it's worth knowing, in a sentence or two. */
   concept?: string;
+  /** Teach mode's closing: the lesson's moves in one line ("Insert, then PivotTable, OK, then the fields"). */
+  recap?: string;
+  /** Teach mode's closing question: one move of the lesson to recall, with answers to pick from. */
+  check?: RecallCheck;
   steps: TaskStep[];
 }
 

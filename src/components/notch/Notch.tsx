@@ -19,7 +19,7 @@ import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
-import { EXPANDED_SIZES, NOTCH_WIDTHS, inScript, islandSize, notchView, shouldPeek, stepItems, voiceNotice, type NotchControl, type NotchSize, type NotchView } from "./notch-view";
+import { EXPANDED_SIZES, NOTCH_WIDTHS, awaitingAnswer, inScript, islandSize, notchView, shouldPeek, stepItems, voiceNotice, type NotchControl, type NotchSize, type NotchView } from "./notch-view";
 import type { NativeVoiceStatus } from "../../providers/speech/native-voice";
 import { HodeyFace } from "../hodey/HodeyFace";
 import { hodeyMood, type HodeyMood } from "../hodey/mood";
@@ -164,7 +164,7 @@ function topBody(props: SurfaceProps, view: NotchView, size: NotchSize, peek: bo
   if (skills?.open) return <SkillsPanel skills={skills} />;
   if (view.mode === "goal") return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} defaultAgentStyle={props.defaultAgentStyle} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   if (peek) return null;
-  return <NotchContent view={view} expanded={EXPANDED_SIZES.includes(size)} fallbackDetail={props.bootNotice} onControl={onControl} extra={successExtra(props)} />;
+  return <NotchContent view={view} expanded={EXPANDED_SIZES.includes(size)} fallbackDetail={props.bootNotice} onControl={onControl} extra={successExtra(props)} onChoice={props.onAnswer} />;
 }
 
 /** Width per size; holding the iPhone, as wide as the phone drawn at full size plus the guidance column. */
@@ -281,8 +281,8 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   const handleControl = useControlHandler(runtime, bus);
   const onControl = (control: NotchControl) => (web && control === "dismiss" ? closeWeb() : handleControl(control));
   useHitRect(surfaceRef, shell, bus, `${layoutKey}:${revealed}`);
-  // The success card stays while the learner reads it (hovering), then makes way.
-  useAutoDismiss(view.mode === "success" && !hovered, runtime);
+  // The success card stays while the learner reads it (hovering) or hasn't answered its question yet, then makes way.
+  useAutoDismiss(view.mode === "success" && !hovered && !awaitingAnswer(view), runtime);
   const [cardBottom, setCardBottom] = useState<number>();
   // Each card is measured afresh: a tall earlier card must not make a short new one look like it covers the target.
   useEffect(() => setCardBottom(undefined), [view.title, view.mode]);
@@ -309,6 +309,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
     bootNotice: notice,
     vision: visionStatus,
     onControl,
+    onAnswer: (option) => runtime.dispatch({ type: "REVIEW_ANSWERED", option }),
     onToggleMute: () => {
       runtime.setMuted(!muted);
       setMuted(!muted);

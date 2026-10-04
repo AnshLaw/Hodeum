@@ -219,9 +219,17 @@ describe.each([PIVOT, ZIP])("a full $name Hode", (journey) => {
     }
     expect(acks.every((ack, i) => ack === undefined || ack !== acks[i - 1])).toBe(true);
     expect(h.state().phase).toBe("success");
-    expect(h.newSpeech()).toEqual([COPY.hodeCompleteSpeech]);
+    const check = journey.pack.check;
+    // Teach ends with the moves and one recall question; Help and Agent just finish.
+    const finale = mode === "teach" ? line(COPY.hodeCompleteSpeech, journey.pack.recap ?? "", check?.question ?? "") : COPY.hodeCompleteSpeech;
+    expect(h.newSpeech()).toEqual([finale]);
     expect(h.view()).toMatchObject({ mode: "success", title: COPY.hodeComplete });
     expect(h.list().every((item) => item.state === "done")).toBe(true);
+    if (mode === "teach" && check) {
+      h.runtime.dispatch({ type: "REVIEW_ANSWERED", option: check.answer });
+      await settle();
+      expect(h.newSpeech()).toEqual([`${EN.reviewRight[0]} ${check.explain}`]);
+    }
   });
 });
 

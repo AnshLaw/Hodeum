@@ -8,6 +8,7 @@ import type {
   OverlayPrimitive,
   PerformRequest,
   PinPrimitive,
+  RecallCheck,
   Rect,
   ScreenObservation,
   SkillRecord,
@@ -124,6 +125,12 @@ export interface HodeState {
   offerSkip?: boolean;
   /** The screen read in hand just finished the previous step: the next step starts from it if it shows its control. */
   freshRead?: boolean;
+  /** Teach mode's closing question, once the Hode is done, and the answer the learner picked. */
+  review?: { check: RecallCheck; picked?: number };
+  /** A practice round: the same lesson again, every step watched rather than prompted. */
+  practice?: boolean;
+  /** Hodey gave more help than the step started with at least once this Hode. */
+  neededHelp?: boolean;
   /** That acknowledgement, shown in the notch until the learner acts again. */
   ack?: string;
   /** The last acknowledgement used, so the next one is a different phrase. */
@@ -198,6 +205,10 @@ export type HodeEvent =
   | { type: "LET_ME_TRY" }
   /** Past a step Hodey can't see done; nothing is learned or failed for it. */
   | { type: "SKIP_STEP" }
+  /** An answer to the closing question: tapped (`option`) or said (`said`). */
+  | { type: "REVIEW_ANSWERED"; option?: number; said?: string }
+  /** The same lesson again, with Hodey only watching. */
+  | { type: "PRACTICE_AGAIN" }
   | { type: "ANNOTATE_START" }
   | { type: "ANNOTATE_CANCEL" }
   | { type: "ANNOTATION_SUBMITTED"; annotation: LearnerAnnotation }

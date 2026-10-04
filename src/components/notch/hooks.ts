@@ -200,6 +200,8 @@ export function useControlHandler(runtime: HodeRuntime, bus: Bus): (control: Not
           return bus.emit("web:cancel", {});
         case "skip":
           return dispatch({ type: "SKIP_STEP" });
+        case "practice":
+          return dispatch({ type: "PRACTICE_AGAIN" });
       }
     },
     [runtime, bus],

@@ -20,6 +20,9 @@ const packTextSchema = z
     title: z.string().min(1),
     prerequisites: z.array(z.string().min(1)),
     concept: z.string().min(1).optional(),
+    recap: z.string().min(1).optional(),
+    /** The recall question's words; which answer is right never changes. */
+    check: z.object({ question: z.string().min(1), options: z.array(z.string().min(1)), explain: z.string().min(1) }).strict().optional(),
     steps: z.record(z.string(), stepTextSchema),
   })
   .strict();
@@ -45,9 +48,11 @@ function localizeStep(step: TaskStep, text: StepText | undefined): TaskStep {
 export function localizePack(pack: TaskPack, language: ReplyLanguage): TaskPack {
   const text = language === "en" ? undefined : TEXTS[language][pack.id];
   if (!text) return pack;
-  const concept = text.concept ?? pack.concept;
-  const localized = { ...pack, title: text.title, prerequisites: text.prerequisites, steps: pack.steps.map((step) => localizeStep(step, text.steps[step.id])) };
-  return concept ? { ...localized, concept } : localized;
+  const localized: TaskPack = { ...pack, title: text.title, prerequisites: text.prerequisites, steps: pack.steps.map((step) => localizeStep(step, text.steps[step.id])) };
+  if (text.concept) localized.concept = text.concept;
+  if (text.recap) localized.recap = text.recap;
+  if (text.check && pack.check && text.check.options.length === pack.check.options.length) localized.check = { ...pack.check, ...text.check };
+  return localized;
 }
 
 /** For tests: a pack's text in a language, to check every step is covered. */

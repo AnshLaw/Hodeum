@@ -6,6 +6,8 @@
   "notFor": ["open", "extract", "unzip", "unpack", "khol", "खोलो", "खोलना"],
   "prerequisites": ["Open File Explorer and select the files you want to zip."],
   "concept": "A ZIP file packs several files into one smaller file that's easy to email or share.",
+  "recap": "You zipped your files: right-click, Compress to, then ZIP File.",
+  "check": {"question": "Quick check: how do you open the menu that has Compress to?", "options": ["Right-click the files", "Double-click the files", "Press Delete"], "answer": 0, "explain": "A right-click opens the actions for whatever you clicked."},
   "steps": [
     {
       "id": "open-menu",
