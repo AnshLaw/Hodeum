@@ -245,6 +245,8 @@ export interface LearnerAnnotation {
   createdAt: number;
   /** The window the learner marked; the mark is only drawn over it. */
   window?: WindowRef;
+  /** Marked on the mirrored iPhone: the shape is in phone frame pixels and the question is about the phone. */
+  surface?: Surface;
 }
 
 /** One turn of the conversation: something the learner asked or said, or something Hodey said. */
