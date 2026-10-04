@@ -49,6 +49,12 @@ export function untrusted(text: string, maxChars = MAX_UNTRUSTED_CHARS): string 
 /** Hodey's own earlier words, flattened like screen text (they can quote it) and tagged as data, but kept whole. */
 const ownWords = (text: string) => `<hodey>${untrusted(text, MAX_OWN_WORDS_CHARS)}</hodey>`;
 
+/** A correction in the lesson's own words, as written; others (built from on-screen names) are quoted as data. */
+function lessonCorrection(context: TeachingContext): string | undefined {
+  const own = context.step?.mistakes.some((mistake) => mistake.correction === context.correction);
+  return own ? context.correction : undefined;
+}
+
 /** What the model does at each rung of the help ladder (docs/teach-loop.md). */
 const HELP_LINES: Record<AssistanceLevel, string> = {
   demonstrate: "Help level: demonstrate. Name the exact control and where it is, and add a few words on why it's the right step.",
@@ -166,7 +172,7 @@ function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
   if (context.goal) lines.push(`The learner's goal: <learner>${untrusted(context.goal)}</learner>.`);
   if (context.step) lines.push(`Current step: ${context.step.objective}. Expected labels: ${context.step.target.names.join(", ")}.`);
   lines.push(HELP_LINES[context.assistanceLevel]);
-  if (context.correction) lines.push(`The learner just made a mistake: ${context.correction}`);
+  if (context.correction) lines.push(`The learner just made a mistake: ${lessonCorrection(context) ?? ownWords(context.correction)}`);
   const recent = context.recentActions ?? [];
   if (recent.length > 0) {
     lines.push("The learner's last actions (oldest first) and what each changed:");

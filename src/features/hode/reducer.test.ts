@@ -413,8 +413,8 @@ describe("learner controls", () => {
   it("ends the Hode from anywhere", () => {
     const g = guiding();
     const t = step(g, { type: "END_HODE" });
-    // Everything resets except the request counter, so a slow reply to this Hode can't match the next one's.
-    expect(t.state).toEqual({ ...initialState, requestId: g.requestId });
+    // Everything resets except the request counter, which moves on: what this Hode had running is called off.
+    expect(t.state).toEqual({ ...initialState, requestId: g.requestId + 1 });
     expect(types(t)).toEqual(["clearOverlay", "cancelStuckTimer", "stopSpeech"]);
   });
 

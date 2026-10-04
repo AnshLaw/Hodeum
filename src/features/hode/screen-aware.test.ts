@@ -28,9 +28,10 @@ function openGuiding(): HodeState {
 }
 
 describe("another window coming forward", () => {
-  it("makes an open-ended Hode look again, as an action that matters", () => {
+  it("makes an open-ended Hode look again (a fresh look, not the learner's action)", () => {
     const t = play(openGuiding(), { type: "APP_SWITCHED" });
-    expect(t.state).toMatchObject({ phase: "observing", actedSinceInstruction: true });
+    expect(t.state.phase).toBe("observing");
+    expect(t.state.actedSinceInstruction).not.toBe(true);
     expect(types(t)).toContain("observe");
   });
 

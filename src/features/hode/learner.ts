@@ -273,14 +273,16 @@ export function onLookAgain(s: HodeState): Transition {
 
 /**
  * Another window came forward. Waiting for the learner's app, Hodey looks again; in an open-ended Hode
- * it's progress worth a fresh look (the learner opened the app the goal is in, say). A lesson ignores
- * it: its steps are checked on the learner's next action, and a glance elsewhere isn't a step.
+ * it's worth a fresh look (the learner may have opened the app the goal is in). A lesson ignores it: its
+ * steps are checked on the learner's next action, and a glance elsewhere isn't a step.
  */
 export function onAppSwitched(s: HodeState): Transition {
   if (s.phase !== "guiding") return noop(s);
-  if (s.waitingForApp) return onLookAgain(s);
+  // The ring on the taskbar's search box has done its job once another window comes forward.
+  if (s.waitingForApp) return withLeadingEffects(onLookAgain(s), [{ type: "clearOverlay" }]);
   if (!s.open) return noop(s);
-  return { state: { ...s, phase: "observing", reobserved: false, actedSinceInstruction: true, toppedOut: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
+  // A fresh look, but not an action of the learner's: a glance at another app never counts a step as done.
+  return { state: { ...s, phase: "observing", reobserved: false, toppedOut: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
 }
 
 /** Lesson phases a step can be skipped from (a question being answered isn't one). */

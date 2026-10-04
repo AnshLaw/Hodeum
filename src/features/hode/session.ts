@@ -183,7 +183,8 @@ export function onResume(s: HodeState): Transition {
 
 export function onEndHode(s: HodeState): Transition {
   if (s.phase === "idle") return noop(s);
-  return { state: nextHode(s), effects: STOP_EVERYTHING };
+  // The request counter moves on, so a model call or look-up still running for this Hode is called off.
+  return { state: { ...nextHode(s), requestId: s.requestId + 1 }, effects: STOP_EVERYTHING };
 }
 
 export function onSetLanguage(s: HodeState, e: EventOf<"SET_LANGUAGE">): Transition {

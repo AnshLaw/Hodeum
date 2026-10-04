@@ -53,10 +53,12 @@ interface Fit {
  */
 function fit(words: string[], app: string | undefined, pack: TaskPack): Fit | undefined {
   if (app !== undefined && app !== pack.app) return undefined;
-  if (pack.notFor?.some((word) => words.includes(stem(word.toLowerCase())))) return undefined;
   const phrases = pack.goalPhrases.map(taskWords).filter((phrase) => phrase.length > 0);
   const contained = phrases.filter((phrase) => phrase.every((word) => words.includes(word)));
   if (contained.length === 0) return undefined;
+  // A ruled-out word only counts outside the phrase that matched: "turn off dark mode" is Light mode's own phrase.
+  const matched = new Set(contained.flat());
+  if (pack.notFor?.some((word) => words.includes(stem(word.toLowerCase())) && !matched.has(stem(word.toLowerCase())))) return undefined;
   const vocabulary = new Set(phrases.flat());
   const counted = words.filter((word) => vocabulary.has(word) || !APP_WORDS.has(word));
   const coverage = counted.filter((word) => vocabulary.has(word)).length / counted.length;
@@ -65,8 +67,11 @@ function fit(words: string[], app: string | undefined, pack: TaskPack): Fit | un
 }
 
 /** The pack a goal asks for, or undefined: a goal that only shares a word or two with a pack isn't its lesson. */
+/** "Switch from light mode to dark mode" is about where it goes: what it switches from is left out. */
+const SWITCHED_FROM = /\bfrom\b.*?\bto\b/i;
+
 export function matchGoal(goal: string, packs: TaskPack[]): TaskPack | undefined {
-  const words = [...new Set(taskWords(goal))];
+  const words = [...new Set(taskWords(goal.replace(SWITCHED_FROM, " to ")))];
   const app = appFromGoal(goal);
   const fits = packs.map((pack) => fit(words, app, pack)).filter((f): f is Fit => f !== undefined);
   return fits.sort((a, b) => b.coverage - a.coverage || b.phrase - a.phrase)[0]?.pack;
