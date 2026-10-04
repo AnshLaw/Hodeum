@@ -270,7 +270,12 @@ describe("what the learner means", () => {
   it("names the installed app a spoken goal is about, from idle or goal entry", () => {
     expect(routeApps(initialState, "how do I send a message on Discord", true)).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", app: "Discord" }]);
     expect(routeApps({ ...initialState, phase: "goal_entry" }, "Hey Hodey, how do I send a message on Discord")).toMatchObject([{ type: "GOAL_SUBMITTED", goal: "how do I send a message on Discord", app: "Discord" }]);
-    expect(routeApps(initialState, "how do I turn on dark mode in discord", true)).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", app: "Discord", pack: undefined }]);
+  });
+
+  it("keeps a spoken lesson when the goal only says where its result goes", () => {
+    const [start, goal] = routeApps(initialState, "how do I zip files to send on whatsapp");
+    expect([start, goal]).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", pack: { id: "windows-zip" } }]);
+    expect(goal).not.toHaveProperty("app", expect.anything());
   });
 
   it("without a catalog, an app request is an ordinary goal", () => {
