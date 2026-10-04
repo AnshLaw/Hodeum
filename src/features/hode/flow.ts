@@ -24,6 +24,7 @@ import { neighboursOf } from "./neighbours";
 import { confidenceBand, nudgeStartLevel, overlayFor, quieterOf } from "./policy";
 import { areaAround, regionAround } from "./region";
 import { acknowledgement } from "./ack";
+import { withPlanRequest } from "./planning";
 
 /** Verbs that open an app, in English, Hindi and Roman Hinglish. */
 const OPEN_VERB = /^(?:open|opening|launch|start|run|खोल\S*|khol\S*)$/u;
@@ -190,6 +191,7 @@ function contextFor(s: HodeState, observation: ScreenObservation): TeachingConte
     openGoal: s.open,
     lastInstruction: s.open ? (s.instructionSaid ?? s.action?.speech) : undefined,
     doneSteps: s.open ? s.openDone : undefined,
+    plan: s.open ? s.plan?.steps : undefined,
     history: s.dialogue,
     lookUp: s.lookUp === true ? true : undefined,
     language: s.language,
@@ -223,7 +225,7 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   // An answer nobody asked for is guidance: shown as an answer, it would fold away and end the Hode.
   const action: TeachingAction = e.action.kind === "answer" ? { ...e.action, kind: "guide" } : e.action;
   if (action.kind === "complete" && s.open) return finishOpenHode(openProgress(withNotice, action), action);
-  if (s.open) return showOpenAction(openProgress(withNotice, action), action);
+  if (s.open) return withPlanRequest(showOpenAction(openProgress(withNotice, action), action));
   const band = action.target ? confidenceBand(action.target.confidence) : "uncertain";
   // A correction is worth saying even when its target isn't on screen (the learner left the page).
   if (band === "uncertain" && action.kind === "correct") return showGuidance(withNotice, { ...action, target: undefined });
@@ -425,10 +427,14 @@ export function openedApp(s: HodeState): Transition {
   return { state, effects: [{ type: "cancelStuckTimer" }, { type: "clearOverlay" }, { type: "say", text: words.openedIt(s.app ?? "") }] };
 }
 
+/** The goal is reached: the model's congratulation, then in Teach the plan's recap and a question to check the idea stuck. */
 function finishOpenHode(s: HodeState, action: TeachingAction): Transition {
+  const plan = s.mode === "teach" ? s.plan : undefined;
+  const parts = [action.speech || spoken(s.language).hodeCompleteSpeech, plan?.recap, plan?.check?.question];
+  const line = parts.filter((part): part is string => part !== undefined && part !== "").join(" ");
   return {
-    state: { ...s, phase: "success", action: undefined },
-    effects: [{ type: "cancelStuckTimer" }, { type: "clearOverlay" }, { type: "say", text: action.speech || spoken(s.language).hodeCompleteSpeech }],
+    state: { ...s, phase: "success", action: undefined, review: plan?.check ? { check: plan.check } : undefined },
+    effects: [{ type: "cancelStuckTimer" }, { type: "clearOverlay" }, { type: "say", text: line }],
   };
 }
 

@@ -1,6 +1,8 @@
+import type { ReplyLanguage } from "../lib/language";
 import type {
   AppLaunch,
   AssistanceLevel,
+  HodePlan,
   PerformRequest,
   Rect,
   ScreenObservation,
@@ -25,6 +27,20 @@ export class ReasonerSkipped extends Error {
     super(reason);
     this.name = "ReasonerSkipped";
   }
+}
+
+/** What an open goal is planned from: the learner's words, the app, and reference steps when some were found. */
+export interface PlanRequest {
+  goal: string;
+  app?: string;
+  /** Reference steps (the offline help, or the web when Settings allows it) as one <web> block of data. */
+  reference?: string;
+  language?: ReplyLanguage;
+}
+
+/** Plans an open goal into a Hode's steps, in the background while the learner works on the first one. */
+export interface PlannerProvider {
+  plan(request: PlanRequest, signal: AbortSignal): Promise<HodePlan>;
 }
 
 /** Local planners, Qwen3-VL, and (opt-in) Gemini all implement this. The Hode engine never sees which. */

@@ -44,6 +44,7 @@ import { PhonePerception, type OcrSegment } from "../features/phone/phone-percep
 import { loadPhonePrefs } from "../features/phone/prefs";
 import { GroundedPlannerProvider, LocalReasoningProvider } from "../providers/local-reasoner";
 import { TaskPackReasoningProvider } from "../providers/task-pack-reasoner";
+import { LocalPlanner } from "../providers/vision/plan";
 import { QwenVisionProvider } from "../providers/vision/qwen-vision-provider";
 import { TauriVisionStatus } from "../providers/vision/tauri-vision-status";
 import { connectionOf, type CapturedFrame } from "../providers/vision/types";
@@ -161,7 +162,9 @@ async function boot(): Promise<void> {
   let webAllowed = false;
   const howTo = createHowToLookup({ web: new TauriWebSearch(bus), webEnabled: () => webAllowed, onProgress: (progress) => bus.emit("web:search", progress) });
   const reference = spokenReference(howTo, (stop) => bus.on("web:cancel", stop));
-  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference });
+  // An open Teach Hode is planned in the background by the local model; it never waits on the plan.
+  const hodePlanner = new LocalPlanner({ connection: () => connectionOf(vision.current()) });
+  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference, planner: hodePlanner });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   const watchDot = screenWatch(activity);
   let hintedPack: string | undefined;

@@ -2,7 +2,7 @@ import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
 import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Rect, StepOutcome, TeachingContext } from "../../lib/types";
-import type { LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
+import type { LearningMemory, MemoryProvider, PerceptionAdapter, PlannerProvider, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { reasonWithFallback } from "../../providers/router";
 import { observeShellTargets } from "./shell";
 import { rememberedLevel } from "../memory/tracker";
@@ -23,6 +23,8 @@ export interface RuntimeDeps {
    * (the learner asked to look it up) and Settings allows it.
    */
   reference?: (question: string, app: string | undefined, signal: AbortSignal, options: { web: boolean }) => Promise<string | undefined>;
+  /** Plans open Teach Hodes in the background; without one, they're planned a step at a time. */
+  planner?: PlannerProvider;
 }
 
 async function* once(text: string): AsyncIterable<string> {
@@ -42,6 +44,8 @@ const OPEN_APP_TIMEOUT_MS = 60_000;
 /** After Hodey presses a control, the app gets this long to respond (a menu or dialog opening) before it's read. */
 export const PRESS_SETTLE_MS = 450;
 const CANT_PRESS = "Hodey can't click in this app, so this step is yours.";
+/** A lookup plus a local-model plan; past this, the Hode carries on a step at a time without one. */
+const PLAN_TIMEOUT_MS = 45_000;
 /** Muted, a line counts as said once it's been up this long per word (with a floor), the time to read it. */
 const MUTED_READ_MS_PER_WORD = 300;
 const MUTED_READ_MIN_MS = 2500;
@@ -207,6 +211,35 @@ export class HodeRuntime {
         return this.openApp(effect.app);
       case "observeShell":
         return this.observeShell();
+      case "planOpenGoal":
+        return this.planOpenGoal(effect);
+    }
+  }
+
+  /**
+   * Plans an open Hode in the background: reference steps first (the offline help, and the web when Settings
+   * allows it), then the local model. A failed plan is logged, and the Hode carries on a step at a time.
+   */
+  private planOpenGoal({ planId, goal, app, language }: Extract<HodeEffect, { type: "planOpenGoal" }>): void {
+    const planner = this.deps.planner;
+    if (!planner) return;
+    const signal = AbortSignal.timeout(PLAN_TIMEOUT_MS);
+    this.planReference(goal, app, signal)
+      .then((reference) => planner.plan({ goal, app, reference, language }, signal))
+      .then(
+        (plan) => this.dispatch({ type: "PLAN_READY", planId, goal, plan }),
+        (error: unknown) => console.error("Couldn't plan the Hode; Hodey plans it a step at a time", error),
+      );
+  }
+
+  /** Reference steps for planning a goal; without them (none found, or the lookup failed) the model plans from what it knows. */
+  private async planReference(goal: string, app: string | undefined, signal: AbortSignal): Promise<string | undefined> {
+    if (!this.deps.reference) return undefined;
+    try {
+      return await this.deps.reference(goal, app, signal, { web: true });
+    } catch (error) {
+      console.error("Looking up the goal failed; Hodey plans it from what it knows", error);
+      return undefined;
     }
   }
 
