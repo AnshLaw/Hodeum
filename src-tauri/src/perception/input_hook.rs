@@ -12,7 +12,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, SetWindowsHookExW,
     UnhookWindowsHookEx, WindowFromPoint, KBDLLHOOKSTRUCT, LLKHF_ALTDOWN, MSG, MSLLHOOKSTRUCT, WH_KEYBOARD_LL,
-    WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONUP, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONUP,
+    WH_MOUSE_LL, LLMHF_INJECTED, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONUP, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONUP,
     XBUTTON1,
 };
 #[cfg(test)]
@@ -94,6 +94,11 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     if code >= 0 {
         // SAFETY: for WH_MOUSE_LL, lparam points to an MSLLHOOKSTRUCT for the duration of the call.
         let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+        // Synthesized clicks (Hodey's own, in Agent · Do it for me) are not the learner's actions.
+        if info.flags & LLMHF_INJECTED != 0 {
+            // SAFETY: forwarding the unmodified hook arguments, as required.
+            return unsafe { CallNextHookEx(None, code, wparam, lparam) };
+        }
         let point: POINT = info.pt;
         let x_button = (info.mouseData >> 16) as u16;
         let at = PointDto { x: f64::from(point.x), y: f64::from(point.y) };

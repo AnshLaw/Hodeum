@@ -149,7 +149,7 @@ function topBody(props: SurfaceProps, view: NotchView, size: NotchSize, peek: bo
   const { menuOpen, skills, onControl } = props;
   if (menuOpen) return <SurfaceMenu {...props} />;
   if (skills?.open) return <SkillsPanel skills={skills} />;
-  if (view.mode === "goal") return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
+  if (view.mode === "goal") return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} defaultAgentStyle={props.defaultAgentStyle} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   if (peek) return null;
   return <NotchContent view={view} expanded={EXPANDED_SIZES.includes(size)} fallbackDetail={props.bootNotice} onControl={onControl} extra={successExtra(props)} />;
 }
@@ -293,9 +293,12 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
       setMenuOpen(false);
       if (state.phase === "goal_entry") runtime.dispatch({ type: "DISMISS" });
     },
-    onSubmitGoal: (goal, mode) => runtime.dispatch(goalEvent(goal, packs, visionStatus?.state === "ready", mode)),
+    onSubmitGoal: (goal, mode, agentStyle) => runtime.dispatch(goalEvent(goal, packs, visionStatus?.state === "ready", mode, agentStyle)),
     hodeMode: state.mode,
+    hodeAgentStyle: state.agentStyle,
     defaultMode: runtime.getDefaultMode(),
+    defaultAgentStyle: runtime.getDefaultAgentStyle(),
+    onSetAgentStyle: (style) => runtime.dispatch({ type: "SET_AGENT_STYLE", style }),
     hodeActive: state.phase !== "idle" && state.phase !== "goal_entry",
     onSetMode: (mode) => runtime.dispatch({ type: "SET_MODE", mode }),
     bus,

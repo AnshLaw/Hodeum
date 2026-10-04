@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { HODEY_KEYS } from "../lib/keys";
-import { HODE_MODES } from "../lib/types";
+import { AGENT_STYLES, HODE_MODES } from "../lib/types";
 
 const MIN_RATE = 0.6;
 const MAX_RATE = 1.6;
@@ -112,6 +112,8 @@ export const settingsSchema = z.object({
   }),
   /** How new Hodes run by default; each Hode can still pick its own. */
   mode: z.enum(HODE_MODES).catch("teach").default("teach"),
+  /** Agent mode guides every step, or does them and stops at checkpoints for the learner to check. */
+  agentStyle: z.enum(AGENT_STYLES).catch("guide").default("guide"),
   /** How long Hodey waits without progress before offering more help. */
   stuckSeconds: z.number().int().min(MIN_STUCK_SECONDS).max(MAX_STUCK_SECONDS),
   appearance: appearanceSchema,
@@ -129,6 +131,7 @@ export type CloudSettings = Settings["cloud"];
 export const DEFAULT_SETTINGS: Settings = {
   voice: { enabled: true, rate: 1.05, name: "", conversation: true, handsFree: false, language: "auto", hindiScript: "devanagari", hindiVoice: DEFAULT_HINDI_VOICE, wakeWords: [] },
   mode: "teach",
+  agentStyle: "guide",
   stuckSeconds: 12,
   appearance: { ...DEFAULT_APPEARANCE },
   webSearch: false,
@@ -145,7 +148,7 @@ export function parseSettings(raw: unknown): Settings {
     const result = settingsSchema.shape[key].safeParse(value[key]);
     return (result.success ? result.data : DEFAULT_SETTINGS[key]) as Settings[K];
   };
-  return { voice: pick("voice"), mode: pick("mode"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance"), webSearch: pick("webSearch"), hodeyKey: pick("hodeyKey"), cloud: pick("cloud") };
+  return { voice: pick("voice"), mode: pick("mode"), agentStyle: pick("agentStyle"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance"), webSearch: pick("webSearch"), hodeyKey: pick("hodeyKey"), cloud: pick("cloud") };
 }
 
 export interface SettingsStore {

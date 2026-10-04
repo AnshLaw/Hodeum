@@ -58,6 +58,8 @@ export function Stage({ env }: { env: StageEnvironment }) {
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const app = env.apps[appId];
   useStageHotkeys(env.bus, env.shell);
+  // Agent · Do it for me presses the practice app itself; redraw it.
+  useEffect(() => env.perception.onPressed(rerender), [env.perception]);
 
   const select = (id: StageAppId) => {
     env.select(id);

@@ -70,6 +70,7 @@ pub fn run() {
             surfaces::set_overlay_interactive,
             surfaces::monitor_info,
             perception::observe,
+            perception::perform_click,
             perception::capture_active_window,
             phone::ocr_frame,
             phone::airplay::airplay_start,

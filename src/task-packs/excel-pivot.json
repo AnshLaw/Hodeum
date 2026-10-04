@@ -44,7 +44,8 @@
       },
       "explain": "A PivotTable summarizes rows of data into totals you can rearrange.",
       "success": { "kind": "element_visible", "names": ["PivotTable from table or range", "Create PivotTable"] },
-      "mistakes": []
+      "mistakes": [],
+      "checkpoint": true
     },
     {
       "id": "confirm-range",

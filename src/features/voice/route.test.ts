@@ -42,6 +42,10 @@ describe("routeUtterance", () => {
     expect(route(guiding, "walk me through every step")).toEqual([{ type: "SET_MODE", mode: "agent" }]);
     expect(route(guiding, "switch to teach mode")).toEqual([{ type: "SET_MODE", mode: "teach" }]);
     expect(route(guiding, "help mode please")).toEqual([{ type: "SET_MODE", mode: "help" }]);
+    expect(route(guiding, "Hodey, can you do it for me")).toEqual([{ type: "SET_AGENT_STYLE", style: "execute" }]);
+    expect(route(guiding, "just guide me")).toEqual([{ type: "SET_AGENT_STYLE", style: "guide" }]);
+    expect(route(guiding, "आप कर दो")).toEqual([{ type: "SET_AGENT_STYLE", style: "execute" }]);
+    expect(route(guiding, "tum kar do")).toEqual([{ type: "SET_AGENT_STYLE", style: "execute" }]);
     expect(route(guiding, "show me all the steps")).toEqual([{ type: "SHOW_ALL_STEPS" }]);
   });
 

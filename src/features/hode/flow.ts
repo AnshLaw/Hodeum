@@ -28,16 +28,17 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
   const goal = e.goal.trim();
   if (s.phase !== "goal_entry" || goal === "") return noop(s);
   const mode = e.mode ?? s.mode;
+  const agentStyle = e.agentStyle ?? s.agentStyle;
   if (!e.pack && e.openAllowed) {
     const focus: HodeEffect[] = e.app ? [{ type: "focusApp", app: e.app }] : [];
     const level = OPEN_START[mode];
-    return { state: { ...s, goal, app: e.app, mode, open: true, level, notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
+    return { state: { ...s, goal, app: e.app, mode, agentStyle, open: true, level, notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
   }
   const { noPack } = spoken(s.language);
   if (!e.pack) return { state: { ...s, goal, notice: noPack }, effects: [{ type: "say", text: noPack }] };
   // Bring the pack's app forward first, so Hodey reads Excel rather than whatever had focus.
   const pack = localizePack(e.pack, s.language);
-  const begun = beginStep({ ...s, goal, mode, pack, app: pack.app, notice: undefined }, 0);
+  const begun = beginStep({ ...s, goal, mode, agentStyle, pack, app: pack.app, notice: undefined }, 0);
   return { ...begun, effects: [{ type: "focusApp", app: e.pack.app }, ...begun.effects] };
 }
 
@@ -80,6 +81,8 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       stuck: undefined,
       surprise: undefined,
       actedWhilePreparing: false,
+      handedBack: false,
+      hodeyTries: 0,
     },
     effects: [{ type: "loadSkill", skillId: step.skill }],
   };
@@ -169,7 +172,7 @@ function lineFor(s: HodeState, action: TeachingAction): string {
   return [s.pendingAck ?? "", instruction].filter((part) => part !== "").join(" ");
 }
 
-function showGuidance(s: HodeState, shown: TeachingAction): Transition {
+export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
   const action = withWhy(s, shown);
   const primitives = overlayOf(s, action);
   const effects: HodeEffect[] = [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }];

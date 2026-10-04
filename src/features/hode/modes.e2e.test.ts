@@ -184,7 +184,7 @@ function expectAgentStep(h: Harness, journey: Journey, index: number, said: stri
   const level = START_LEVELS.agent[journey.name][index];
   const s = step(journey, index);
   expect(h.state()).toMatchObject({ phase: "guiding", stepIndex: index, level, mode: "agent" });
-  const ack = expectAck(h, journey, index, EN.stepDoneLight, "Agent");
+  const ack = expectAck(h, journey, index, EN.stepDoneLight, "Agent · Guide me");
   expect(said).toEqual([line(ack, s.speech[level])]);
   expect(h.overlays.at(-1)).toBe(level === "demonstrate" ? FULL : HIGHLIGHT);
   const view = h.view();

@@ -1,5 +1,6 @@
 import { padRect } from "../../lib/coords";
 import { requestReason } from "./flow";
+import { continueAfterCheckpoint, takeOver } from "./execute";
 import { clampToMode } from "./policy";
 import { COPY } from "../../lib/copy";
 import { spoken } from "../../lib/spoken";
@@ -15,11 +16,13 @@ import {
   type Transition,
 } from "./model";
 
-const IN_HODE: HodePhase[] = ["observing", "reasoning", "guiding", "answering", "recovering"];
+const IN_HODE: HodePhase[] = ["observing", "reasoning", "guiding", "answering", "recovering", "acting"];
+/** A checkpoint is already Hodey waiting on the learner, so it isn't paused. */
 const PAUSABLE: HodePhase[] = IN_HODE;
 const STOP_EVERYTHING: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "stopSpeech" }];
 
 function resumeTarget(s: HodeState): HodePhase {
+  if (s.phase === "checkpoint") return "checkpoint";
   if ((s.pack || s.open) && IN_HODE.includes(s.phase)) return "observing";
   return s.phase === "goal_entry" ? "goal_entry" : "idle";
 }
@@ -43,8 +46,21 @@ function withStuckReset(t: Transition): Transition {
 export function onSetMode(s: HodeState, e: EventOf<"SET_MODE">): Transition {
   if (s.mode === e.mode) return noop(s);
   const changed: HodeState = { ...s, mode: e.mode, level: clampToMode(e.mode, s.level), showAllSteps: false };
-  if (s.phase !== "guiding" || !s.observation) return { state: changed, effects: [] };
+  return replan(s, changed);
+}
+
+/** Guiding or about to press: plan the step again under the new mode (a pending press is dropped). */
+function replan(s: HodeState, changed: HodeState): Transition {
+  if ((s.phase !== "guiding" && s.phase !== "acting") || !s.observation) return { state: changed, effects: [] };
   return withStuckReset(requestReason(changed));
+}
+
+/** "Do it for me" or "guide me": agent mode in that style. Asking Hodey to do it again clears a handed-back step. */
+export function onSetAgentStyle(s: HodeState, e: EventOf<"SET_AGENT_STYLE">): Transition {
+  if (s.mode === "agent" && s.agentStyle === e.style) return noop(s);
+  const changed: HodeState = { ...s, mode: "agent", agentStyle: e.style, level: clampToMode("agent", s.level), showAllSteps: false, handedBack: false, hodeyTries: 0 };
+  if (s.phase === "acting" && e.style === "guide") return takeOver(changed);
+  return replan(s, changed);
 }
 
 export function onShowAllSteps(s: HodeState): Transition {
@@ -116,7 +132,9 @@ export function onPause(s: HodeState): Transition {
   return { state: { ...s, phase: "paused", resumePhase: resumeTarget(s), requestId: s.requestId + 1 }, effects: STOP_EVERYTHING };
 }
 
+/** "Continue": out of a pause, or past a checkpoint once the learner has checked Hodey's work. */
 export function onResume(s: HodeState): Transition {
+  if (s.phase === "checkpoint") return continueAfterCheckpoint(s);
   return s.phase === "paused" ? resume(s) : noop(s);
 }
 

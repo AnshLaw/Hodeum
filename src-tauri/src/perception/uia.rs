@@ -4,6 +4,7 @@ use uiautomation::variants::Value;
 use uiautomation::{UIAutomation, UIElement, UITreeWalker};
 
 use super::model::{normalize_role, ElementDto, RectDto};
+use super::press::{self, PressButton};
 
 pub const MAX_ELEMENTS: usize = 1500;
 pub const MAX_DEPTH: usize = 40;
@@ -73,6 +74,11 @@ impl UiaReader {
             }
         }
         Ok(out)
+    }
+
+    /// Agent · Do it for me: clicks the control Hodey saw at `bounds`, if it's still there.
+    pub fn press(&self, bounds: &RectDto, button: PressButton) -> Result<(), String> {
+        press::press(&self.automation, &self.walker, bounds, button)
     }
 
     fn push_children(&self, element: &UIElement, depth: usize, stack: &mut Vec<(UIElement, usize)>) {

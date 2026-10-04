@@ -19,7 +19,8 @@
       },
       "explain": "Right-clicking opens a menu of actions for whatever you clicked.",
       "success": { "kind": "element_visible", "names": ["Compress to..."] },
-      "mistakes": []
+      "mistakes": [],
+      "press": "right"
     },
     {
       "id": "choose-compress",

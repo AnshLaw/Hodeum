@@ -13,7 +13,8 @@ export interface HodeRecord {
   outcome?: HodeOutcome;
 }
 
-export type HodeEventKind = "step_done" | "mistake" | "hint" | "stuck" | "asked" | "paused";
+/** `hodey_step`: Agent · Do it for me did the step; it never counts as the learner's. */
+export type HodeEventKind = "step_done" | "hodey_step" | "mistake" | "hint" | "stuck" | "asked" | "paused";
 
 export interface HodeEventRecord {
   hodeId: string;

@@ -1,4 +1,4 @@
-import type { Rect, ScreenObservation, Surface } from "../lib/types";
+import type { PerformRequest, Rect, ScreenObservation, Surface } from "../lib/types";
 import type { PerceptionAdapter } from "./interfaces";
 
 export interface WatchablePerception extends PerceptionAdapter {
@@ -33,6 +33,12 @@ export class SurfacePerception implements PerceptionAdapter {
 
   async focusApp(app: string): Promise<boolean> {
     return (await this.adapters[this.active].focusApp?.(app)) ?? false;
+  }
+
+  async perform(request: PerformRequest): Promise<void> {
+    const adapter = this.adapters[this.active];
+    if (!adapter.perform) throw new Error(`Hodey can't click on the ${this.active === "phone" ? "iPhone" : "desktop"} yet.`);
+    return adapter.perform(request);
   }
 
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void {

@@ -1,4 +1,4 @@
-import type { LearnerInput, Rect, ScreenObservation } from "../lib/types";
+import type { LearnerInput, PerformRequest, Rect, ScreenObservation } from "../lib/types";
 import type { PerceptionAdapter } from "./interfaces";
 
 /** Must match `LEARNER_ACTION_EVENT` in src-tauri/src/perception/input_hook.rs. */
@@ -34,6 +34,11 @@ export class NativePerception implements PerceptionAdapter {
 
   async focusApp(app: string): Promise<boolean> {
     return (await this.bridge.invoke<{ title: string } | null>("focus_app", { app })) !== null;
+  }
+
+  /** Clicks the control through Windows, after checking it's still the one Hodey saw at those bounds. */
+  perform({ target, button }: PerformRequest): Promise<void> {
+    return this.bridge.invoke<void>("perform_click", { bounds: target.bounds, button });
   }
 
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void {

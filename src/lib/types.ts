@@ -2,9 +2,15 @@ import type { ReplyLanguage } from "./language";
 export const ASSISTANCE_LEVELS = ["demonstrate", "guide", "hint", "observe", "independent"] as const;
 export type AssistanceLevel = (typeof ASSISTANCE_LEVELS)[number];
 
-/** How Hodey runs a Hode: teach (learn by doing), help (stand by until asked), agent (guide every step). */
+/** How Hodey runs a Hode: teach (learn by doing), help (stand by until asked), agent (guide or do every step). */
 export const HODE_MODES = ["teach", "help", "agent"] as const;
 export type HodeMode = (typeof HODE_MODES)[number];
+
+/** Agent mode's two styles: Hodey guides every step, or does them itself and stops at checkpoints for the learner to check. */
+export const AGENT_STYLES = ["guide", "execute"] as const;
+export type AgentStyle = (typeof AGENT_STYLES)[number];
+
+export type MouseButton = "left" | "right";
 
 export interface Rect {
   x: number;
@@ -56,7 +62,7 @@ export interface UiElement {
  * and undo/back shortcuts. Only these are reported; nothing typed is ever recorded.
  */
 export type LearnerInput =
-  | { kind: "click"; at: Point; button: "left" | "right" }
+  | { kind: "click"; at: Point; button: MouseButton }
   | { kind: "undo" }
   | { kind: "back" };
 
@@ -91,6 +97,10 @@ export interface TaskStep {
   explain: string;
   success: StateSignal;
   mistakes: { signal: StateSignal; correction: string }[];
+  /** How the target is pressed; left when absent. */
+  press?: MouseButton;
+  /** Agent · Do it for me pauses after this step so the learner can check Hodey's work. */
+  checkpoint?: boolean;
 }
 
 export interface TaskPack {
@@ -109,6 +119,12 @@ export interface ActionTarget {
   bounds: Rect;
   confidence: number;
   label: string;
+}
+
+/** Agent · Do it for me: the control Hodey presses for the learner, as last seen on screen. */
+export interface PerformRequest {
+  target: ActionTarget;
+  button: MouseButton;
 }
 
 /** `complete` ends an open-ended Hode when the screen shows the goal is reached. */

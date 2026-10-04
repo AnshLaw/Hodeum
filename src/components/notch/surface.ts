@@ -1,4 +1,4 @@
-import type { HodeMode } from "../../lib/types";
+import type { AgentStyle, HodeMode } from "../../lib/types";
 import type { NativeShell } from "../../lib/shell";
 import type { TaskPack } from "../../lib/types";
 import type { DockController } from "./use-dock";
@@ -29,13 +29,17 @@ export interface SurfaceProps {
   onToggleMute: () => void;
   onToggleMenu: () => void;
   onGrip: () => void;
-  onSubmitGoal: (goal: string, mode: HodeMode) => void;
+  onSubmitGoal: (goal: string, mode: HodeMode, agentStyle: AgentStyle) => void;
   /** The running Hode's mode, and the learner's default for a new one. */
   hodeMode: HodeMode;
   defaultMode: HodeMode;
+  /** The running Hode's agent style, and the learner's default for a new one. */
+  hodeAgentStyle: AgentStyle;
+  defaultAgentStyle: AgentStyle;
   /** A Hode is running, so the mode can be switched from the menu. */
   hodeActive: boolean;
   onSetMode: (mode: HodeMode) => void;
+  onSetAgentStyle: (style: AgentStyle) => void;
   activity: ActivityState;
   micStatus: SpeechInputStatus;
   /** A short message (e.g. why the mic can't start) shown for a few seconds. */

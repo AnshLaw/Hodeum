@@ -20,7 +20,7 @@ describe("notchView", () => {
 
   it("shows Hodey's instruction, step progress, and prerequisites on step one", () => {
     const view = notchView(guiding());
-    expect(view).toMatchObject({ title: "Click Insert. I highlighted it.", eyebrow: "Step 1 of 2 · Agent", detail: "Open the workbook.", hintLabel: COPY.hint });
+    expect(view).toMatchObject({ title: "Click Insert. I highlighted it.", eyebrow: "Step 1 of 2 · Agent · Guide me", detail: "Open the workbook.", hintLabel: COPY.hint });
     expect(view.controls).toContain("let_me_try");
   });
 
@@ -29,6 +29,21 @@ describe("notchView", () => {
     expect(view.title).toBe("Your turn: Open the Insert tab");
     expect(view.hintLabel).toBe(COPY.needHint);
     expect(view.controls).not.toContain("let_me_try");
+  });
+
+  it("shows what Hodey is clicking, with time to take over, in Do it for me", () => {
+    const view = notchView(guiding({ phase: "acting", agentStyle: "execute" }));
+    expect(view).toMatchObject({ title: COPY.acting("Insert", false), eyebrow: "Step 1 of 2 · Agent · Do it for me", busy: true, controls: ["take_over", "pause", "end"] });
+  });
+
+  it("asks the learner to check Hodey's work at a checkpoint", () => {
+    const view = notchView(guiding({ phase: "checkpoint", agentStyle: "execute", stepIndex: 1, action: undefined }));
+    expect(view).toMatchObject({ title: COPY.checkpointTitle, detail: COPY.checkpointDetail(PACK.steps[0].objective), controls: ["approve", "take_over", "point", "end"] });
+  });
+
+  it("says Hodey did the clicking when no skill was the learner's", () => {
+    expect(notchView({ ...initialState, phase: "success", hodeyDid: 2 }).detail).toBe(COPY.hodeyDidIt);
+    expect(notchView({ ...initialState, phase: "success", hodeyDid: 1, learnedSkills: ["excel.pivot.create"] }).detail).toBe(COPY.skillLearned);
   });
 
   it("surfaces the failure message with recovery controls", () => {

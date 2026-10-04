@@ -2,6 +2,7 @@ pub mod capture;
 pub mod foreground;
 pub mod input_hook;
 pub mod model;
+mod press;
 mod uia;
 
 use std::sync::atomic::AtomicIsize;
@@ -16,6 +17,7 @@ use crate::dock::geometry::PxRect;
 use crate::surfaces;
 
 use model::{app_name, Observation, RectDto};
+use press::PressButton;
 use uia::UiaReader;
 
 /// Logged so slow trees (large workbooks) show up during rehearsal.
@@ -24,9 +26,10 @@ const SLOW_SNAPSHOT_MS: u128 = 300;
 /// An observation plus the monitor the learner's app is on, so the overlay can follow it.
 type Observed = (Observation, Option<PxRect>);
 
-struct Job {
-    region: Option<RectDto>,
-    reply: mpsc::Sender<Result<Observed, String>>,
+/// Work for the UI Automation thread: read the learner's app, or click a control in it.
+enum Job {
+    Observe { region: Option<RectDto>, reply: mpsc::Sender<Result<Observed, String>> },
+    Press { bounds: RectDto, button: PressButton, reply: mpsc::Sender<Result<(), String>> },
 }
 
 /// UI Automation needs a COM (MTA) thread of its own; all reads are serialized through it.
@@ -66,9 +69,16 @@ impl Perception {
 fn worker(jobs: mpsc::Receiver<Job>, last_external: Arc<AtomicIsize>) {
     let reader = UiaReader::new().map_err(|e| format!("UI Automation is unavailable: {e}"));
     for job in jobs {
-        let result = reader.as_ref().map_err(Clone::clone).and_then(|r| observe_once(r, &last_external, job.region));
+        let reader = reader.as_ref().map_err(Clone::clone);
         // The caller may have given up (window closed); dropping the result is correct then.
-        let _ = job.reply.send(result);
+        match job {
+            Job::Observe { region, reply } => {
+                let _ = reply.send(reader.and_then(|r| observe_once(r, &last_external, region)));
+            }
+            Job::Press { bounds, button, reply } => {
+                let _ = reply.send(reader.and_then(|r| r.press(&bounds, button)));
+            }
+        }
     }
 }
 
@@ -99,7 +109,7 @@ pub async fn observe(app: AppHandle, region: Option<RectDto>, state: State<'_, P
         .jobs
         .lock()
         .map_err(|e| e.to_string())?
-        .send(Job { region, reply })
+        .send(Job::Observe { region, reply })
         .map_err(|_| "The screen reader stopped.".to_string())?;
     let (observation, monitor) = tauri::async_runtime::spawn_blocking(move || result.recv().map_err(|_| "The screen reader stopped.".to_string())?)
         .await
@@ -111,6 +121,22 @@ pub async fn observe(app: AppHandle, region: Option<RectDto>, state: State<'_, P
         }
     }
     Ok(observation)
+}
+
+/// Agent · Do it for me: clicks the control Hodey last saw at `bounds` in the learner's app.
+/// Refuses (with a message for the learner) when something else is there now.
+#[tauri::command]
+pub async fn perform_click(bounds: RectDto, button: PressButton, state: State<'_, Perception>) -> Result<(), String> {
+    let (reply, result) = mpsc::channel();
+    state
+        .jobs
+        .lock()
+        .map_err(|e| e.to_string())?
+        .send(Job::Press { bounds, button, reply })
+        .map_err(|_| "The screen reader stopped.".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || result.recv().map_err(|_| "The screen reader stopped.".to_string())?)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Mirrors `CapturedFrame` in `src/providers/vision/types.ts`.

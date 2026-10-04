@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { SETTINGS_LIMITS, type Settings } from "../../data/settings";
-import { MODE_COPY } from "../../lib/modes";
-import { HODE_MODES } from "../../lib/types";
+import { AGENT_STYLE_COPY, MODE_COPY } from "../../lib/modes";
+import { AGENT_STYLES, HODE_MODES } from "../../lib/types";
 import type { VisionStatus } from "../../providers/vision/types";
 import type { AppServices, VoicePreview } from "../services";
 import { AccountSettings } from "./settings/AccountSettings";
@@ -46,6 +46,18 @@ function HodeySettings({ settings, natural, update }: { settings: Settings; natu
           <button key={mode} type="button" role="radio" aria-checked={settings.mode === mode} className="hpreset" onClick={() => update({ ...settings, mode })}>
             <strong>{MODE_COPY[mode].title} mode</strong>
             <span className="hmuted">{MODE_COPY[mode].detail}</span>
+          </button>
+        ))}
+      </div>
+      <span className="hsetting__text hmode-label">
+        <strong id="agent-style-label">In Agent mode</strong>
+        <span className="hmuted">Mid-Hode, say "do it for me" or "guide me", or say "let me try" to take over.</span>
+      </span>
+      <div className="hpresets" role="radiogroup" aria-labelledby="agent-style-label">
+        {AGENT_STYLES.map((agentStyle) => (
+          <button key={agentStyle} type="button" role="radio" aria-checked={settings.agentStyle === agentStyle} className="hpreset" onClick={() => update({ ...settings, agentStyle })}>
+            <strong>{AGENT_STYLE_COPY[agentStyle].title}</strong>
+            <span className="hmuted">{AGENT_STYLE_COPY[agentStyle].detail}</span>
           </button>
         ))}
       </div>

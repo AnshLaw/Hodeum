@@ -1,5 +1,6 @@
 import { COPY } from "./copy";
 import type { ReplyLanguage } from "./language";
+import type { MouseButton } from "./types";
 
 /** Everything Hodey says that isn't from a task pack or the vision model, per language. */
 export interface SpokenCopy {
@@ -31,6 +32,16 @@ export interface SpokenCopy {
   /** Said instead of guidance while an unexpected dialog is in the way. */
   surpriseDialog: (title: string) => string;
   targetMissing: (target: string) => string;
+  /** Agent · Do it for me: said while Hodey is about to press a control, so the learner can stop it. */
+  doing: (label: string, button: MouseButton) => string;
+  /** Agent · Do it for me: Hodey finished `objective` and waits for the learner to check it. */
+  checkpoint: (objective: string) => string;
+  /** `checkpoint` for an open-ended Hode, which has no named steps. */
+  checkpointOpen: string;
+  /** Hodey couldn't press this step's control safely; the learner does this one. */
+  overToYou: string;
+  /** Hodey did the last step; the learner checks the result. */
+  hodeyFinished: string;
 }
 
 const ENGLISH: SpokenCopy = {
@@ -55,6 +66,11 @@ const ENGLISH: SpokenCopy = {
   undoLoop: "No problem. Let's take it one step at a time.",
   surpriseDialog: (title) => `"${title}" opened, and it isn't part of this step. Close it, then we'll carry on.`,
   targetMissing: (target) => `I can't see ${target} on the screen yet. Let's find it together.`,
+  doing: (label, button) => (button === "right" ? `Right-clicking ${label}.` : `Clicking ${label}.`),
+  checkpoint: (objective) => `Done: ${objective}. Take a look. Say continue when it looks right, or "let me try" to take over.`,
+  checkpointOpen: `I've done a few steps. Take a look. Say continue when it looks right, or "let me try" to take over.`,
+  overToYou: "I can't safely click this one myself, so it's your turn.",
+  hodeyFinished: "All done. Check the result and make sure it's what you wanted.",
 };
 
 /** Gender-neutral on purpose: the learner picks a female or male Hindi voice. */
@@ -80,6 +96,11 @@ const HINDI: SpokenCopy = {
   undoLoop: "कोई बात नहीं। चलिए, एक-एक कदम करके चलते हैं।",
   surpriseDialog: (title) => `"${title}" खुल गया है, जो इस स्टेप का हिस्सा नहीं है। उसे बंद कीजिए, फिर हम आगे बढ़ेंगे।`,
   targetMissing: (target) => `मुझे स्क्रीन पर अभी ${target} नहीं दिख रहा। चलिए, साथ में ढूँढते हैं।`,
+  doing: (label, button) => (button === "right" ? `${label} पर राइट-क्लिक कर रहा हूँ।` : `${label} पर क्लिक कर रहा हूँ।`),
+  checkpoint: (objective) => `हो गया: ${objective}। एक बार देख लीजिए। सही लगे तो "आगे बढ़ो" कहिए, या खुद करना हो तो "मुझे करने दो"।`,
+  checkpointOpen: `मैंने कुछ स्टेप कर दिए हैं। एक बार देख लीजिए। सही लगे तो "आगे बढ़ो" कहिए, या खुद करना हो तो "मुझे करने दो"।`,
+  overToYou: "ये वाला मैं सुरक्षित तरीके से खुद क्लिक नहीं कर सकता, इसलिए अब आपकी बारी है।",
+  hodeyFinished: "सब हो गया। नतीजा देख लीजिए कि यही आप चाहते थे।",
 };
 
 /** Hindi words in Devanagari, English words in English; the voice gets Devanagari via `speakable`. */
@@ -105,6 +126,11 @@ const HINGLISH: SpokenCopy = {
   undoLoop: "कोई बात नहीं। चलिए, एक-एक step करके चलते हैं।",
   surpriseDialog: (title) => `"${title}" खुल गया है, जो इस step का हिस्सा नहीं है। उसे close कीजिए, फिर हम आगे बढ़ेंगे।`,
   targetMissing: (target) => `मुझे screen पर अभी ${target} नहीं दिख रहा। चलिए, साथ में ढूँढते हैं।`,
+  doing: (label, button) => (button === "right" ? `${label} पर right-click कर रहा हूँ।` : `${label} पर click कर रहा हूँ।`),
+  checkpoint: (objective) => `हो गया: ${objective}। एक बार check कर लीजिए। सही लगे तो "continue" कहिए, या खुद करना हो तो "मुझे करने दो"।`,
+  checkpointOpen: `मैंने कुछ steps कर दिए हैं। एक बार check कर लीजिए। सही लगे तो "continue" कहिए, या खुद करना हो तो "मुझे करने दो"।`,
+  overToYou: "ये वाला मैं safely खुद click नहीं कर सकता, इसलिए अब आपकी बारी है।",
+  hodeyFinished: "सब हो गया। Result check कर लीजिए कि यही आप चाहते थे।",
 };
 
 const BY_LANGUAGE: Record<ReplyLanguage, SpokenCopy> = { en: ENGLISH, hi: HINDI, hinglish: HINGLISH };

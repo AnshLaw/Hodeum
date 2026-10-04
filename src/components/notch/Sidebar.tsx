@@ -48,7 +48,7 @@ function SidebarBody(props: SurfaceProps) {
   if (menuOpen) return <SurfaceMenu {...props} />;
   if (skills?.open) return <SkillsPanel skills={skills} />;
   if (view.mode === "goal") {
-    return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
+    return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} defaultAgentStyle={props.defaultAgentStyle} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   }
   if (view.mode === "idle") return <IdleStart onControl={onControl} notice={view.detail ?? props.bootNotice} />;
   if (view.busy) {
