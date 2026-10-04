@@ -18,6 +18,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/0002_learning.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "chat_web_sources",
+            sql: include_str!("../migrations/0003_chat_web.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

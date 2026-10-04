@@ -48,6 +48,7 @@ interface MessageRow {
   role: string;
   content: string;
   context: string | null;
+  web: string | null;
   at: string;
 }
 
@@ -81,8 +82,18 @@ function eventFromRow(row: EventRow): HodeEventRecord {
 
 const chatFromRow = (row: ChatRow): ChatThread => ({ id: row.id, title: row.title, createdAt: row.created_at, updatedAt: row.updated_at });
 
+function webFromColumn(json: string | null): ChatMessage["web"] | null {
+  if (json === null) return null;
+  try {
+    return JSON.parse(json) as ChatMessage["web"];
+  } catch (error) {
+    console.error("Ignoring unreadable web sources on a chat message", error);
+    return null;
+  }
+}
+
 function messageFromRow(row: MessageRow): ChatMessage {
-  return { id: row.id, chatId: row.chat_id, role: row.role as ChatRole, content: row.content, ...optional("context", row.context), at: row.at };
+  return { id: row.id, chatId: row.chat_id, role: row.role as ChatRole, content: row.content, ...optional("context", row.context), ...optional("web", webFromColumn(row.web)), at: row.at };
 }
 
 /** Local learner progress (Tauri only). No screenshots, audio or transcripts are stored. */
@@ -174,7 +185,7 @@ export class SqliteChatStore implements ChatStore {
   }
 
   async append(message: ChatMessage): Promise<void> {
-    await this.db.execute("INSERT INTO chat_messages (id, chat_id, role, content, context, at) VALUES ($1, $2, $3, $4, $5, $6)", [message.id, message.chatId, message.role, message.content, message.context ?? null, message.at]);
+    await this.db.execute("INSERT INTO chat_messages (id, chat_id, role, content, context, web, at) VALUES ($1, $2, $3, $4, $5, $6, $7)", [message.id, message.chatId, message.role, message.content, message.context ?? null, message.web ? JSON.stringify(message.web) : null, message.at]);
     await this.db.execute("UPDATE chats SET updated_at = $1 WHERE id = $2", [message.at, message.chatId]);
   }
 

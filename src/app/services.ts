@@ -3,6 +3,7 @@ import type { TaskPack } from "../lib/types";
 import type { ChatMessage, ChatStore, LearningStore } from "../data/types";
 import type { SettingsStore } from "../data/settings";
 import type { CapturedFrame, VisionStatusSource } from "../providers/vision/types";
+import type { WebSearch, WebSearchSource } from "../providers/web/types";
 
 /** An open app window the learner can attach to a chat as context. */
 export interface WindowInfo {
@@ -20,7 +21,9 @@ export interface WindowSource {
 
 /** Streams Hodey's reply to a chat, optionally looking at an attached window. */
 export interface ChatProvider {
-  reply(history: ChatMessage[], frame: CapturedFrame | undefined, signal: AbortSignal): AsyncIterable<string>;
+  reply(history: ChatMessage[], frame: CapturedFrame | undefined, signal: AbortSignal, web?: WebSearch): AsyncIterable<string>;
+  /** A generic web query for the latest message, decided locally; undefined when none is needed. */
+  searchQuery?(history: ChatMessage[], frame: CapturedFrame | undefined, signal: AbortSignal): Promise<string | undefined>;
 }
 
 export interface AppWindowControls {
@@ -39,6 +42,8 @@ export interface AppServices {
   chat?: ChatProvider;
   windows?: WindowSource;
   vision?: VisionStatusSource;
+  /** Opt-in (Settings > webSearch); only scrubbed queries leave the PC. */
+  web?: WebSearchSource;
   window: AppWindowControls;
   /** Why chat or window context isn't available here (e.g. the browser stage has no local model). */
   limitation?: string;

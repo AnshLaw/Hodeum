@@ -20,6 +20,7 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 **Hodey, where you want it**
 - **Notch, sidebar, or hidden**: Hodey sits at the top centre, or on the left or right as a sidebar. Drag it by its face to re-dock, or use the ⋯ menu, the tray icon, or Settings.
 - **Dynamic island**: the top notch changes shape with what Hodey is doing. It's a pill when idle and shrinks to an orb around Hodey's face while it looks or thinks; the orb shows a sweeping ring and the green dot while it reads the screen. When the next step is ready it springs open into a card.
+- **The right app**: starting a Hode brings its app forward (a task pack's app, or one an open goal names, like "…in Word"), so Hodey reads and highlights there and not in whatever had focus. If you're in another app, Hodey asks you to open or switch to it, points at nothing meanwhile, and picks up when you act there.
 - **Copilot sidebar** (default for side docks): a real side panel. Windows reserves its width and any normal windows overlapping it slide over; they move back when the panel closes, unless you've moved them since. Choose *Floating* to have the panel hover over your windows instead.
 - **Auto-hide** (default): Hodey tucks into a sliver at the screen edge when idle and slides back on hover or when a Hode needs you. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd> hides or shows it completely.
 - **No covering**: during a Hode, a side sidebar reserves its width so maximized apps move over. At the top, the card shrinks to a slim bar whenever the highlighted control sits beneath it.
@@ -37,6 +38,12 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - **Home**: start a Hode, continue the live one, and see streak, skills mastered, minutes learning, recent Hodes and what to practise next.
 - **Your Hodes**: every Hode as a timeline of steps, corrections, hints and questions.
 - **Learning paths**: task packs and every skill's mastery. Change how much help a skill gets, or reset it.
+- **Web search** (off by default; turn it on with the globe in Ask Hodey or in Settings):
+  - On this PC, Hodey decides whether a question needs the web and writes a short, generic query.
+  - Rust then removes emails, links, file paths and names, long numbers and your Windows user name, so only that query is sent.
+  - Your screen, chat and files never leave the PC.
+  - The blue privacy dot shows while it searches, and each answer shows the exact query and its sources.
+  - Without a key, results come from Stack Exchange (Super User) and Microsoft Learn, which welcome programs; general search engines block them. Set the `HODEUM_BRAVE_API_KEY` environment variable to use Brave Search for full web results.
 - **Ask Hodey**: chat with the local Qwen3-VL. It attaches the app you were last in (or any window you pick), streams the answer, and can turn a question into a Hode. The screenshot stays in memory; the notch's green dot shows while it's taken.
 - **Settings**:
   - **Hodey**: choose an on-device voice and preview it (online voices aren't offered, since they'd send Hodey's words to the cloud), set the speaking speed, how long Hodey waits before helping, and the help preset for new skills.

@@ -2,7 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useRef } from "react";
 import { HodeumApp } from "../app/App";
 import type { AppServices } from "../app/services";
-import { TauriWindowSource } from "../app/tauri-services";
+import { TauriWebSearch, TauriWindowSource } from "../app/tauri-services";
 import { fold, unfold } from "../app/unfold";
 import { MemoryChatStore, MemoryLearningStore } from "../data/memory-stores";
 import { MemorySettingsStore } from "../data/settings";
@@ -98,6 +98,7 @@ async function boot(): Promise<void> {
     vision,
     chat: new QwenChatProvider({ connection: () => connectionOf(vision.current()), unavailableReason: () => unavailableReason(vision.current()) }),
     windows: new TauriWindowSource(bus),
+    web: new TauriWebSearch(bus),
   };
   mount(<NativeFrame base={base} />);
 }

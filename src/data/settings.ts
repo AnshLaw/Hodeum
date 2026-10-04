@@ -50,6 +50,8 @@ export const settingsSchema = z.object({
   /** How long Hodey waits without progress before offering more help. */
   stuckSeconds: z.number().int().min(MIN_STUCK_SECONDS).max(MAX_STUCK_SECONDS),
   appearance: appearanceSchema,
+  /** Off by default: when on, only a scrubbed, generic query leaves the PC. */
+  webSearch: z.boolean().default(false),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -60,6 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
   help: "beginner",
   stuckSeconds: 12,
   appearance: { ...DEFAULT_APPEARANCE },
+  webSearch: false,
 };
 
 export const SETTINGS_LIMITS = { MIN_RATE, MAX_RATE, MIN_STUCK_SECONDS, MAX_STUCK_SECONDS } as const;
@@ -71,7 +74,7 @@ export function parseSettings(raw: unknown): Settings {
     const result = settingsSchema.shape[key].safeParse(value[key]);
     return (result.success ? result.data : DEFAULT_SETTINGS[key]) as Settings[K];
   };
-  return { voice: pick("voice"), help: pick("help"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance") };
+  return { voice: pick("voice"), help: pick("help"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance"), webSearch: pick("webSearch") };
 }
 
 export interface SettingsStore {

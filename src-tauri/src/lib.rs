@@ -8,6 +8,7 @@ mod perception;
 mod surfaces;
 mod tray;
 mod vlm;
+mod web_search;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, Shortcut, ShortcutState};
@@ -87,7 +88,8 @@ pub fn run() {
             chat_context::list_windows,
             chat_context::last_app_window,
             chat_context::capture_window,
-            app_focus::focus_app
+            app_focus::focus_app,
+            web_search::web_search
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())

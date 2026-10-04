@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { trackRemote } from "../lib/activity";
 import type { Bus } from "../lib/bus";
 import type { CapturedFrame } from "../providers/vision/types";
+import type { WebSearch, WebSearchSource } from "../providers/web/types";
 import type { WindowInfo, WindowSource } from "./services";
 
 /** Open app windows via Rust. Captures stay in memory and light the notch's screen dot. */
@@ -18,5 +19,14 @@ export class TauriWindowSource implements WindowSource {
 
   capture(id: string): Promise<CapturedFrame> {
     return trackRemote(this.bus, "screen", () => invoke<CapturedFrame>("capture_window", { id }));
+  }
+}
+
+/** Web search through Rust, which scrubs the query before it leaves the PC. Lights the blue cloud dot. */
+export class TauriWebSearch implements WebSearchSource {
+  constructor(private readonly bus: Bus) {}
+
+  search(query: string): Promise<WebSearch> {
+    return trackRemote(this.bus, "cloud", () => invoke<WebSearch>("web_search", { query }));
   }
 }

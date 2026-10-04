@@ -1077,3 +1077,49 @@
   color: var(--hd-text);
   background: color-mix(in srgb, var(--hd-accent) 10%, transparent);
 }
+
+/* ---- Web search in chat ---- */
+
+.hweb-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--happ-line);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--hd-text-2);
+  background: transparent;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.hweb-toggle[aria-pressed="true"] {
+  border-color: color-mix(in srgb, #0a84ff 60%, transparent);
+  color: var(--hd-text);
+  background: color-mix(in srgb, #0a84ff 14%, transparent);
+}
+
+.hweb-toggle:focus-visible {
+  outline: 2px solid var(--hd-accent);
+  outline-offset: 2px;
+}
+
+.hbubble__web {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--hd-text-3);
+}
+
+.hbubble__web svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}

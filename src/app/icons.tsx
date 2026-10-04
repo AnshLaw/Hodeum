@@ -74,3 +74,10 @@ export const WindowIcon = () => (
     <path d="M3 7h12" />
   </svg>
 );
+
+export const GlobeIcon = () => (
+  <svg {...BASE}>
+    <circle cx="9" cy="9" r="6" />
+    <path d="M3 9h12M9 3c1.8 1.8 2.6 3.8 2.6 6S10.8 13.2 9 15M9 3C7.2 4.8 6.4 6.8 6.4 9s.8 4.2 2.6 6" />
+  </svg>
+);

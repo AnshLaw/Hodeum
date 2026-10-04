@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { HELP_PRESETS, SETTINGS_LIMITS, type HelpPreset, type Settings } from "../../data/settings";
 import type { VisionStatus } from "../../providers/vision/types";
 import type { AppServices } from "../services";
@@ -47,7 +47,7 @@ function HodeySettings({ settings, update }: { settings: Settings; update: (next
   );
 }
 
-function AboutSettings({ vision }: { vision?: VisionStatus }) {
+function AboutSettings({ vision, webSearch }: { vision?: VisionStatus; webSearch?: ReactNode }) {
   return (
     <>
       <section className="hcard">
@@ -59,6 +59,7 @@ function AboutSettings({ vision }: { vision?: VisionStatus }) {
           <li data-dot="cloud">Blue: a cloud service is receiving data</li>
         </ul>
         <p className="hmuted">Screenshots and audio are never saved or synced.</p>
+        {webSearch}
       </section>
       <section className="hcard">
         <h2>Local AI</h2>
@@ -106,7 +107,16 @@ export function SettingsPage({ services }: { services: AppServices }) {
       )}
       {loadError && <p className="hchat__error">Couldn't load settings: {loadError}</p>}
       <OnScreenSettings bus={services.bus} />
-      <AboutSettings vision={vision} />
+      <AboutSettings
+        vision={vision}
+        webSearch={
+          settings && (
+            <Row label="Let Hodey search the web" detail="For questions in Ask Hodey. Hodey writes a short, generic query on this PC; only that query is sent (to DuckDuckGo), never your screen, chat or files. The blue dot shows while it searches.">
+              <input type="checkbox" className="hswitch" checked={settings.webSearch} onChange={(e) => update({ ...settings, webSearch: e.target.checked })} aria-label="Let Hodey search the web" />
+            </Row>
+          )
+        }
+      />
     </div>
   );
 }

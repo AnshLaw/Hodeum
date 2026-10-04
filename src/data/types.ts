@@ -61,6 +61,8 @@ export interface ChatMessage {
   content: string;
   /** Which window was attached as context, e.g. "Sales.xlsx - Excel". */
   context?: string;
+  /** The web search behind a reply: the exact query sent and the sources used. */
+  web?: { query: string; sources: { title: string; url: string }[] };
   at: string;
 }
 
