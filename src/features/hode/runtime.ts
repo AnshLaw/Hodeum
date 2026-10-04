@@ -39,6 +39,11 @@ const ECHO_WINDOW_MS = 3500;
 const ECHO_LINES = 2;
 /** The native side waits up to ~45 s for a slow app (Excel cold-starts in ~21 s); this only catches a hung call. */
 const OPEN_APP_TIMEOUT_MS = 60_000;
+/**
+ * Once an app Hodey opened is up, how long the window watcher gets to report it coming forward (it lets a new
+ * front window settle first) before Hodey reports the switch itself.
+ */
+export const NATIVE_SWITCH_GRACE_MS = 1500;
 /** After Hodey presses a control, the app gets this long to respond (a menu or dialog opening) before it's read. */
 export const PRESS_SETTLE_MS = 450;
 const CANT_PRESS = "Hodey can't click in this app, so this step is yours.";
@@ -78,6 +83,10 @@ export class HodeRuntime {
   private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
   /** The reasoning in flight, called off as soon as the Hode's request id moves past it. */
   private reasoning: { requestId: number; controller: AbortController } | undefined;
+  /** Window switches the watcher has reported, so an app being opened can tell whether one came meanwhile. */
+  private watchedSwitches = 0;
+  /** Hodey's own report that an app it opened is up, waiting out the watcher's grace period. */
+  private openedSwitch: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly deps: RuntimeDeps) {
     this.disposers = [
@@ -85,7 +94,7 @@ export class HodeRuntime {
       deps.bus.on("annotate:start", () => this.dispatch({ type: "ANNOTATE_START" })),
       deps.bus.on("annotate:cancel", () => this.dispatch({ type: "ANNOTATE_CANCEL" })),
       deps.bus.on("annotation:submitted", ({ annotation }) => this.dispatch({ type: "ANNOTATION_SUBMITTED", annotation })),
-      deps.perception.onAppSwitched?.(() => this.appSwitched()) ?? (() => undefined),
+      deps.perception.onAppSwitched?.(() => this.watcherSawSwitch()) ?? (() => undefined),
     ];
   }
 
@@ -174,6 +183,7 @@ export class HodeRuntime {
     this.disposers.forEach((dispose) => dispose());
     this.clearStuckTimer();
     this.clearPressTimer();
+    this.clearOpenedSwitch();
     this.stopSpeech();
   }
 
@@ -215,6 +225,33 @@ export class HodeRuntime {
     this.dispatch({ type: "APP_SWITCHED" });
   }
 
+  /** The window watcher saw another window come forward, which covers an app Hodey has just opened too. */
+  private watcherSawSwitch(): void {
+    this.watchedSwitches += 1;
+    this.clearOpenedSwitch();
+    this.appSwitched();
+  }
+
+  /**
+   * An app Hodey opened is up. The window watcher usually reports its window coming forward, while it opened or
+   * just after; Hodey reports the switch itself only when the watcher said nothing by the end of the grace period
+   * (or nothing watches), so the reducer hears of it once.
+   */
+  private openedAppIsUp(watchedAtStart: number): void {
+    if (!this.deps.perception.onAppSwitched) return this.appSwitched();
+    if (this.watchedSwitches !== watchedAtStart) return;
+    this.clearOpenedSwitch();
+    this.openedSwitch = setTimeout(() => {
+      this.openedSwitch = undefined;
+      this.appSwitched();
+    }, NATIVE_SWITCH_GRACE_MS);
+  }
+
+  private clearOpenedSwitch(): void {
+    if (this.openedSwitch !== undefined) clearTimeout(this.openedSwitch);
+    this.openedSwitch = undefined;
+  }
+
   /** The taskbar's Start button and search box, for a Hode waiting on an app; always answered, empty when unreadable. */
   private observeShell(): void {
     observeShellTargets(this.deps.perception).then((elements) => this.dispatch({ type: "SHELL_OBSERVED", elements }));
@@ -223,11 +260,12 @@ export class HodeRuntime {
   /** Opens an installed app the learner asked for; a Hode waiting for it carries on as soon as it's up. */
   private openApp(app: InstalledApp): void {
     const failed = (reason: string) => this.dispatch({ type: "APP_OPEN_FAILED", app, reason });
+    const watchedAtStart = this.watchedSwitches;
     const open = this.deps.perception.openInstalledApp?.(app.id) ?? Promise.reject(new Error("Opening apps isn't available here"));
     withTimeout(open, OPEN_APP_TIMEOUT_MS, `${app.name} didn't open in time`).then(
       (appeared) => {
         if (!appeared) return failed(`No ${app.name} window appeared`);
-        this.appSwitched();
+        this.openedAppIsUp(watchedAtStart);
       },
       (error) => {
         console.error(`Couldn't open ${app.name}`, error);
