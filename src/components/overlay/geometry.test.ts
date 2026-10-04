@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MonitorInfo } from "../../lib/types";
-import { POINT_BOX_PX, arrowGeometry, composerPosition, primitiveToOverlay, shapeFromGesture, shapeToScreen } from "./geometry";
+import { POINT_BOX_PX, composerPosition, primitiveToOverlay, shapeFromGesture, shapeToScreen } from "./geometry";
 
 const viewport = { width: 1000, height: 800 };
 const composer = { width: 300, height: 130 };
@@ -44,13 +44,5 @@ describe("composerPosition", () => {
 
   it("drops below a full-width mark and stays on-screen", () => {
     expect(composerPosition({ x: 20, y: 750, width: 960, height: 40 }, viewport, composer)).toEqual({ x: 20, y: 658 });
-  });
-});
-
-describe("arrowGeometry", () => {
-  it("approaches a top-edge target from below", () => {
-    const { start, end } = arrowGeometry({ x: 480, y: 10, width: 40, height: 20 }, viewport);
-    expect(start.y).toBeGreaterThan(end.y);
-    expect(end.y).toBeGreaterThan(30);
   });
 });

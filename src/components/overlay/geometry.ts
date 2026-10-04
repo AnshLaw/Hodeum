@@ -1,14 +1,10 @@
-import { boundsOf, center, pointToScreen, toOverlay, toScreen } from "../../lib/coords";
+import { boundsOf, pointToScreen, toOverlay, toScreen } from "../../lib/coords";
 import type { AnnotationShape, MonitorInfo, OverlayPrimitive, Point, Rect, Size } from "../../lib/types";
 
 export const CLICK_SLOP_PX = 6;
 export const POINT_BOX_PX = 48;
 const COMPOSER_GAP_PX = 12;
 const VIEWPORT_MARGIN_PX = 12;
-const ARROW_LENGTH_PX = 72;
-const ARROW_GAP_PX = 10;
-const ARROW_BEND = 0.25;
-const DEGREES_PER_RADIAN = 180 / Math.PI;
 
 /** A near-stationary press is a point; Shift-drawing is a freehand circle; otherwise a dragged rectangle. */
 export function shapeFromGesture(points: Point[], freehand: boolean): AnnotationShape {
@@ -56,28 +52,6 @@ export function composerPosition(anchor: Rect, viewport: Size, composer: Size): 
     x: clamp(x, VIEWPORT_MARGIN_PX, viewport.width - composer.width - VIEWPORT_MARGIN_PX),
     y: clamp(y, VIEWPORT_MARGIN_PX, viewport.height - composer.height - VIEWPORT_MARGIN_PX),
   };
-}
-
-export interface ArrowGeometry {
-  start: Point;
-  control: Point;
-  end: Point;
-  angle: number;
-}
-
-/** A short curved arrow approaching the target from the screen's centre, so it never runs off-screen. */
-export function arrowGeometry(target: Rect, viewport: Size): ArrowGeometry {
-  const c = center(target);
-  const toward = { x: viewport.width / 2 - c.x, y: viewport.height / 2 - c.y };
-  const length = Math.hypot(toward.x, toward.y);
-  const dir = length < 1 ? { x: 0, y: 1 } : { x: toward.x / length, y: toward.y / length };
-  const reach = Math.hypot(target.width, target.height) / 2 + ARROW_GAP_PX;
-  const end = { x: c.x + dir.x * reach, y: c.y + dir.y * reach };
-  const start = { x: end.x + dir.x * ARROW_LENGTH_PX, y: end.y + dir.y * ARROW_LENGTH_PX };
-  const bend = ARROW_LENGTH_PX * ARROW_BEND;
-  const control = { x: (start.x + end.x) / 2 - dir.y * bend, y: (start.y + end.y) / 2 + dir.x * bend };
-  const angle = Math.atan2(end.y - control.y, end.x - control.x) * DEGREES_PER_RADIAN;
-  return { start, control, end, angle };
 }
 
 export function roundedRectPath({ x, y, width: w, height: h }: Rect, radius: number): string {

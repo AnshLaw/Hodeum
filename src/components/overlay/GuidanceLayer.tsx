@@ -1,13 +1,18 @@
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { padRect } from "../../lib/coords";
-import type { OverlayPrimitive, Rect, Size } from "../../lib/types";
-import { arrowGeometry, roundedRectPath } from "./geometry";
+import type { OverlayPrimitive, Point, Rect, Size } from "../../lib/types";
+import { GUIDANCE_CARD_HEIGHT } from "../notch/footprint";
+import { NOTCH_WIDTHS } from "../notch/notch-view";
+import { roundedRectPath } from "./geometry";
+import { type ArrowGeometry, arrowBounds, arrowGeometry, labelPosition, pulseScale } from "./placement";
 
 const HIGHLIGHT_OUTSET_PX = 4;
 const HIGHLIGHT_RADIUS_PX = 8;
+/** How far the precise ring's pulse grows on every side before fading. */
+const PULSE_SPREAD_PX = 8;
 const SPOTLIGHT_PADDING_PX = 10;
 const PIN_RADIUS_PX = 6;
 const LABEL_HEIGHT_PX = 26;
-const LABEL_GAP_PX = 8;
 const ARROW_PATH_LENGTH = 100;
 
 function keyOf(primitive: OverlayPrimitive): string {
@@ -20,19 +25,26 @@ function rectProps(r: Rect, rx: number) {
 }
 
 function Highlight({ bounds, emphasis }: { bounds: Rect; emphasis: "precise" | "broad" }) {
-  const props = rectProps(padRect(bounds, HIGHLIGHT_OUTSET_PX), HIGHLIGHT_RADIUS_PX);
+  const ring = padRect(bounds, HIGHLIGHT_OUTSET_PX);
+  const props = rectProps(ring, HIGHLIGHT_RADIUS_PX);
   return (
     <g className={`hl hl--${emphasis}`}>
       <rect className="hl__under" {...props} />
       <rect className="hl__ring" {...props} />
-      {emphasis === "precise" && <rect className="hl__pulse" {...props} />}
+      {emphasis === "precise" && <rect className="hl__pulse" style={pulseStyle(ring)} {...props} />}
     </g>
   );
 }
 
-function Arrow({ to, size }: { to: Rect; size: Size }) {
-  const { start, control, end, angle } = arrowGeometry(to, size);
-  const d = `M${start.x} ${start.y}Q${control.x} ${control.y} ${end.x} ${end.y}`;
+function pulseStyle(ring: Rect): CSSProperties | undefined {
+  if (ring.width <= 0 || ring.height <= 0) return undefined;
+  const scale = pulseScale(ring, PULSE_SPREAD_PX);
+  return { "--pulse-sx": scale.x, "--pulse-sy": scale.y } as CSSProperties;
+}
+
+function Arrow({ geometry }: { geometry: ArrowGeometry }) {
+  const { start, control, end, shaftEnd, angle } = geometry;
+  const d = `M${start.x} ${start.y}Q${control.x} ${control.y} ${shaftEnd.x} ${shaftEnd.y}`;
   return (
     <g className="arrow">
       <path className="arrow__under" d={d} />
@@ -42,7 +54,7 @@ function Arrow({ to, size }: { to: Rect; size: Size }) {
   );
 }
 
-function Shape({ primitive, size }: { primitive: OverlayPrimitive; size: Size }) {
+function Shape({ primitive, size, arrow }: { primitive: OverlayPrimitive; size: Size; arrow?: ArrowGeometry }) {
   switch (primitive.kind) {
     case "spotlight": {
       const hole = roundedRectPath(padRect(primitive.bounds, SPOTLIGHT_PADDING_PX), HIGHLIGHT_RADIUS_PX);
@@ -51,7 +63,8 @@ function Shape({ primitive, size }: { primitive: OverlayPrimitive; size: Size })
     case "highlight":
       return <Highlight bounds={primitive.bounds} emphasis={primitive.emphasis} />;
     case "arrow":
-      return <Arrow to={primitive.to} size={size} />;
+      // No arrow when the target is off this monitor or has no room around it: the highlight carries it.
+      return arrow ? <Arrow geometry={arrow} /> : null;
     case "pin":
       return (
         <g className="pin">
@@ -62,26 +75,64 @@ function Shape({ primitive, size }: { primitive: OverlayPrimitive; size: Size })
   }
 }
 
-function LabelChip({ bounds, text }: { bounds: Rect; text: string }) {
-  const above = bounds.y - HIGHLIGHT_OUTSET_PX - LABEL_GAP_PX - LABEL_HEIGHT_PX;
-  const top = above >= LABEL_GAP_PX ? above : bounds.y + bounds.height + HIGHLIGHT_OUTSET_PX + LABEL_GAP_PX;
+/** Measures itself, then asks `place` where to sit; hidden for the one frame before it knows its size. */
+function LabelChip({ text, place }: { text: string; place: (chip: Size) => Point }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [chip, setChip] = useState<Size>();
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element) setChip({ width: element.offsetWidth, height: element.offsetHeight });
+  }, [text]);
+  const at = chip ? place(chip) : undefined;
+  const style: CSSProperties = at ? { left: at.x, top: at.y, height: LABEL_HEIGHT_PX } : { left: 0, top: 0, height: LABEL_HEIGHT_PX, visibility: "hidden" };
   return (
-    <div className="label-chip" style={{ left: bounds.x - HIGHLIGHT_OUTSET_PX, top, height: LABEL_HEIGHT_PX }}>
+    <div ref={ref} className="label-chip" style={style}>
       {text}
     </div>
   );
 }
 
+const sameRect = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+
+/** What each primitive covers on screen, so labels can keep clear of it. */
+function footprint(primitive: OverlayPrimitive, arrow: ArrowGeometry | undefined): Rect | undefined {
+  if (primitive.kind === "highlight") return padRect(primitive.bounds, HIGHLIGHT_OUTSET_PX);
+  if (primitive.kind === "pin") return primitive.bounds;
+  if (primitive.kind === "arrow") return arrow && arrowBounds(arrow);
+  return undefined;
+}
+
+/** Where the expanded notch card sits (top centre), so arrows and labels don't hide beneath it. */
+function notchZone(size: Size): Rect {
+  const width = NOTCH_WIDTHS.guidance;
+  return { x: (size.width - width) / 2, y: 0, width, height: GUIDANCE_CARD_HEIGHT };
+}
+
+function arrowsFor(primitives: OverlayPrimitive[], size: Size): Map<OverlayPrimitive, ArrowGeometry | undefined> {
+  const avoid = [notchZone(size)];
+  return new Map(primitives.map((p) => [p, p.kind === "arrow" ? arrowGeometry(p.to, size, avoid) : undefined]));
+}
+
+function labelPlacer(label: OverlayPrimitive & { kind: "highlight" }, primitives: OverlayPrimitive[], arrows: Map<OverlayPrimitive, ArrowGeometry | undefined>, size: Size) {
+  const pointing = primitives.find((p) => p.kind === "arrow" && sameRect(p.to, label.bounds));
+  const marks = primitives.filter((p) => p !== label).flatMap((p) => footprint(p, arrows.get(p)) ?? []);
+  const avoid = [notchZone(size), ...marks];
+  return (chip: Size) => labelPosition({ target: label.bounds, chip, viewport: size, avoid, arrow: pointing && arrows.get(pointing) });
+}
+
 /** Draws guidance primitives (already in overlay CSS pixels). Purely visual: never captures input. */
 export function GuidanceLayer({ primitives, size }: { primitives: OverlayPrimitive[]; size: Size }) {
+  const arrows = arrowsFor(primitives, size);
   return (
     <>
       <svg className="guidance" width={size.width} height={size.height} aria-hidden="true">
         {primitives.map((p) => (
-          <Shape key={keyOf(p)} primitive={p} size={size} />
+          <Shape key={keyOf(p)} primitive={p} size={size} arrow={arrows.get(p)} />
         ))}
       </svg>
-      {primitives.map((p) => (p.kind === "highlight" && p.label ? <LabelChip key={`label-${keyOf(p)}`} bounds={p.bounds} text={p.label} /> : null))}
+      {primitives.map((p) =>
+        p.kind === "highlight" && p.label ? <LabelChip key={`label-${keyOf(p)}`} text={p.label} place={labelPlacer(p, primitives, arrows, size)} /> : null,
+      )}
     </>
   );
 }
