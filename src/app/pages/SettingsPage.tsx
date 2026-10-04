@@ -12,7 +12,9 @@ import { OnScreenSettings } from "./settings/OnScreenSettings";
 import { KeySettings } from "./settings/KeySettings";
 import { useEditableSettings } from "./settings/use-settings";
 import { VoiceSettings } from "./settings/VoiceSettings";
-
+import { SECTION_ID } from "./settings/sections";
+import { SettingsNav } from "./settings/SettingsNav";
+import "./pages.css";
 
 const VISION_TEXT: Record<VisionStatus["state"], string> = {
   ready: "Qwen3-VL is running on your GPU.",
@@ -29,13 +31,17 @@ function useVision(services: AppServices): VisionStatus | undefined {
 
 function HodeySettings({ settings, natural, update }: { settings: Settings; natural?: VoicePreview; update: (next: Settings) => void }) {
   return (
-    <section className="hcard">
+    <section className="hcard" id={SECTION_ID.hodey}>
       <h2>Hodey</h2>
       <VoiceSettings voice={settings.voice} natural={natural} onChange={(voice) => update({ ...settings, voice })} />
       <Row label="Wait before offering help" detail={`${settings.stuckSeconds} seconds without progress`}>
         <input type="range" min={SETTINGS_LIMITS.MIN_STUCK_SECONDS} max={SETTINGS_LIMITS.MAX_STUCK_SECONDS} step={1} value={settings.stuckSeconds} onChange={(e) => update({ ...settings, stuckSeconds: Number(e.target.value) })} aria-label="Wait before offering help" />
       </Row>
-      <div className="hpresets" role="radiogroup" aria-label="Default mode">
+      <span className="hsetting__text hmode-label">
+        <strong id="default-mode-label">Default learning mode</strong>
+        <span className="hmuted">For new Hodes. You can pick another when you start one, or switch mid-Hode from the ⋯ menu or by saying "teach mode", "help mode" or "agent mode".</span>
+      </span>
+      <div className="hpresets" role="radiogroup" aria-labelledby="default-mode-label">
         {HODE_MODES.map((mode) => (
           <button key={mode} type="button" role="radio" aria-checked={settings.mode === mode} className="hpreset" onClick={() => update({ ...settings, mode })}>
             <strong>{MODE_COPY[mode].title} mode</strong>
@@ -43,7 +49,6 @@ function HodeySettings({ settings, natural, update }: { settings: Settings; natu
           </button>
         ))}
       </div>
-      <p className="hmuted hmode-note">The default for new Hodes. You can pick another when you start one, or switch mid-Hode from the ⋯ menu or by saying "teach mode", "help mode" or "agent mode".</p>
     </section>
   );
 }
@@ -51,7 +56,7 @@ function HodeySettings({ settings, natural, update }: { settings: Settings; natu
 function AboutSettings({ vision, webSearch }: { vision?: VisionStatus; webSearch?: ReactNode }) {
   return (
     <>
-      <section className="hcard">
+      <section className="hcard" id={SECTION_ID.privacy}>
         <h2>Privacy</h2>
         <p className="hmuted">The dots in the notch tell you what Hodey is using right now.</p>
         <ul className="hlegend">
@@ -62,7 +67,7 @@ function AboutSettings({ vision, webSearch }: { vision?: VisionStatus; webSearch
         <p className="hmuted">Screenshots and audio are never saved or synced.</p>
         {webSearch}
       </section>
-      <section className="hcard">
+      <section className="hcard" id={SECTION_ID.ai}>
         <h2>Local AI</h2>
         <Row label="Screen understanding" detail={vision ? VISION_TEXT[vision.state] : "Not available here."}>
           <span className="hchip" data-tone={vision?.state === "ready" ? "done" : "ended"}>
@@ -83,6 +88,7 @@ export function SettingsPage({ services }: { services: AppServices }) {
         <h1>Settings</h1>
         <p className="hmuted">Changes apply to the notch right away.</p>
       </header>
+      <SettingsNav />
       {saveError && <p className="hchat__error" role="alert">Couldn't save: {saveError}</p>}
       {settings && (
         <>

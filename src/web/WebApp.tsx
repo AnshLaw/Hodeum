@@ -49,6 +49,9 @@ function SignIn({ client }: { client: SupabaseClient }) {
         </p>
       )}
       <p className="hweb-gate__fine">Only your skills, Hodes, settings and chats are in your account. Screenshots and audio never leave your PC.</p>
+      <a className="hlink" href="/">
+        What is Hodeum?
+      </a>
     </main>
   );
 }

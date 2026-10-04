@@ -6,6 +6,7 @@ import type { CloudKeyService } from "../../services";
 import { CLOUD_ROWS, MEMORY_OPTIONS, controlEnabled, keyDraftError, keyErrorMessage, keyStatusLabel, withKeyCleared, withProvider, type CloudRow } from "./cloud-settings";
 import { Row, Segmented } from "./controls";
 import { SensitiveApps } from "./SensitiveApps";
+import { SECTION_ID } from "./sections";
 
 /** Which keys are saved; refreshed when any window saves or clears one. */
 function useKeyPresence(keys: CloudKeyService | undefined, bus: Bus): [KeyPresence | undefined, () => void] {
@@ -109,7 +110,7 @@ export function CloudSettings({ cloud, keys, bus, onChange }: CloudSettingsProps
     bus.emit("cloud:keys-changed", {});
   };
   return (
-    <section className="hcard">
+    <section className="hcard" id={SECTION_ID.cloud}>
       <h2>Cloud (optional)</h2>
       <p className="hmuted">Local is always on. Cloud only receives the current step, never your screen or voice.</p>
       <p className="hmuted hcloud__note">{keys ? "Keys are kept in Windows Credential Manager and never shown again." : "Add keys in the Hodeum app on your PC; they never leave it."}</p>

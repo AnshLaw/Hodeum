@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useLiveQuery } from "../hooks";
 import type { AppServices } from "../services";
 import { EVENT_LABELS, durationLabel, outcomeOf, timeAgo } from "../view";
+import { PracticeList } from "./PracticeList";
+import "./pages.css";
 
 const HISTORY_LIMIT = 200;
 
@@ -61,7 +63,8 @@ export function HodesPage({ services }: { services: AppServices }) {
       {hodes.value.length === 0 ? (
         <section className="hcard hempty">
           <h2>No Hodes yet</h2>
-          <p className="hmuted">Start one from Home or the notch. It will show up here with every step.</p>
+          <p className="hmuted">Each Hode you start shows up here, with every step you took and where Hodey helped. Try a guided one:</p>
+          <PracticeList packs={services.packs} services={services} />
         </section>
       ) : (
         <div className="hsplit">

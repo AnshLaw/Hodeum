@@ -4,6 +4,7 @@ import { MOOD_LABELS, type HodeyMood } from "../../../components/hodey/mood";
 import { HODEY_ACCESSORIES, type Accent, type Appearance, type HodeyAccessory, type HodeyColor, type Theme } from "../../../data/settings";
 import { ACCENT_SWATCHES, HODEY_SWATCHES, hodeyVars } from "../../../lib/appearance";
 import { Row, Segmented, Swatches } from "./controls";
+import { SECTION_ID } from "./sections";
 
 const THEMES: [Theme, string][] = [
   ["system", "System"],
@@ -54,7 +55,7 @@ function AccessoryTiles({ appearance, onSelect }: { appearance: Appearance; onSe
 export function AppearanceSettings({ appearance, onChange }: { appearance: Appearance; onChange: (appearance: Appearance) => void }) {
   const set = (change: Partial<Appearance>) => onChange({ ...appearance, ...change });
   return (
-    <section className="hcard happearance">
+    <section className="hcard happearance" id={SECTION_ID.look}>
       <h2>Look &amp; feel</h2>
       <div className="happearance__grid">
         <HodeyPreview appearance={appearance} />

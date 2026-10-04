@@ -5,6 +5,7 @@ import { produceReply } from "../chat-reply";
 import { GlobeIcon, SendIcon, WindowIcon } from "../icons";
 import type { AppServices, WindowInfo } from "../services";
 import { timeAgo } from "../view";
+import "./pages.css";
 
 const TITLE_CHARS = 48;
 const REPLY_TIMEOUT_MS = 60_000;
@@ -37,7 +38,7 @@ function ContextPicker({ services, value, onChange }: { services: AppServices; v
   );
 }
 
-function Thread({ messages, streaming, status, onStartHode }: { messages: ChatMessage[]; streaming?: string; status: string; onStartHode: (goal: string) => void }) {
+function Thread({ messages, streaming, status, note, onStartHode }: { messages: ChatMessage[]; streaming?: string; status: string; note?: string; onStartHode: (goal: string) => void }) {
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
@@ -48,6 +49,7 @@ function Thread({ messages, streaming, status, onStartHode }: { messages: ChatMe
         <div className="hthread__empty">
           <h2>Ask Hodey anything</h2>
           <p className="hmuted">Hodey looks at the window you were working in, explains what's going on, and can start a Hode to teach you step by step.</p>
+          {note && <p className="hchat__note">{note}</p>}
         </div>
       )}
       {messages.map((m) => (
@@ -161,6 +163,8 @@ export function ChatPage({ services }: { services: AppServices }) {
         <button type="button" className="btn btn--neutral" onClick={() => setActive(undefined)}>
           New chat
         </button>
+        {chats.state === "error" && <p className="hchat__error">Couldn't load your chats: {chats.message}</p>}
+        {chats.state === "ready" && chats.value.length === 0 && <p className="hchat__none hmuted">Your conversations with Hodey show up here.</p>}
         {chats.state === "ready" &&
           chats.value.map((c) => (
             <button key={c.id} type="button" className="hchat__item" aria-current={c.id === active?.id ? "true" : undefined} onClick={() => setActive(c)}>
@@ -170,9 +174,8 @@ export function ChatPage({ services }: { services: AppServices }) {
           ))}
       </aside>
       <section className="hchat__main">
-        <Thread messages={history.state === "ready" ? history.value : []} streaming={streaming} status={status} onStartHode={(goal) => services.bus.emit("hode:start", { goal })} />
+        <Thread messages={history.state === "ready" ? history.value : []} streaming={streaming} status={status} note={services.chat ? undefined : services.limitation} onStartHode={(goal) => services.bus.emit("hode:start", { goal })} />
         {error && <p className="hchat__error" role="alert">{error}</p>}
-        {services.limitation && !services.chat && <p className="hchat__note">{services.limitation}</p>}
         <form
           className="hcomposer"
           onSubmit={(e) => {

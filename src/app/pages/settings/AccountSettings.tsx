@@ -3,6 +3,7 @@ import { ACCOUNT_COPY, syncDetail } from "../../../features/account/copy";
 import type { AccountStatus } from "../../../features/account/types";
 import { useAccount } from "../../../features/account/use-account";
 import { Row } from "./controls";
+import { SECTION_ID } from "./sections";
 
 function SignedOut({ status, bus }: { status: AccountStatus; bus: Bus }) {
   const waiting = status.phase === "signing-in";
@@ -53,7 +54,7 @@ function SignedIn({ status, bus }: { status: AccountStatus; bus: Bus }) {
 export function AccountSettings({ bus }: { bus: Bus }) {
   const status = useAccount(bus);
   return (
-    <section className="hcard">
+    <section className="hcard" id={SECTION_ID.account}>
       <h2>Account</h2>
       {!status && <p className="hmuted">Checking your account…</p>}
       {status && !status.configured && (
