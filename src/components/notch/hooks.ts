@@ -131,7 +131,9 @@ export function useCoveringTarget(bus: Bus, shell: NativeShell, ref: RefObject<H
       return;
     }
     let alive = true;
-    const offRender = bus.on("overlay:render", ({ primitives }) => {
+    const offRender = bus.on("overlay:render", ({ primitives, surface }) => {
+      // Phone highlights sit on the mirror inside the notch, never under it.
+      if ((surface ?? "windows") !== "windows") return setCovering(false);
       shell
         .notchOrigin()
         .then((origin) => {

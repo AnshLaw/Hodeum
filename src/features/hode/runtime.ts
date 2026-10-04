@@ -115,7 +115,7 @@ export class HodeRuntime {
       case "reason":
         return this.reason(effect.requestId, effect.context);
       case "renderOverlay":
-        return this.deps.bus.emit("overlay:render", { primitives: effect.primitives });
+        return this.deps.bus.emit("overlay:render", { primitives: effect.primitives, surface: this.state.pack?.surface ?? "windows" });
       case "clearOverlay":
         return this.deps.bus.emit("overlay:clear", {});
       case "say":

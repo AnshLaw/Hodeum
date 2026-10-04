@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Bus } from "../../lib/bus";
 import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
-import type { AnnotationShape, LearnerAnnotation, MonitorInfo, OverlayPrimitive } from "../../lib/types";
+import type { AnnotationShape, LearnerAnnotation, MonitorInfo, OverlayPrimitive, Surface } from "../../lib/types";
 import { useElementSize } from "../shared/use-element-size";
 import { AnnotateLayer } from "./AnnotateLayer";
 import { GuidanceLayer } from "./GuidanceLayer";
@@ -32,27 +32,30 @@ function useOverlayMonitor(shell: NativeShell): MonitorInfo | undefined {
   return monitor;
 }
 
-function useOverlayBus(bus: Bus) {
+function useOverlayBus(bus: Bus, surfaces: Surface[]) {
   const [primitives, setPrimitives] = useState<OverlayPrimitive[]>([]);
   const [annotating, setAnnotating] = useState(false);
   useEffect(() => {
     const offs = [
-      bus.on("overlay:render", (payload) => setPrimitives(payload.primitives)),
+      // Guidance for another surface replaces ours, so a stale desktop highlight never lingers.
+      bus.on("overlay:render", (payload) => setPrimitives(surfaces.includes(payload.surface ?? "windows") ? payload.primitives : [])),
       bus.on("overlay:clear", () => setPrimitives([])),
       bus.on("annotate:start", () => setAnnotating(true)),
       bus.on("annotate:cancel", () => setAnnotating(false)),
     ];
     return () => offs.forEach((off) => off());
-  }, [bus]);
+  }, [bus, surfaces.join()]);
   return { primitives, annotating, setAnnotating };
 }
 
 /** The click-through guidance surface; becomes interactive only while the learner is marking for Point & Ask. */
-export function GuidanceOverlay({ bus, shell }: { bus: Bus; shell: NativeShell }) {
+const DESKTOP_ONLY: Surface[] = ["windows"];
+
+export function GuidanceOverlay({ bus, shell, surfaces = DESKTOP_ONLY }: { bus: Bus; shell: NativeShell; surfaces?: Surface[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(rootRef);
   const monitor = useOverlayMonitor(shell);
-  const { primitives, annotating, setAnnotating } = useOverlayBus(bus);
+  const { primitives, annotating, setAnnotating } = useOverlayBus(bus, surfaces);
 
   useEffect(() => {
     shell.setOverlayInteractive(annotating).catch(reportError("Couldn't switch the overlay mode"));

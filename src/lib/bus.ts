@@ -1,11 +1,12 @@
 import type { ActivityChannel } from "./activity";
 import type { DockPrefs } from "../features/dock/dock";
-import type { LearnerAnnotation, OverlayPrimitive } from "./types";
+import type { LearnerAnnotation, OverlayPrimitive, Surface } from "./types";
 
 type Empty = Record<string, never>;
 
 export interface BusEvents {
-  "overlay:render": { primitives: OverlayPrimitive[] };
+  /** Highlights for one surface; absent means the Windows desktop. The notch draws "phone" ones on the mirror. */
+  "overlay:render": { primitives: OverlayPrimitive[]; surface?: Surface };
   "overlay:clear": Empty;
   "annotate:start": Empty;
   "annotate:cancel": Empty;
