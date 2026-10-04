@@ -289,7 +289,9 @@ function useNaturalVoices(source?: Pick<NativeVoiceStatus, "current" | "subscrib
 export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource, voiceSetup, cloudSetup, apps, speaking, conversation }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
-  const notice = bootNotice ?? voiceNotice(useTtsState(voiceStatus));
+  // Called on every render: a hook behind `bootNotice ??` would change the hook order if it ever changed.
+  const ttsState = useTtsState(voiceStatus);
+  const notice = bootNotice ?? voiceNotice(ttsState);
   const show = script?.() === "roman" ? romanize : (text: string) => text;
   // A web search from the app takes the notch while it runs, so the learner sees what leaves the PC.
   const [web, closeWeb] = useWebActivity(bus);

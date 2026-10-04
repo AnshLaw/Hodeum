@@ -339,7 +339,10 @@ function steppedAway(s: HodeState): Transition {
 function cameBack(s: HodeState): Transition {
   const back: HodeState = { ...s, away: false };
   if (s.phase !== "guiding") return { state: back, effects: [] };
-  return { state: { ...back, phase: "observing", reobserved: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
+  // A click made as they came back, before the window watcher settled, wasn't read: the lesson's fresh look
+  // credits what it did (an open goal's step is the model's to judge, and a glance away never counts).
+  const credited = s.open ? {} : { actedWhilePreparing: true };
+  return { state: { ...back, ...credited, phase: "observing", reobserved: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
 }
 
 /** Lesson phases a step can be skipped from (a question being answered isn't one). */

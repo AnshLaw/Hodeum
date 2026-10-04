@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { spoken } from "../../lib/spoken";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState, type Transition } from "./model";
 import { step } from "./reducer";
-import { HOME_SELECTED, PACK, guideAction } from "./test-fixtures";
+import { HOME_SELECTED, INSERT_SELECTED, PACK, guideAction } from "./test-fixtures";
 
 /** The learner can step into another app: the Hode's window stays open, so the step simply waits for them. */
 
@@ -67,6 +67,12 @@ describe("stepping into another app while the Hode's window stays open", () => {
     const looked = play(back.state, { type: "OBSERVED", observation: { ...HOME_SELECTED, at: 2 } });
     const shown = play(looked.state, { type: "ACTION_READY", requestId: looked.state.requestId, action: next, failures: [] });
     expect(said(shown).join(" ")).toContain("Open the Insert tab.");
+  });
+
+  it("credits a click made right as they came back, which the fresh look shows done", () => {
+    const back = play(guiding(), { type: "APP_SWITCHED", away: true }, { type: "APP_SWITCHED", away: false });
+    const looked = play(back.state, { type: "OBSERVED", observation: { ...INSERT_SELECTED, at: 3 } });
+    expect(looked.state.stepIndex).toBe(1);
   });
 
   it("still answers a question asked from the other app", () => {

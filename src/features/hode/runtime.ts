@@ -10,6 +10,7 @@ import { rememberedLevel } from "../memory/tracker";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState } from "./model";
 import { step } from "./reducer";
 import { wantedNames } from "./wanted";
+import { diffScreens, isUnchanged } from "./change";
 
 export interface RuntimeDeps {
   perception: PerceptionAdapter;
@@ -60,6 +61,8 @@ export const NATIVE_SWITCH_GRACE_MS = 1500;
 /** After Hodey presses a control, the app gets this long to respond (a menu or dialog opening) before it's read. */
 export const PRESS_SETTLE_MS = 450;
 const CANT_PRESS = "Hodey can't click in this app, so this step is yours.";
+/** How long an app gets to show a click's result before Hodey takes its second look at a lesson step. */
+export const ACTION_SETTLE_MS = 600;
 /** A lookup plus a local-model plan; past this, the Hode carries on a step at a time without one. */
 const PLAN_TIMEOUT_MS = 45_000;
 /** A plan called off for the learner's next step is asked for again after it, this many times in all. */
@@ -108,6 +111,8 @@ export class HodeRuntime {
   private stuckMs: number | undefined;
   private autoLanguage = false;
   private pointerWatch: ReturnType<typeof setInterval> | undefined;
+  /** One more look shortly after a learner's action, for an app that shows its result late. */
+  private settleTimer: ReturnType<typeof setTimeout> | undefined;
   /** The plan being made; llama-server serves one request at a time, so it gives way to the next step. */
   private planning: { effect: PlanEffect; controller: AbortController; tries: number } | undefined;
   /** A plan that gave way to a step, asked for again once that step is answered. */
@@ -132,8 +137,7 @@ export class HodeRuntime {
 
   constructor(private readonly deps: RuntimeDeps) {
     this.disposers = [
-      // What the learner does in another app (while the Hode's app waits behind it) isn't part of the Hode.
-      deps.perception.onLearnerAction((observation) => (this.away ? undefined : this.dispatch({ type: "LEARNER_ACTED", observation }))),
+      deps.perception.onLearnerAction((observation) => this.learnerActed(observation)),
       deps.bus.on("annotate:start", () => this.dispatch({ type: "ANNOTATE_START" })),
       deps.bus.on("annotate:cancel", () => this.dispatch({ type: "ANNOTATE_CANCEL" })),
       deps.bus.on("annotation:submitted", ({ annotation }) => this.submitAnnotation(annotation)),
@@ -229,6 +233,7 @@ export class HodeRuntime {
     this.clearStuckTimer();
     this.clearPressTimer();
     this.clearOpenedSwitch();
+    this.clearSettle();
     this.stopPointerWatch();
     this.planning?.controller.abort();
     this.stopSpeech();
@@ -405,6 +410,8 @@ export class HodeRuntime {
    * nothing would ever say the learner came back).
    */
   private awayFrom(window: AppSwitch): boolean | undefined {
+    // A phone Hode is taught on the mirror: no desktop window coming forward takes the learner away from it.
+    if (this.state.pack?.surface === "phone") return undefined;
     const app = this.state.app ?? this.hodeApp;
     if (!this.deps.perception.onAppSwitched || this.state.phase === "idle" || app === undefined || !window.app) return undefined;
     return !sameApp(window.app, app);
@@ -438,8 +445,43 @@ export class HodeRuntime {
     this.clearOpenedSwitch();
     this.openedSwitch = setTimeout(() => {
       this.openedSwitch = undefined;
-      this.appSwitched({ app });
+      // No watcher confirmed which window is in front (bringing it forward can fail quietly): never claim "away".
+      this.dispatch({ type: "APP_SWITCHED" });
     }, NATIVE_SWITCH_GRACE_MS);
+  }
+
+  /** What the learner does in another app (while the Hode's app waits behind it) isn't part of the Hode. */
+  private learnerActed(observation: ScreenObservation): void {
+    if (this.away) return;
+    this.clearSettle();
+    this.dispatch({ type: "LEARNER_ACTED", observation });
+    this.settleAfter(observation);
+  }
+
+  /**
+   * An app shows a click's result a moment later (a dialog opening, a ribbon tab switching), so the read right
+   * after it can miss the step being done. A lesson step still waiting gets one more look once the app has caught
+   * up, and anything it shows counts as that action's, so the step finishes on the first try.
+   */
+  private settleAfter(acted: ScreenObservation): void {
+    const { pack, stepIndex } = this.state;
+    if (!pack || pack.surface === "phone" || this.state.phase !== "guiding") return;
+    const same = () => this.state.pack === pack && this.state.stepIndex === stepIndex && this.state.phase === "guiding" && !this.away;
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = undefined;
+      if (!same()) return;
+      this.deps.perception.observe(undefined, this.wanted).then(
+        (settled) => {
+          if (same() && !isUnchanged(diffScreens(acted, settled))) this.dispatch({ type: "LEARNER_ACTED", observation: { ...settled, inputs: [] } });
+        },
+        (error) => console.error("Couldn't take a second look after the learner's action", error),
+      );
+    }, ACTION_SETTLE_MS);
+  }
+
+  private clearSettle(): void {
+    if (this.settleTimer !== undefined) clearTimeout(this.settleTimer);
+    this.settleTimer = undefined;
   }
 
   private clearOpenedSwitch(): void {
@@ -469,7 +511,6 @@ export class HodeRuntime {
     );
   }
 
-  /** Desktop guidance belongs to the window it was placed on, the one last read; the overlay draws it only there. */
   /** A mark on the mirrored iPhone becomes a question about the phone, in its frame's pixels. */
   private submitAnnotation(annotation: LearnerAnnotation): void {
     const place = this.deps.placeAnnotation ?? ((a: LearnerAnnotation) => Promise.resolve(a));
@@ -481,6 +522,7 @@ export class HodeRuntime {
       .then((placed) => this.dispatch({ type: "ANNOTATION_SUBMITTED", annotation: placed }));
   }
 
+  /** Desktop guidance belongs to the window it was placed on, the one last read; the overlay draws it only there. */
   private renderOverlay(primitives: OverlayPrimitive[], screen = false): void {
     const surface = this.state.pack?.surface ?? this.state.question?.surface ?? "windows";
     // Screen-wide guidance (the taskbar's search box) isn't clipped to the learner's window.
