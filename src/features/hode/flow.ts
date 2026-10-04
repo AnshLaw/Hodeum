@@ -1,6 +1,7 @@
 import { COPY } from "../../lib/copy";
 import { spoken } from "../../lib/spoken";
 import { localizePack } from "../../task-packs/localize";
+import { appFromGoal } from "../../task-packs/match";
 import { area, padRect } from "../../lib/coords";
 import type { AssistanceLevel, HodeMode, LearnerAnnotation, Rect, ScreenObservation, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
 import {
@@ -24,6 +25,26 @@ import { confidenceBand, nudgeStartLevel, overlayFor, quieterOf } from "./policy
 import { regionAround } from "./region";
 import { acknowledgement } from "./ack";
 
+/** Verbs that open an app, in English, Hindi and Roman Hinglish. */
+const OPEN_VERB = /^(?:open|opening|launch|start|run|खोल\S*|khol\S*)$/u;
+/** Words a how-to-open goal carries besides the verb and the app ("how do I…", "कैसे", "kaise…hain"). */
+const OPEN_FILLER = new Set("how to do i can you me the my a an please teach show up on this pc computer microsoft ms app kaise karte hain hai karo mujhe कैसे करते हैं है करें मुझे".split(" "));
+
+/**
+ * The goal is opening its app and nothing else: once the app's own words and filler are set aside, only
+ * an opening verb is left. "How do I start a new workbook in Excel" leaves "new workbook", so it isn't.
+ */
+function opensApp(goal: string, app: string): boolean {
+  const appWords = new Set(app.toLowerCase().split(/\s+/));
+  const rest = goal
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word !== "" && !appWords.has(word) && appFromGoal(word) !== app && !OPEN_FILLER.has(word));
+  return rest.length > 0 && rest.every((word) => OPEN_VERB.test(word));
+}
+
 /** Open-ended Hodes have no saved skill: the vision model phrases each step at the mode's level. */
 const OPEN_START: Record<HodeMode, AssistanceLevel> = { teach: "hint", help: "observe", agent: "guide" };
 
@@ -38,9 +59,11 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
   const mode = e.mode ?? s.mode;
   const agentStyle = e.agentStyle ?? s.agentStyle;
   if (!e.pack && e.openAllowed) {
-    const focus: HodeEffect[] = e.app ? [{ type: "focusApp", app: e.app }] : [];
+    // Opening the app is the lesson itself: it isn't brought forward for the learner.
+    const openingApp = e.app !== undefined && opensApp(goal, e.app);
+    const focus: HodeEffect[] = e.app && !openingApp ? [{ type: "focusApp", app: e.app }] : [];
     const level = OPEN_START[mode];
-    return { state: { ...s, goal, app: e.app, mode, agentStyle, open: true, level, notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
+    return { state: { ...s, goal, app: e.app, openingApp, mode, agentStyle, open: true, level, notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
   }
   const { noPack } = spoken(s.language);
   if (!e.pack) return { state: { ...s, goal, notice: noPack }, effects: [{ type: "say", text: noPack }] };
@@ -63,7 +86,8 @@ export function sameApp(observed: string, expected: string): boolean {
 export function waitForApp(s: HodeState, observation: ScreenObservation): Transition {
   const app = s.app ?? "";
   const words = spoken(s.language);
-  const speech = s.pack?.surface === "phone" ? words.connectPhone : words.switchToApp(app);
+  // "How do I open it?" is answered with how, not "open it and I'll pick up there".
+  const speech = s.pack?.surface === "phone" ? words.connectPhone : s.openingApp ? words.howToOpen(app) : words.switchToApp(app);
   const action: TeachingAction = { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
   // Already said: a fresh look that still finds another app keeps the waiting card, quietly.
   if (s.waitingForApp === app) return { state: { ...s, phase: "guiding", observation }, effects: [] };
@@ -127,6 +151,7 @@ export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {
   // A question is answered wherever the learner is looking; only guidance waits for the right app.
   const asking = s.spokenQuestion !== undefined || s.question !== undefined;
   if (!asking && inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
+  if (!asking && s.openingApp) return openedApp({ ...s, observation: e.observation });
   // Help with an open goal watches until the learner asks or gets stuck: no model call yet.
   if (!asking && standingBy(s) && s.action === undefined) return { state: { ...s, phase: "guiding", observation: e.observation }, effects: [{ type: "startStuckTimer", ms: STUCK_MS }] };
   // A second look at a screen that hasn't changed would only get the same unsure answer: ask the learner instead.
@@ -321,6 +346,14 @@ export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
     prompted: false,
   };
   return { state, effects };
+}
+
+/** The app the learner was learning to open is open: that was the whole goal. */
+export function openedApp(s: HodeState): Transition {
+  const words = spoken(s.language);
+  const taught = s.waitingForApp ? [words.howToOpen(s.app ?? "")] : [];
+  const state: HodeState = { ...s, phase: "success", action: undefined, waitingForApp: undefined, openDone: [...(s.openDone ?? []), ...taught] };
+  return { state, effects: [{ type: "cancelStuckTimer" }, { type: "clearOverlay" }, { type: "say", text: words.openedIt(s.app ?? "") }] };
 }
 
 function finishOpenHode(s: HodeState, action: TeachingAction): Transition {

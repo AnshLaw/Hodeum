@@ -152,6 +152,7 @@ describe("Hinglish speech", () => {
     lines.push(say.clarify, ...say.acks, ...say.stepDone, ...say.stepDoneLight, say.needVisionToAnswer, say.noPack, say.hodeCompleteSpeech, say.nothingMarked, say.neededForThisStep);
     lines.push(say.repeatedClick("Data"), say.menuLoop("Insert"), say.undoLoop, say.surpriseDialog("Excel"), say.targetMissing("Insert"));
     lines.push(say.youDoTheClicking, say.gotTheHang, say.cantSeeItDone, ...say.reviewRight, say.reviewWrong("Insert"), say.pickAnAnswer, say.practiceIntro, say.didItAlone);
+    lines.push(say.howToOpen("Excel"), say.openedIt("Excel"));
     expect(lines.flatMap(latinLeft)).toEqual([]);
   });
 });

@@ -84,6 +84,8 @@ export interface HodeState {
   open: boolean;
   /** The app this Hode happens in (the pack's, or one an open goal names). */
   app?: string;
+  /** The goal is opening `app` itself ("how do I open Excel?"): Hodey teaches the launch and finishes once it's open. */
+  openingApp?: boolean;
   /** That app, while Hodey waits for the learner to open or switch to it. */
   waitingForApp?: string;
   /** Teach (learn by doing), help (stand by until asked) or agent (guide or do every step). */

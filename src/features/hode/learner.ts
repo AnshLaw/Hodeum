@@ -1,7 +1,7 @@
 import { spoken } from "../../lib/spoken";
 import { ASSISTANCE_LEVELS, type ActionVerdict, type ScreenObservation, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
 import { assessAction, mattered } from "./change";
-import { beginStep, inWrongApp, onObserved, onSkillLoaded, requestReason, waitForApp } from "./flow";
+import { beginStep, inWrongApp, onObserved, onSkillLoaded, openedApp, requestReason, waitForApp } from "./flow";
 import { takeOver } from "./execute";
 import { acknowledgement, watchedOnly } from "./ack";
 import { onVoiceQuestion } from "./session";
@@ -140,6 +140,7 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
  */
 function onOpenAction(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
   if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
+  if (s.openingApp) return openedApp({ ...s, observation: e.observation });
   const action = { before: s.observation, after: e.observation };
   const next: HodeState = { ...s, observation: e.observation, waitingForApp: undefined, stepActions: remember(s.stepActions, action), ack: undefined };
   if (!s.waitingForApp && !mattered(assessAction(action))) return quiet(next);
