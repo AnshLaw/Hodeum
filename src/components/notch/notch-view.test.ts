@@ -61,7 +61,7 @@ describe("modes in the notch", () => {
 
 describe("islandSize", () => {
   const looking = notchView({ ...initialState, phase: "reasoning" });
-  const quiet = { settled: true, hovered: false, menuOpen: false, peek: false, listening: false };
+  const quiet = { settled: true, hovered: false, menuOpen: false, peek: false, listening: false, phone: false };
 
   it("shrinks to an orb while Hodey looks, keeping the status as its label", () => {
     expect(looking).toMatchObject({ size: "orb", busy: true, title: COPY.looking });
@@ -106,5 +106,17 @@ describe("stepItems", () => {
   it("marks finished, current, and upcoming steps", () => {
     expect(stepItems(guiding({ stepIndex: 1 })).map((s) => s.state)).toEqual(["done", "current"]);
     expect(stepItems({ ...guiding(), phase: "success" }).map((s) => s.state)).toEqual(["done", "done"]);
+  });
+});
+
+describe("phone island", () => {
+  const context = { settled: true, hovered: false, menuOpen: false, peek: false, listening: false, phone: true };
+
+  it("opens to the phone layout while the mirror is open", () => {
+    expect(islandSize(notchView(initialState), context)).toBe("phone");
+  });
+
+  it("still lets the menu take over", () => {
+    expect(islandSize(notchView(initialState), { ...context, menuOpen: true })).toBe("lesson");
   });
 });

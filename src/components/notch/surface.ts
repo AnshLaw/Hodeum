@@ -7,6 +7,8 @@ import type { SpeechInputStatus } from "../../providers/speech/speech-input";
 import type { HodeyMood } from "../hodey/mood";
 import type { VisionStatus } from "../../providers/vision/types";
 import type { NotchControl, NotchView, StepItem } from "./notch-view";
+import type { Bus } from "../../lib/bus";
+import type { PhoneMirror } from "../../features/phone/phone-mirror";
 
 /** Everything the top notch and the sidebar render from; both are views over the same state. */
 export interface SurfaceProps {
@@ -41,4 +43,10 @@ export interface SurfaceProps {
   heard?: string;
   onToggleMic: () => void;
   onOpenApp: () => void;
+  bus: Bus;
+  /** The iPhone mirror (desktop app only; the stage has none). */
+  phone?: PhoneMirror;
+  phoneOpen?: boolean;
+  /** Shows or hides the iPhone mirror; absent where there is no mirror. */
+  onTogglePhone?: () => void;
 }

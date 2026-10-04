@@ -20,6 +20,9 @@ import { hodeyMood, type HodeyMood } from "../hodey/mood";
 import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
 import type { ActivityState, ActivityTracker } from "../../lib/activity";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
+import type { PhoneMirror } from "../../features/phone/phone-mirror";
+import { PhonePanel } from "./PhonePanel";
+import { usePhoneControls } from "./use-phone";
 import { PrivacyDots } from "./NotchParts";
 import "../hodey/hodey-face.css";
 import "./notch.css";
@@ -35,6 +38,8 @@ export interface NotchProps {
   vision?: VisionStatusSource;
   activity: ActivityTracker;
   speech: SpeechInput;
+  /** The iPhone mirror (desktop app only). */
+  phone?: PhoneMirror;
 }
 
 const TOAST_MS = 4000;
@@ -115,7 +120,7 @@ function useVisionStatus(source?: VisionStatusSource): VisionStatus | undefined 
 /** Hodey has to be busy this long before the notch shrinks to an orb, so quick reads don't flicker. */
 const ORB_DELAY_MS = 180;
 const ORB_FACE_SIZE = 40;
-const EXPANDED_SIZES: NotchSize[] = ["guidance", "lesson", "success"];
+const EXPANDED_SIZES: NotchSize[] = ["guidance", "lesson", "success", "phone"];
 
 /** Looking or thinking: just Hodey, in its current mood, with a sweeping ring. */
 function Orb({ mood, label, activity }: { mood: HodeyMood; label: string; activity: ActivityState }) {
@@ -130,7 +135,7 @@ function Orb({ mood, label, activity }: { mood: HodeyMood; label: string; activi
 
 function topBody(props: SurfaceProps, view: NotchView, size: NotchSize, peek: boolean) {
   const { menuOpen, dock, onControl } = props;
-  if (menuOpen) return <DockMenu prefs={dock.prefs} vision={props.vision} mode={props.hodeActive ? props.hodeMode : undefined} onModeChange={props.onSetMode} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
+  if (menuOpen) return <DockMenu prefs={dock.prefs} vision={props.vision} mode={props.hodeActive ? props.hodeMode : undefined} onModeChange={props.onSetMode} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} phoneOpen={props.phoneOpen} onTogglePhone={props.onTogglePhone} />;
   if (view.mode === "goal") return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   if (peek) return null;
   return <NotchContent view={view} expanded={EXPANDED_SIZES.includes(size)} fallbackDetail={props.bootNotice} onControl={onControl} />;
@@ -143,7 +148,7 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
   // Step aside to a slim bar while the highlighted control sits under the card; hovering brings it back.
   const peek = props.covering && !hovered && !menuOpen && props.view.mode === "guidance";
   const listening = props.micStatus === "listening";
-  const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening });
+  const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening, phone: props.phoneOpen === true });
   const view = peek ? { ...props.view, controls: [] } : props.view;
   const style = { "--notch-width": `${NOTCH_WIDTHS[size]}px`, "--notch-hover-width": `${NOTCH_IDLE_HOVER_WIDTH}px` } as CSSProperties;
   const classes = ["notch", `notch--${size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
@@ -157,7 +162,15 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
             <NotchBar view={view} mood={props.mood} expanded={EXPANDED_SIZES.includes(size)} muted={props.muted} menuOpen={menuOpen} onToggleMute={props.onToggleMute} onToggleMenu={props.onToggleMenu} onControl={props.onControl} onGrip={props.onGrip} activity={props.activity} micStatus={props.micStatus} onToggleMic={props.onToggleMic} onOpenApp={props.onOpenApp} />
             {props.toast && <p className="notch__toast" role="status">{props.toast}</p>}
             {listening && <HeardLine heard={props.heard} />}
-            <div aria-live="polite">{topBody(props, view, size, peek)}</div>
+            <div aria-live="polite">
+              {size === "phone" && props.phone ? (
+                <PhonePanel mirror={props.phone} bus={props.bus}>
+                  {topBody(props, view, size, peek)}
+                </PhonePanel>
+              ) : (
+                topBody(props, view, size, peek)
+              )}
+            </div>
           </>
         )}
         {!revealed && <PrivacyDots activity={props.activity} className="privacy-dots--sliver" />}
@@ -189,7 +202,7 @@ function useNotchActions(speech: SpeechInput, shell: NativeShell, surfaceRef: Re
 }
 
 /** Hodey's surface: a top-centre notch or a side sidebar, draggable between them, with auto-hide. */
-export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity: tracker, speech }: NotchProps) {
+export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity: tracker, speech, phone }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
   const view = notchView(state);
@@ -206,6 +219,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
   const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top");
   const activity = useActivity(tracker);
   const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
+  const { phoneOpen, onTogglePhone } = usePhoneControls(phone, state, () => setMenuOpen(false));
 
   const props: SurfaceProps = {
     view,
@@ -245,6 +259,10 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
     defaultMode: runtime.getDefaultMode(),
     hodeActive: state.phase !== "idle" && state.phase !== "goal_entry",
     onSetMode: (mode) => runtime.dispatch({ type: "SET_MODE", mode }),
+    bus,
+    phone,
+    phoneOpen,
+    onTogglePhone,
   };
   if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} covering={covering} />;
   return <Sidebar {...props} side={dock.prefs.dock} surfaceRef={surfaceRef} />;

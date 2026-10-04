@@ -66,6 +66,9 @@ interface DockMenuProps {
   vision?: VisionStatus;
   onChange: (change: Partial<DockPrefs>) => void;
   onHide: () => void;
+  phoneOpen?: boolean;
+  /** Absent where there is no iPhone mirror (the stage). */
+  onTogglePhone?: () => void;
 }
 
 /** Where Hodey lives and how it behaves when idle. Rendered inside the notch so hit-testing stays exact. */
@@ -77,7 +80,7 @@ function useHodeyKeyLabel(): string {
 
 const MODE_OPTIONS: [HodeMode, string][] = HODE_MODES.map((mode) => [mode, MODE_COPY[mode].title]);
 
-export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide }: DockMenuProps) {
+export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide, phoneOpen, onTogglePhone }: DockMenuProps) {
   const keyLabel = useHodeyKeyLabel();
   const idle = prefs.visibility === "hidden" ? "pinned" : prefs.visibility;
   return (
@@ -91,6 +94,11 @@ export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide }
         </>
       )}
       <Segmented label={COPY.whenIdle} options={IDLE_OPTIONS} value={idle} onSelect={(visibility) => onChange({ visibility })} />
+      {onTogglePhone && (
+        <button type="button" className="btn" onClick={onTogglePhone}>
+          {phoneOpen ? COPY.hideIphone : COPY.showIphone}
+        </button>
+      )}
       <div className="dock-menu__footer">
         <button type="button" className="btn" onClick={onHide}>
           {COPY.hideHodey}
