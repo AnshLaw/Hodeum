@@ -18,7 +18,7 @@ use tauri::{AppHandle, Manager, State};
 
 use super::rtp::Depacketizer;
 use crate::child_job::ChildJob;
-use crate::vlm::local_ai_root;
+use crate::vlm::{local_ai_root, port_from_row};
 
 pub const RECEIVER_NAME: &str = "Hodeum";
 /// One fixed place, like llama-server: no setting or variable can redirect which receiver binary runs,
@@ -102,15 +102,36 @@ fn exit_detail(root: &Path) -> String {
     last_line(&log).map_or_else(|| "The AirPlay receiver stopped.".to_string(), |l| format!("The AirPlay receiver stopped: {l}"))
 }
 
-/// Video is only accepted from the first sender (UxPlay), so other local programs can't inject frames.
-fn accept_from(peer: &mut Option<SocketAddr>, from: SocketAddr) -> bool {
-    match peer {
-        Some(known) => *known == from,
-        None => {
-            *peer = Some(from);
-            true
+/// Which process owns a local UDP port (IPv4), straight from the OS UDP table.
+fn udp_owner_pid(port: u16) -> Option<u32> {
+    use windows::Win32::NetworkManagement::IpHelper::{GetExtendedUdpTable, MIB_UDPTABLE_OWNER_PID, UDP_TABLE_OWNER_PID};
+    use windows::Win32::Networking::WinSock::AF_INET;
+    let family = u32::from(AF_INET.0);
+    let mut size = 0u32;
+    // SAFETY: the first call only reports the required size; the second fills a buffer of that size.
+    unsafe {
+        GetExtendedUdpTable(None, &mut size, false, family, UDP_TABLE_OWNER_PID, 0);
+        let mut buffer = vec![0u8; size as usize];
+        if GetExtendedUdpTable(Some(buffer.as_mut_ptr().cast()), &mut size, false, family, UDP_TABLE_OWNER_PID, 0) != 0 {
+            return None;
         }
+        let table = &*(buffer.as_ptr() as *const MIB_UDPTABLE_OWNER_PID);
+        let rows = std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize);
+        rows.iter().find(|row| port_from_row(row.dwLocalPort) == port).map(|row| row.dwOwningPid)
     }
+}
+
+/// Video is only accepted from a port owned by the UxPlay process we started, so another local
+/// program can neither inject frames nor lock the receiver out by sending first.
+fn accept_from(peer: &mut Option<SocketAddr>, from: SocketAddr, receiver_pid: u32, owner: impl Fn(u16) -> Option<u32>) -> bool {
+    if let Some(known) = peer {
+        return *known == from;
+    }
+    let ours = from.ip().is_loopback() && owner(from.port()) == Some(receiver_pid);
+    if ours {
+        *peer = Some(from);
+    }
+    ours
 }
 
 /// One packet in; an access unit out to the notch when a frame completes. False when the notch is gone.
@@ -123,14 +144,14 @@ fn forward(depacketizer: &mut Depacketizer, packet: &[u8], channel: &Channel<Inv
 }
 
 /// Forwards video until stopped, the notch goes away, or the receiver exits.
-fn pump(socket: UdpSocket, channel: Channel<InvokeResponseBody>, stop: Arc<AtomicBool>, root: PathBuf, exited: impl Fn() -> bool) {
+fn pump(socket: UdpSocket, channel: Channel<InvokeResponseBody>, stop: Arc<AtomicBool>, root: PathBuf, receiver_pid: u32, exited: impl Fn() -> bool) {
     let mut depacketizer = Depacketizer::new();
     let mut buffer = vec![0u8; MAX_PACKET];
     let mut streaming = false;
     let mut sender = None;
     while !stop.load(Ordering::SeqCst) {
         match socket.recv_from(&mut buffer) {
-            Ok((_, from)) if !accept_from(&mut sender, from) => continue,
+            Ok((_, from)) if !accept_from(&mut sender, from, receiver_pid, udp_owner_pid) => continue,
             Ok((n, _)) => {
                 if !streaming {
                     streaming = status(&channel, "streaming", None);
@@ -164,10 +185,11 @@ pub fn airplay_start(app: AppHandle, state: State<'_, Airplay>, on_frame: Channe
     let port = socket.local_addr().map_err(|e| e.to_string())?.port();
     let child = spawn_receiver(&root, &exe, port)?;
     state.job.bind(&child, "the AirPlay receiver")?;
+    let receiver_pid = child.id();
     let stop = Arc::new(AtomicBool::new(false));
     *state.session.lock().map_err(|e| e.to_string())? = Some(Session { child, stop: stop.clone() });
     status(&on_frame, "waiting", None);
-    thread::spawn(move || pump(socket, on_frame, stop, root, move || app.state::<Airplay>().exited()));
+    thread::spawn(move || pump(socket, on_frame, stop, root, receiver_pid, move || app.state::<Airplay>().exited()));
     Ok(())
 }
 
@@ -201,13 +223,23 @@ mod tests {
     }
 
     #[test]
-    fn only_the_first_sender_may_feed_video() {
-        let uxplay: std::net::SocketAddr = "127.0.0.1:50000".parse().unwrap();
-        let intruder: std::net::SocketAddr = "127.0.0.1:50001".parse().unwrap();
+    fn finds_the_process_that_owns_a_udp_port() {
+        let socket = UdpSocket::bind(("127.0.0.1", 0)).unwrap();
+        let port = socket.local_addr().unwrap().port();
+        assert_eq!(udp_owner_pid(port), Some(std::process::id()));
+    }
+
+    #[test]
+    fn only_the_receiver_process_may_feed_video_even_if_another_sends_first() {
+        const RECEIVER_PID: u32 = 42;
+        let uxplay: SocketAddr = "127.0.0.1:50000".parse().unwrap();
+        let intruder: SocketAddr = "127.0.0.1:50001".parse().unwrap();
+        let owner = |port: u16| Some(if port == 50000 { RECEIVER_PID } else { 7 });
         let mut peer = None;
-        assert!(accept_from(&mut peer, uxplay));
-        assert!(!accept_from(&mut peer, intruder));
-        assert!(accept_from(&mut peer, uxplay));
+        assert!(!accept_from(&mut peer, intruder, RECEIVER_PID, owner));
+        assert!(accept_from(&mut peer, uxplay, RECEIVER_PID, owner));
+        assert!(!accept_from(&mut peer, intruder, RECEIVER_PID, owner));
+        assert!(accept_from(&mut peer, uxplay, RECEIVER_PID, owner));
     }
 
     #[test]
