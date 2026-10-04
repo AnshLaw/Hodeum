@@ -160,7 +160,7 @@ No cloud API keys are needed. Copy `.env.example` to `.env.local` only when you 
 
 ### Accounts, sync and the web dashboard (optional)
 
-Sign in with Google (Settings › Account) to sync skills, Hodes, settings and chats to Supabase, then use the web dashboard (`/web.html`) to see your progress and start a Hode on your PC. Signed out, everything stays local. Setup: [`docs/accounts-setup.md`](./docs/accounts-setup.md).
+Sign in with Google (Settings › Account) to sync skills, Hodes, settings and chats to Supabase, then use the web dashboard (`/web.html`) to see your progress and start a Hode on your PC. A goal from the dashboard only ever starts a Hode: "open Command Prompt" sent from the web never opens an app on the PC (only the PC's own notch and app window can). Signed out, everything stays local. Setup: [`docs/accounts-setup.md`](./docs/accounts-setup.md).
 
 ## Layout
 
