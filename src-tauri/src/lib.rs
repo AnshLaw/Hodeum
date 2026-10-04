@@ -17,6 +17,7 @@ mod hodey_key;
 mod perception;
 mod phone;
 mod surfaces;
+mod topmost;
 mod tray;
 mod vlm;
 mod voice;
@@ -64,6 +65,9 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let exe = std::env::current_exe().map(|exe| exe.display().to_string()).unwrap_or_else(|error| format!("exe unknown: {error}"));
     log::info!("Hodeum {} starting ({exe})", tray::build_info());
     surfaces::setup(app)?;
+    if let Err(error) = topmost::start(app) {
+        log::error!("the notch and overlay won't be kept above other windows: {error}");
+    }
     dock::keep_top_anchored(app)?;
     app_window::keep_alive(app)?;
     tray::install(app)?;

@@ -136,6 +136,8 @@ pub fn spawn(app: AppHandle, last_external: Arc<AtomicIsize>) {
         loop {
             let now = current_learner_window(&last_external, &mut memo);
             if reported.as_ref() != Some(&now) {
+                // It may have gone fullscreen or come forward over the notch and overlay.
+                crate::topmost::request_check();
                 match app.emit(LEARNER_WINDOW_EVENT, &now) {
                     Ok(()) => reported = Some(now),
                     Err(error) => eprintln!("couldn't report the learner's window: {error}"),

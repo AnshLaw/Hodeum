@@ -97,6 +97,15 @@ Turn every cloud provider off in Settings → Cloud, so the run proves the local
 2. Start the PivotTable Hode, then disconnect Wi-Fi after the first step.
 3. **Pass:** the next step still arrives, with at most a single delay of about the request timeout, and the Hode completes. Repeat the same check with ElevenLabs voice: Hodey keeps speaking in the local voice.
 
+## Also check: the notch and overlay stay above every app
+
+**Automated:** the Rust tests in `src-tauri/src/topmost/` check the z-order against real (invisible, off-screen) windows.
+
+**Live:**
+1. Open Task Manager, choose **Options → Always on top**, drag it over the notch and click into it.
+2. Watch a video full screen in the browser, then start a PowerPoint slide show.
+3. **Pass:** the notch comes back above Task Manager, the video and the slide show within about 1.5 s (at once when they take focus), typing still goes to the app, and a notch hidden with the Hodey key + H stays hidden. `hodeum.log` shows `keeping the notch and overlay above other windows` once at startup and no `SetWindowPos couldn't put` warnings. Exclusive-fullscreen games are out of scope.
+
 ## Results
 
 | Gate | Date | Machine | Result | Measurement / notes |
