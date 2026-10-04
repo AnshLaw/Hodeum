@@ -1,7 +1,7 @@
 import { spoken } from "../../lib/spoken";
 import { ASSISTANCE_LEVELS, type ActionVerdict, type ScreenObservation, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
 import { assessAction, mattered } from "./change";
-import { beginStep, inWrongApp, onObserved, onSkillLoaded, openedApp, requestReason, waitForApp } from "./flow";
+import { beginStep, inWrongApp, onObserved, onSkillLoaded, openedApp, overlayOf, requestReason, waitForApp } from "./flow";
 import { takeOver } from "./execute";
 import { acknowledgement, watchedOnly } from "./ack";
 import { onVoiceQuestion } from "./session";
@@ -214,17 +214,37 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
 }
 
 /**
+ * Teach's hint rung has two beats: the question alone while the learner tries, then (stuck, a hint
+ * asked for, "where?") the area that holds the answer, at once and without a model call. Undefined when
+ * that beat is past, or there's no area to light (then help climbs a rung as usual).
+ */
+function revealArea(s: HodeState, stuck?: StuckSignal): Transition | undefined {
+  if (s.mode !== "teach" || s.level !== "hint" || s.areaShown === true || !s.action?.target) return undefined;
+  // Lighting the area is help, and why the learner needed it ("where?") goes into their history.
+  const shown: HodeState = { ...s, areaShown: true, escalated: true, neededHelp: true, stuck: stuck ?? s.stuck };
+  const primitives = overlayOf(shown, s.action);
+  if (primitives.length === 0) return undefined;
+  const effects: HodeEffect[] = [CANCEL_TIMER, { type: "renderOverlay", primitives }, { type: "say", text: spoken(s.language).lookHere }, { type: "startStuckTimer", ms: STUCK_MS }];
+  return { state: shown, effects };
+}
+
+/**
  * Hesitation raises help one rung per timeout. At the most help a step is explained and reset once (an
  * open-ended Hode gets one fresh look); after that Hodey waits for the learner (an action that
  * matters, or a hint request) instead of re-deciding and repeating itself while they look around.
  */
 export function onStuckTimeout(s: HodeState): Transition {
-  if (s.phase !== "guiding" || s.toppedOut) return noop(s);
+  // In another app, the learner isn't hesitating over the step.
+  if (s.phase !== "guiding" || s.toppedOut || s.away === true) return noop(s);
+  const area = revealArea(s);
+  if (area) return area;
   return requestReason(raiseHelp({ ...s, toppedOut: s.level === MOST_HELP }, { countsAsMistake: false }));
 }
 
 export function onHintRequested(s: HodeState): Transition {
   if (s.phase !== "guiding") return noop(s);
+  const area = revealArea(s);
+  if (area) return area;
   return withLeadingEffects(requestReason(raiseHelp({ ...s, prompted: true }, { countsAsMistake: false })), [CANCEL_TIMER]);
 }
 
@@ -238,6 +258,8 @@ export function onShowMe(s: HodeState): Transition {
 /** "Where?", "I don't see it": the same ladder as the stuck timer, never a pause. */
 export function onSaidStuck(s: HodeState): Transition {
   if (s.phase !== "guiding") return noop(s);
+  const area = revealArea(s, { kind: "said_stuck" });
+  if (area) return area;
   const raised = raiseHelp({ ...s, prompted: true }, { countsAsMistake: false, stuck: { kind: "said_stuck" } });
   return withLeadingEffects(requestReason(raised), [CANCEL_TIMER]);
 }
@@ -276,13 +298,31 @@ export function onLookAgain(s: HodeState): Transition {
  * it's worth a fresh look (the learner may have opened the app the goal is in). A lesson ignores it: its
  * steps are checked on the learner's next action, and a glance elsewhere isn't a step.
  */
-export function onAppSwitched(s: HodeState): Transition {
+export function onAppSwitched(s: HodeState, e: EventOf<"APP_SWITCHED">): Transition {
+  if (e.away === true) return steppedAway(s);
+  if (e.away === false && s.away === true) return cameBack(s);
   if (s.phase !== "guiding") return noop(s);
   // The ring on the taskbar's search box has done its job once another window comes forward.
   if (s.waitingForApp) return withLeadingEffects(onLookAgain(s), [{ type: "clearOverlay" }]);
   if (!s.open) return noop(s);
   // A fresh look, but not an action of the learner's: a glance at another app never counts a step as done.
   return { state: { ...s, phase: "observing", reobserved: false, toppedOut: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
+}
+
+/** Phases of a running Hode the learner can step away from. */
+const AWAY_PHASES: HodeState["phase"][] = ["guiding", "reasoning", "observing", "answering"];
+
+/** In another app, the Hode's window still open behind it: the step and its card stay, quietly, with no stuck timer. */
+function steppedAway(s: HodeState): Transition {
+  if (s.away === true || !AWAY_PHASES.includes(s.phase)) return noop(s);
+  return { state: { ...s, away: true }, effects: [CANCEL_TIMER] };
+}
+
+/** Back in the Hode's window: a fresh look at it (what changed while they were away), then the step carries on. */
+function cameBack(s: HodeState): Transition {
+  const back: HodeState = { ...s, away: false };
+  if (s.phase !== "guiding") return { state: back, effects: [] };
+  return { state: { ...back, phase: "observing", reobserved: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
 }
 
 /** Lesson phases a step can be skipped from (a question being answered isn't one). */

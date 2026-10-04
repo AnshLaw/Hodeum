@@ -128,6 +128,10 @@ export interface HodeState {
   reason?: string;
   /** The current step's why has been said (in a demonstration, a correction, or Explain). */
   whySaid?: boolean;
+  /** Teach's hint rung, second beat: the area that holds the answer is lit (the question came alone first). */
+  areaShown?: boolean;
+  /** The learner is in another app while the Hode's window stays open: the step waits for them, quietly. */
+  away?: boolean;
   /** Paused, then a question: where the pause itself resumes to, kept while the question is answered. */
   pausedResume?: Pick<HodeState, "resumePhase" | "resumeAction" | "resumeObservation">;
   /** A short line said once, ahead of the next guidance ("I can't see that done yet."). */
@@ -190,7 +194,18 @@ export const initialState: HodeState = {
 export type HodeEvent =
   | { type: "START_HODE" }
   /** `openAllowed`: no pack matched, but the local vision model is ready to plan step by step. */
-  | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean; /** Named in an open goal. */ app?: string; mode?: HodeMode; agentStyle?: AgentStyle }
+  | {
+      type: "GOAL_SUBMITTED";
+      goal: string;
+      pack?: TaskPack;
+      openAllowed?: boolean;
+      /** Named in an open goal. */
+      app?: string;
+      mode?: HodeMode;
+      agentStyle?: AgentStyle;
+      /** No pack matched and the local vision model is still loading, so the goal can't be planned yet. */
+      visionStarting?: boolean;
+    }
   /** `remembered`: where learning memory says to start this skill (nudges the start by one step at most). */
   | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null; remembered?: AssistanceLevel }
   /** Switch teach / help / agent, mid-Hode too. */
@@ -223,8 +238,11 @@ export type HodeEvent =
   | { type: "VOICE_QUESTION"; question: string; lookUp?: boolean }
   /** The learner asks Hodey to re-read the screen now (PRD §11 "look again"). */
   | { type: "LOOK_AGAIN" }
-  /** Another window came to the front (the learner opened or switched apps, with or without a click). */
-  | { type: "APP_SWITCHED" }
+  /**
+   * Another window came to the front (the learner opened or switched apps, with or without a click).
+   * `away`: the Hode's own window is still open behind it (true), or back in front (false).
+   */
+  | { type: "APP_SWITCHED"; away?: boolean }
   /** The taskbar's Start button and search box, read for `observeShell`; empty when they couldn't be read. */
   | { type: "SHELL_OBSERVED"; elements: UiElement[] }
   | { type: "LET_ME_TRY" }

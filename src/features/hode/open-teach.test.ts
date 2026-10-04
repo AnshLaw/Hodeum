@@ -48,7 +48,7 @@ function firstInstruction(mode: HodeMode = "teach"): HodeState {
 
 describe("a step done in an open-ended Hode", () => {
   it("is acknowledged when the model moves on after the learner acted, and the next step starts with a question again", () => {
-    const raised = play(firstInstruction(), { type: "STUCK_TIMEOUT" });
+    const raised = play(firstInstruction(), { type: "STUCK_TIMEOUT" }, { type: "STUCK_TIMEOUT" });
     const guided = play(raised.state, { type: "ACTION_READY", requestId: raised.state.requestId, action: guide("Open the File menu.", "guide"), failures: [] }).state;
     expect(guided.level).toBe("guide");
     const acted = play(guided, { type: "LEARNER_ACTED", observation: MENU_OPEN });

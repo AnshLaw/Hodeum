@@ -75,14 +75,15 @@ describe("orient: a Teach Hode opens with what the learner is about to make", ()
 });
 
 describe("ask first: a hint lights up the area that holds the answer, never the answer", () => {
-  it("rings the row of tabs, without a label, for a hint about a tab", () => {
-    const [primitives] = overlays(hinting());
+  it("rings the row of tabs, without a label, once the learner is stuck on a question about a tab", () => {
+    expect(overlays(hinting())).toEqual([]);
+    const [primitives] = overlays(play(hinting().state, { type: "STUCK_TIMEOUT" }));
     expect(primitives).toEqual([{ kind: "highlight", bounds: padRect({ x: 0, y: 0, width: 140, height: 20 }, REGION_PADDING_PX), emphasis: "broad" }]);
   });
 
   it("lights up a generous area around a target that stands alone, never the control alone", () => {
     const t = begin("teach");
-    const lone = play(t.state, { type: "OBSERVED", observation: obs([tab("Insert", 1)]) }, { type: "ACTION_READY", requestId: 1, action: hint(), failures: [] });
+    const lone = play(t.state, { type: "OBSERVED", observation: obs([tab("Insert", 1)]) }, { type: "ACTION_READY", requestId: 1, action: hint(), failures: [] }, { type: "STUCK_TIMEOUT" });
     const [primitives] = overlays(lone);
     expect(primitives).toHaveLength(1);
     expect(primitives[0]).toMatchObject({ kind: "highlight", emphasis: "broad" });
@@ -93,7 +94,7 @@ describe("ask first: a hint lights up the area that holds the answer, never the 
 
   it("points at the control itself once the learner needs more help", () => {
     const t = hinting();
-    const raised = play(t.state, { type: "STUCK_TIMEOUT" });
+    const raised = play(t.state, { type: "STUCK_TIMEOUT" }, { type: "STUCK_TIMEOUT" });
     const guided = play(raised.state, { type: "ACTION_READY", requestId: raised.state.requestId, action: guideAction({ assistanceLevel: "guide", speech: "Open Insert." }), failures: [] });
     expect(overlays(guided)[0]).toContainEqual(expect.objectContaining({ kind: "highlight", emphasis: "precise", label: "Insert" }));
   });

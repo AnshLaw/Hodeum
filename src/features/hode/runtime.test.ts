@@ -132,8 +132,8 @@ describe("HodeRuntime end to end", () => {
     await second.start("teach");
     await second.act("tab:Insert");
     expect(second.state()).toMatchObject({ stepIndex: 1, level: "hint" });
-    // A question, with the area that holds the answer lit up rather than the answer itself.
-    expect(second.overlays.at(-1)).toBe("area");
+    // A question on its own: the learner tries before anything is lit up.
+    expect(second.overlays.at(-1)).toBe("clear");
   });
 
   it("tells views once a step's skill progress is saved", async () => {
@@ -168,6 +168,9 @@ describe("HodeRuntime end to end", () => {
     const h = setup(undefined, skills);
     await h.start("teach");
     expect(h.state().level).toBe("hint");
+    vi.advanceTimersByTime(STUCK_MS);
+    await settle();
+    expect(h.state()).toMatchObject({ phase: "guiding", level: "hint", areaShown: true });
     vi.advanceTimersByTime(STUCK_MS);
     await settle();
     expect(h.state()).toMatchObject({ phase: "guiding", level: "guide" });

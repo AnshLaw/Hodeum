@@ -157,7 +157,8 @@ function expectTeachStep(h: Harness, journey: Journey, index: number, said: stri
   const level = levels[index];
   expect(h.state()).toMatchObject({ phase: "guiding", stepIndex: index, level, mode: "teach" });
   expect(highlighted(h.overlays.at(-1))).toBe(false);
-  if (level === "hint") expect(h.overlays.at(-1)).toBe(AREA);
+  // The question comes alone while the learner tries; nothing is lit up yet.
+  if (level === "hint") expect(h.overlays.at(-1)).toBe(NONE);
   const ack = expectAck(h, journey, index, [...EN.stepDone, EN.rememberedOnYourOwn, EN.gotTheHang], "Teach");
   const intro = index === 0 ? `${journey.pack.concept} ${EN.youDoTheClicking}` : "";
   const reason = index > 0 && levels[index - 1] === "hint" ? why(journey, index - 1) : "";
@@ -315,8 +316,10 @@ describe("a wrong action", () => {
 });
 
 /** What each successive hint (or stuck timeout) shows on PivotTable step 1. */
-const LADDER: Record<HodeMode, Array<{ level: AssistanceLevel; overlay: string; speech: (j: Journey) => string }>> = {
+/** `title`: what the card shows, when it isn't what was said (lighting the area keeps the question on the card). */
+const LADDER: Record<HodeMode, Array<{ level: AssistanceLevel; overlay: string; speech: (j: Journey) => string; title?: (j: Journey) => string }>> = {
   teach: [
+    { level: "hint", overlay: AREA, speech: () => EN.lookHere, title: (j) => step(j, 0).speech.hint },
     { level: "guide", overlay: HIGHLIGHT, speech: (j) => step(j, 0).speech.guide },
     { level: "demonstrate", overlay: FULL, speech: (j) => `${step(j, 0).speech.demonstrate} ${why(j, 0)}` },
   ],
@@ -338,7 +341,7 @@ describe.each(["HINT_REQUESTED", "STUCK_TIMEOUT"] as const)("help revealed gradu
       expect(h.state()).toMatchObject({ phase: "guiding", level: rung.level });
       expect(h.newSpeech()).toEqual([rung.speech(PIVOT)]);
       expect(h.overlays.at(-1)).toBe(rung.overlay);
-      expect(h.view().title).toBe(rung.speech(PIVOT));
+      expect(h.view().title).toBe((rung.title ?? rung.speech)(PIVOT));
     }
     await click(h, PIVOT.clicks[0]);
     expect(h.state()).toMatchObject({ stepIndex: 1 });
@@ -363,6 +366,10 @@ describe("the stuck timer", () => {
     const h = harness(ZIP);
     await start(h, ZIP, "teach");
     h.newSpeech();
+    vi.advanceTimersByTime(STUCK_MS);
+    await settle();
+    expect(h.newSpeech()).toEqual([EN.lookHere]);
+    expect(h.overlays.at(-1)).toBe(AREA);
     vi.advanceTimersByTime(STUCK_MS);
     await settle();
     expect(h.newSpeech()).toEqual([step(ZIP, 0).speech.guide]);
@@ -439,7 +446,7 @@ describe("Teach with a practised skill", () => {
     await start(second, PIVOT, "teach");
     expect(second.state().level).toBe("hint");
     expect(second.overlays.filter(highlighted)).toEqual([]);
-    expect(second.overlays.at(-1)).toBe(AREA);
+    expect(second.overlays.at(-1)).toBe(NONE);
   });
 });
 

@@ -68,8 +68,10 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
     const level = OPEN_START[mode];
     return { state: { ...s, goal, app: e.app, openingApp, mode, agentStyle, open: true, level, notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
   }
-  const { noPack } = spoken(s.language);
-  if (!e.pack) return { state: { ...s, goal, notice: noPack }, effects: [{ type: "say", text: noPack }] };
+  const words = spoken(s.language);
+  // Nothing to plan it with yet: say the vision model is loading, rather than that there's no lesson for it.
+  const nothing = e.visionStarting ? words.visionLoading : words.noPack;
+  if (!e.pack) return { state: { ...s, goal, notice: nothing }, effects: [{ type: "say", text: nothing }] };
   // Bring the pack's app forward first, so Hodey reads Excel rather than whatever had focus.
   const pack = localizePack(e.pack, s.language);
   // Teach opens with the idea: what the learner is about to make, and that they do the clicking.
@@ -131,6 +133,7 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       instructionSaid: undefined,
       pendingNote: undefined,
       whySaid: false,
+      areaShown: false,
       claimedDone: false,
       offerSkip: false,
       prompted: false,
@@ -290,7 +293,7 @@ function openProgress(s: HodeState, action: TeachingAction): HodeState {
   if (action.kind === "complete") return { ...s, openDone };
   const ack = acknowledgement(s);
   const acknowledged: HodeState = ack ? { ...s, pendingAck: ack, lastAck: ack } : s;
-  const fresh = { level: OPEN_START[s.mode], escalated: false, toppedOut: false, mistakes: 0, wrongActions: 0, stepActions: [], instructionSaid: undefined };
+  const fresh = { level: OPEN_START[s.mode], escalated: false, toppedOut: false, mistakes: 0, wrongActions: 0, stepActions: [], instructionSaid: undefined, areaShown: false };
   return { ...acknowledged, ...fresh, openDone, actedSinceInstruction: false };
 }
 
@@ -307,7 +310,9 @@ function showOpenAction(s: HodeState, action: TeachingAction): Transition {
 export function overlayOf(s: HodeState, action: TeachingAction) {
   const elements = s.observation?.elements ?? [];
   const nearby = action.target ? neighboursOf(action.target.bounds, elements) : [];
-  return overlayFor(action, pinFor(s), nearby, hintArea(action, elements, s.observation?.window?.bounds));
+  // Teach lets the learner try a question on their own first: the area lights up once they're stuck.
+  const area = s.mode !== "teach" || s.areaShown === true ? hintArea(action, elements, s.observation?.window?.bounds) : undefined;
+  return overlayFor(action, pinFor(s), nearby, area);
 }
 
 /**
