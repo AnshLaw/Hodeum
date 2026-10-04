@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ReplyLanguage } from "../lib/language";
 import type { TaskPack, TaskStep } from "../lib/types";
 import hindi from "./hi.json";
+import hinglish from "./hinglish.json";
 
 /** A step's words in another language. Targets, signals and skills never change: they match the screen. */
 const stepTextSchema = z
@@ -25,7 +26,8 @@ const packTextSchema = z
 type PackText = z.infer<typeof packTextSchema>;
 type StepText = z.infer<typeof stepTextSchema>;
 
-const HINDI: Record<string, PackText> = z.record(z.string(), packTextSchema).parse(hindi);
+const packTexts = z.record(z.string(), packTextSchema);
+const TEXTS: Record<Exclude<ReplyLanguage, "en">, Record<string, PackText>> = { hi: packTexts.parse(hindi), hinglish: packTexts.parse(hinglish) };
 
 function localizeStep(step: TaskStep, text: StepText | undefined): TaskStep {
   if (!text) return step;
@@ -38,12 +40,12 @@ function localizeStep(step: TaskStep, text: StepText | undefined): TaskStep {
   };
 }
 
-/** The pack in the learner's language: Hindi and Hinglish use the Hindi text. Untranslated packs stay English. */
+/** The pack in the learner's language. Untranslated packs stay English. */
 export function localizePack(pack: TaskPack, language: ReplyLanguage): TaskPack {
-  const text = language === "en" ? undefined : HINDI[pack.id];
+  const text = language === "en" ? undefined : TEXTS[language][pack.id];
   if (!text) return pack;
   return { ...pack, title: text.title, prerequisites: text.prerequisites, steps: pack.steps.map((step) => localizeStep(step, text.steps[step.id])) };
 }
 
-/** For tests: the Hindi text of a pack, to check every step is covered. */
-export const hindiText = (packId: string): PackText | undefined => HINDI[packId];
+/** For tests: a pack's text in a language, to check every step is covered. */
+export const packText = (language: Exclude<ReplyLanguage, "en">, packId: string): PackText | undefined => TEXTS[language][packId];

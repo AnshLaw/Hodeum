@@ -78,11 +78,12 @@ Hodey swallows these letter presses, so the app underneath never sees them, and 
 - **Tap-to-talk:** listening stops after one sentence, so room noise can't steer Hodey. Tapping also interrupts Hodey mid-sentence. If Hodey hears its own voice coming back through the speakers, it ignores it.
 - **Hodey's voice:** Kokoro-82M, the most natural local voice. Pick from 12 English voices in Settings, American and British, female and male; "Heart" is the default. Supertonic's 10 voices are a second option. Both run on the CPU, about three times faster than real time, and Hodey says one sentence while it prepares the next. Windows voices are used only if no natural voice is installed. (NVIDIA's MagpieTTS was considered, but it can't run in real time on the CPU, and the GPU is busy with the vision model.) Hodey's first words come from a short first phrase, and quick acknowledgements are prepared ahead, so replies start in well under a second.
 - **Understanding you:** NVIDIA Nemotron 3.5 streaming speech recognition, with Windows echo cancellation during conversations so Hodey doesn't hear itself.
-- **Hindi and Hinglish:** Settings > Voice > Language: English (US), English (UK), हिन्दी Hindi, or Hinglish. Hodey listens and answers in that language:
-  - Lessons, quick replies, and the vision model's answers are in Hindi (in Devanagari), spoken by one of Kokoro's four Hindi voices (pick it in Settings).
-  - Goals and spoken controls work in Hindi: "पिवट टेबल बनाना सिखाओ", "हिंट दो", "फिर से बोलो", "रुको", "बस".
-  - English control names inside Hindi sentences are said with English pronunciation.
-  - The speech model has no Indian-English option; if English (US) mishears your accent, try English (UK).
+- **Hindi and Hinglish:** Settings > Voice > Language is **Auto** by default: Hodey answers in whatever you speak, English, Hindi (हिन्दी) or Hinglish, and switches when you do. You can also fix one language.
+  - Hinglish is written the way people type it ("ऊपर Insert tab पर click कीजिए"); Hindi is all Devanagari. Lessons, quick replies and the vision model's answers follow the language.
+  - "Hindi written as" shows Hindi words in English letters if you prefer ("Upar Insert tab par click kijiye"). Speech is the same either way.
+  - Spoken by one of Kokoro's four Hindi voices; English words inside Hindi sentences are respelled so the voice says them naturally.
+  - Goals and spoken controls work in all three: "पिवट टेबल बनाना सिखाओ", "हिंट दो", "hint do", "phir se bolo", "ruko", "bas".
+  - The speech model has no Indian-English option; if Auto or English US mishears your accent, try English UK.
 - **Hands-free (opt-in):** Settings > Voice > Hands-free lets you say "Hey Hodey, give me a hint" with no key. The mic stays on (orange dot). Speech is checked on this PC, and anything that doesn't open with a wake word is dropped as soon as its first word is known. Nothing is recorded or sent.
 - **Wake words:** while you hold the Hodey key, you can start with "Hey Hodey" (or a common mishearing of it) and Hodey drops it before acting; add your own names, like "Hey Hodes", in Settings > Voice.
 - **Privacy:** the orange dot shows while the mic is on. Audio and transcripts are never saved.

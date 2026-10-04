@@ -47,7 +47,20 @@ const HINDI_COMMANDS: [string, HodeEvent][] = [
   ["एजेंट मोड(?: (?:में|पर) (?:जाओ|चलो))?|हर स्टेप (?:में|पर) (?:गाइड करो|बताओ)", { type: "SET_MODE", mode: "agent" }],
   ["(?:सारे|सभी|पूरे) स्टेप(?:्स)? दिखाओ|पूरा तरीका दिखाओ", { type: "SHOW_ALL_STEPS" }],
 ];
-const POLITE_HINDI = /कृपया|प्लीज़?|ज़रा/g;
+/** Hinglish controls typed or heard in English letters. */
+const ROMAN_HINGLISH: [RegExp, HodeEvent][] = [
+  [/^(?:hint (?:do|dijiye|chahiye)|madad (?:karo|kijiye|chahiye)|help karo|main (?:phas|phans|atak) (?:gaya|gayi))$/, { type: "HINT_REQUESTED" }],
+  [/^(?:samjhao|samjhaiye|samjhaiye na|explain karo)$/, { type: "EXPLAIN_REQUESTED" }],
+  [/^(?:(?:phir se|dobara) (?:bolo|boliye|kaho|kahiye)|repeat karo|kya bola|kya kaha)$/, { type: "REPEAT" }],
+  [/^(?:ho gaya|kar diya|kar liya|(?:phir se|dobara) dekho)$/, { type: "LOOK_AGAIN" }],
+  [/^(?:mujhe (?:karne|try karne) do|main (?:khud )?(?:karta|karti) hoon)$/, { type: "LET_ME_TRY" }],
+  [/^(?:ruko|rukiye|ek minute|ek min)$/, { type: "PAUSE" }],
+  [/^(?:aage badho|aage badhiye|chalo aage|continue karo)$/, { type: "RESUME" }],
+  [/^(?:band karo|band kijiye|khatam karo|bas karo)$/, { type: "END_HODE" }],
+  [/^(?:theek hai|thik hai|accha|acha|samajh (?:gaya|gayi))$/, { type: "DISMISS" }],
+  [/^(?:(?:sare|saare|sabhi|poore) steps dikhao|poora tarika dikhao)$/, { type: "SHOW_ALL_STEPS" }],
+];
+const POLITE_HINDI =/कृपया|प्लीज़?|ज़रा/g;
 /** Devanagari's nukta (ज़ vs ज): speech recognition writes it inconsistently, so it's ignored. */
 const NUKTA = /\u093C/g;
 const withoutNukta = (text: string) => text.normalize("NFC").replace(NUKTA, "");
@@ -79,7 +92,7 @@ function asCommand(text: string): HodeEvent | undefined {
     .replace(/[^\p{L}\p{M}\p{N}' ]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return [...COMMANDS, ...HINDI_PATTERNS].find(([pattern]) => pattern.test(bare))?.[1];
+  return [...COMMANDS, ...ROMAN_HINGLISH, ...HINDI_PATTERNS].find(([pattern]) => pattern.test(bare))?.[1];
 }
 
 const question = (text: string): HodeEvent => ({ type: "VOICE_QUESTION", question: text });

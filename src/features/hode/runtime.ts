@@ -1,4 +1,4 @@
-import type { ReplyLanguage } from "../../lib/language";
+import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
 import type { AssistanceLevel, HodeMode, Rect, StepOutcome, TeachingContext } from "../../lib/types";
@@ -39,6 +39,7 @@ export class HodeRuntime {
   /** The learner's default mode, used when a goal arrives without one. */
   private defaultMode: HodeMode = "teach";
   private stuckMs: number | undefined;
+  private autoLanguage = false;
   private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
 
   constructor(private readonly deps: RuntimeDeps) {
@@ -68,6 +69,8 @@ export class HodeRuntime {
   }
 
   dispatch = (incoming: HodeEvent): void => {
+    const said = learnerWords(incoming);
+    if (said) this.noticeLanguage(said);
     const event = incoming.type === "GOAL_SUBMITTED" && !incoming.mode ? { ...incoming, mode: this.defaultMode } : incoming;
     const prev = this.state;
     const { state, effects } = step(prev, event);
@@ -85,10 +88,21 @@ export class HodeRuntime {
     return this.defaultMode;
   }
 
+  /** `language` undefined: follow whatever language the learner speaks (Settings > Voice > Language > Auto). */
   configure(options: { mode: HodeMode; stuckMs: number; language?: ReplyLanguage }): void {
     this.defaultMode = options.mode;
     this.stuckMs = options.stuckMs;
-    if (options.language && options.language !== this.state.language) this.dispatch({ type: "SET_LANGUAGE", language: options.language });
+    this.autoLanguage = options.language === undefined;
+    if (options.language) this.setLanguage(options.language);
+  }
+
+  /** Auto language: what the learner just said or typed decides what Hodey answers in. */
+  noticeLanguage(text: string): void {
+    if (this.autoLanguage) this.setLanguage(detectLanguage(text));
+  }
+
+  private setLanguage(language: ReplyLanguage): void {
+    if (language !== this.state.language) this.dispatch({ type: "SET_LANGUAGE", language });
   }
 
   /** Barge-in: the learner started talking, so Hodey stops mid-sentence. */
@@ -236,4 +250,12 @@ export class HodeRuntime {
     console.error(context, error);
     this.dispatch({ type: "PROVIDER_FAILED", requestId, message: `${context}: ${errorMessage(error)}` });
   }
+}
+
+/** The learner's own words in an event, for detecting their language. */
+function learnerWords(event: HodeEvent): string | undefined {
+  if (event.type === "GOAL_SUBMITTED") return event.goal;
+  if (event.type === "VOICE_QUESTION") return event.question;
+  if (event.type === "ANNOTATION_SUBMITTED") return event.annotation.question;
+  return undefined;
 }

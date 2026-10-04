@@ -1,0 +1,97 @@
+{
+  "excel-pivot": {
+    "title": "PivotTable बनाना",
+    "prerequisites": ["Sales workbook खोलिए और table के अंदर किसी भी cell पर click कीजिए।"],
+    "steps": {
+      "open-insert": {
+        "objective": "Insert tab खोलिए",
+        "speech": {
+          "demonstrate": "ऊपर Insert tab पर click कीजिए। मैंने उसे highlight कर दिया है।",
+          "guide": "Insert tab खोलिए।",
+          "hint": "कुछ नया add करने के लिए आप कौन सा tab use करेंगे?"
+        },
+        "explain": "Insert में वो सब है जो आप sheet में add कर सकते हैं, जैसे charts, tables और PivotTables।",
+        "corrections": [
+          "आपने Data खोल लिया। Insert थोड़ा left में है, Home के ठीक बाद।",
+          "ये Formulas है। Insert थोड़ा left में है, Home के ठीक बाद।"
+        ]
+      },
+      "click-pivot": {
+        "objective": "PivotTable पर click कीजिए",
+        "speech": {
+          "demonstrate": "अब PivotTable पर click कीजिए। ये Insert ribbon का पहला button है।",
+          "guide": "PivotTable पर click कीजिए।",
+          "hint": "इस ribbon में सबसे left में देखिए।"
+        },
+        "explain": "PivotTable data की rows को ऐसे totals में बदल देता है जिन्हें आप अपने हिसाब से rearrange कर सकते हैं।",
+        "corrections": []
+      },
+      "confirm-range": {
+        "objective": "Range confirm करके OK पर click कीजिए",
+        "speech": {
+          "demonstrate": "Excel ने आपकी table की range खुद select कर ली है। PivotTable बनाने के लिए OK पर click कीजिए।",
+          "guide": "OK पर click कीजिए।",
+          "hint": "Range सही लग रही है। इसे confirm कैसे करेंगे?"
+        },
+        "explain": "ये dialog पूछता है कि किन cells का summary बनाना है। आपने जिस cell पर click किया था, उससे Excel इसे खुद भर देता है।",
+        "corrections": []
+      },
+      "add-region": {
+        "objective": "Field list में Region पर tick कीजिए",
+        "speech": {
+          "demonstrate": "PivotTable Fields list में Region पर tick कीजिए। इससे आपकी rows बनेंगी।",
+          "guide": "Region field पर tick कीजिए।",
+          "hint": "आप किस field के हिसाब से group करना चाहते हैं?"
+        },
+        "explain": "आप जिस भी field पर tick करते हैं, वो summary में row, column या value बन जाता है।",
+        "corrections": ["ये Product है। हर region का total देखने के लिए Region पर tick कीजिए।"]
+      },
+      "add-sales": {
+        "objective": "Total के लिए Sales पर tick कीजिए",
+        "speech": {
+          "demonstrate": "अब Sales पर tick कीजिए, ताकि हर region का total बन जाए।",
+          "guide": "Sales field पर tick कीजिए।",
+          "hint": "Add करने वाले numbers किस field में हैं?"
+        },
+        "explain": "Number वाले fields values बन जाते हैं, इसलिए Excel हर row के लिए उन्हें add कर देता है।",
+        "corrections": []
+      }
+    }
+  },
+  "windows-zip": {
+    "title": "Files zip करना",
+    "prerequisites": ["File Explorer खोलिए और जिन files को zip करना है, उन्हें select कीजिए।"],
+    "steps": {
+      "open-menu": {
+        "objective": "Selected files पर right-click कीजिए",
+        "speech": {
+          "demonstrate": "Selected files में से किसी एक पर right-click कीजिए। एक menu खुलेगा।",
+          "guide": "Selected files पर right-click कीजिए।",
+          "hint": "Mouse का कौन सा button और options दिखाता है?"
+        },
+        "explain": "Right-click करने से उस चीज़ के actions का menu खुलता है जिस पर आपने click किया।",
+        "corrections": []
+      },
+      "choose-compress": {
+        "objective": "Compress to चुनिए",
+        "speech": {
+          "demonstrate": "Menu में Compress to चुनिए।",
+          "guide": "Compress to चुनिए।",
+          "hint": "Files को छोटा करने वाला option ढूँढिए।"
+        },
+        "explain": "Compress करने से files एक छोटे archive में pack हो जाती हैं, जिसे share करना आसान होता है।",
+        "corrections": []
+      },
+      "choose-zip": {
+        "objective": "ZIP File चुनिए",
+        "speech": {
+          "demonstrate": "ZIP File पर click कीजिए। Windows आपकी files के बगल में ही archive बना देगा।",
+          "guide": "ZIP File पर click कीजिए।",
+          "hint": "Common format कौन सा है?"
+        },
+        "explain": "ZIP हर जगह चलता है। कोई भी computer इसे बिना extra software के खोल सकता है।",
+        "corrections": []
+      }
+    }
+  }
+}

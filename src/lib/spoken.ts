@@ -49,6 +49,24 @@ const HINDI: SpokenCopy = {
   neededForThisStep: "इस स्टेप के लिए आपको यही चाहिए।",
 };
 
+/** Hindi words in Devanagari, English words in English; the voice gets Devanagari via `speakable`. */
+const HINGLISH: SpokenCopy = {
+  clarify: "मुझे sure नहीं है कि आपको कौन सा control चाहिए। जहाँ आप काम कर रहे हैं, pointer को उसके पास ले जाइए।",
+  acks: ["एक second।", "ज़रा देखने दीजिए।", "हाँ, अभी देखते हैं।", "Okay, एक पल।"],
+  switchToApp: (app) => `${app} खोलिए या उस पर switch कीजिए, फिर हम वहीं से आगे बढ़ेंगे।`,
+  needVisionToAnswer: "इसका answer local vision model के बिना नहीं दिया जा सकता, और वो अभी ready नहीं है। Point & Ask से उस जगह की तरफ़ point करके देखिए।",
+  itsHere: (name) => `ये ${name} है। मैंने इसे highlight कर दिया है।`,
+  noPack: "इसके लिए अभी मेरे पास कोई Hode नहीं है। “PivotTable बनाओ” या “ये files zip करो” बोलकर देखिए।",
+  hodeCompleteSpeech: "Hode complete. बहुत बढ़िया।",
+  rememberedOnYourOwn: "बढ़िया, ये आपको खुद याद था।",
+  nothingMarked: "वहाँ अभी कोई control समझ नहीं आ रहा। किसी एक button के आसपास छोटा area mark करके देखिए।",
+  thatsControl: (name, explain) => `ये ${name} है। ${explain}`,
+  thatsElement: (name, role) => `ये "${name}" ${role} है।`,
+  neededForThisStep: "इस step के लिए आपको यही चाहिए।",
+};
+
+const BY_LANGUAGE: Record<ReplyLanguage, SpokenCopy> = { en: ENGLISH, hi: HINDI, hinglish: HINGLISH };
+
 export function spoken(language: ReplyLanguage = "en"): SpokenCopy {
-  return language === "en" ? ENGLISH : HINDI;
+  return BY_LANGUAGE[language];
 }

@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { hasDevanagari, replyLanguage } from "../../lib/language";
+import { LocalBus } from "../../lib/bus";
+import { romanize, speakable } from "../../lib/hinglish";
+import { inScript, notchView } from "../../components/notch/notch-view";
+import { asrLanguage, hasDevanagari, replyLanguage } from "../../lib/language";
+import type { TTSProvider } from "../../providers/interfaces";
+import { MemorySkillStore } from "../../providers/memory-skill-store";
+import { MockPerception } from "../../providers/mock-perception";
+import { ExcelScene } from "../../stage/scenes/excel";
+import { HodeRuntime } from "./runtime";
 import { spoken } from "../../lib/spoken";
 import type { TeachingContext } from "../../lib/types";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
 import { buildMessages } from "../../providers/vision/prompt";
 import { TASK_PACKS, appFromGoal, matchGoal } from "../../task-packs";
-import { hindiText, localizePack } from "../../task-packs/localize";
+import { localizePack, packText } from "../../task-packs/localize";
 import { routeUtterance } from "../voice/route";
 import { initialState, type HodeEvent, type HodeState, type Transition } from "./model";
 import { step } from "./reducer";
@@ -22,27 +30,50 @@ const EXCEL = TASK_PACKS.find((p) => p.id === "excel-pivot")!;
 const hindi = fold(initialState, { type: "SET_LANGUAGE", language: "hi" }).state;
 
 describe("language setting", () => {
-  it("listens and replies in the same language", () => {
+  it("listens and replies in the same language, or follows the learner on Auto", () => {
     expect(replyLanguage("en-GB")).toBe("en");
     expect(replyLanguage("hi")).toBe("hi");
-    expect(replyLanguage("auto")).toBe("hinglish");
+    expect(replyLanguage("hinglish")).toBe("hinglish");
+    expect(replyLanguage("auto")).toBeUndefined();
+    expect(asrLanguage("hinglish")).toBe("auto");
+  });
+
+  it("on Auto, answers in whatever language the learner just used", () => {
+    const scene = new ExcelScene();
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception: new MockPerception(() => scene), reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
+    runtime.configure({ mode: "teach", stuckMs: 20_000 });
+    runtime.dispatch({ type: "START_HODE" });
+    runtime.dispatch({ type: "GOAL_SUBMITTED", goal: "मुझे पिवट टेबल बनाना सिखाओ", pack: EXCEL });
+    expect(runtime.getState().language).toBe("hinglish");
+    runtime.noticeLanguage("what does this button do");
+    expect(runtime.getState().language).toBe("en");
+    runtime.configure({ mode: "teach", stuckMs: 20_000, language: "hi" });
+    runtime.noticeLanguage("what does this button do");
+    expect(runtime.getState().language).toBe("hi");
   });
 });
 
 describe("Hindi task packs", () => {
-  it("translates every step of every shipped pack, mistakes included", () => {
-    for (const pack of TASK_PACKS) {
-      const text = hindiText(pack.id);
-      expect(text, pack.id).toBeDefined();
-      for (const s of pack.steps) {
-        expect(text?.steps[s.id], `${pack.id}/${s.id}`).toBeDefined();
-        expect(text?.steps[s.id].corrections).toHaveLength(s.mistakes.length);
+  it("translates every step of every shipped pack into Hindi and Hinglish, mistakes included", () => {
+    for (const language of ["hi", "hinglish"] as const) {
+      for (const pack of TASK_PACKS) {
+        const text = packText(language, pack.id);
+        expect(text, `${language}/${pack.id}`).toBeDefined();
+        for (const s of pack.steps) {
+          expect(text?.steps[s.id], `${language}/${pack.id}/${s.id}`).toBeDefined();
+          expect(text?.steps[s.id].corrections).toHaveLength(s.mistakes.length);
+        }
       }
     }
   });
 
+  it("writes Hinglish with English words in English, the way people type it", () => {
+    expect(localizePack(EXCEL, "hinglish").steps[0].speech.guide).toBe("Insert tab खोलिए।");
+  });
+
   it("swaps the words but keeps targets and signals, which match the screen", () => {
-    const local = localizePack(EXCEL, "hinglish");
+    const local = localizePack(EXCEL, "hi");
     expect(hasDevanagari(local.steps[0].speech.demonstrate)).toBe(true);
     expect(local.steps[0].target).toEqual(EXCEL.steps[0].target);
     expect(local.steps[0].success).toEqual(EXCEL.steps[0].success);
@@ -90,5 +121,39 @@ describe("understanding Hindi and Hinglish", () => {
     expect(route("रुको")).toEqual([{ type: "PAUSE" }]);
     expect(route("हो गया")).toEqual([{ type: "LOOK_AGAIN" }]);
     expect(route("ये बटन क्या करता है")).toEqual([{ type: "VOICE_QUESTION", question: "ये बटन क्या करता है" }]);
+  });
+
+  it("follows spoken controls in Hinglish written in English letters", () => {
+    const guiding: HodeState = { ...hindi, phase: "guiding", pack: PACK };
+    const route = (text: string) => routeUtterance(guiding, text, TASK_PACKS, false);
+    expect(route("hint do")).toEqual([{ type: "HINT_REQUESTED" }]);
+    expect(route("phir se bolo")).toEqual([{ type: "REPEAT" }]);
+    expect(route("ruko")).toEqual([{ type: "PAUSE" }]);
+    expect(route("ho gaya")).toEqual([{ type: "LOOK_AGAIN" }]);
+    expect(route("aage badho")).toEqual([{ type: "RESUME" }]);
+  });
+});
+
+describe("Hinglish speech", () => {
+  const latinLeft = (text: string) => speakable(text).match(/[A-Za-z]+/g) ?? [];
+
+  it("has a Devanagari spelling for every English word in Hodey's Hinglish lines", () => {
+    const lines: string[] = [];
+    for (const pack of TASK_PACKS) {
+      const local = localizePack(pack, "hinglish");
+      lines.push(local.title, ...local.prerequisites);
+      for (const s of local.steps) lines.push(s.objective, s.speech.demonstrate, s.speech.guide, s.speech.hint, s.explain, ...s.mistakes.map((m) => m.correction));
+    }
+    const say = spoken("hinglish");
+    lines.push(say.clarify, ...say.acks, say.needVisionToAnswer, say.noPack, say.hodeCompleteSpeech, say.nothingMarked, say.neededForThisStep);
+    expect(lines.flatMap(latinLeft)).toEqual([]);
+  });
+});
+
+describe("Hindi shown in English letters", () => {
+  it("rewrites the notch's words when the learner reads Hinglish that way", () => {
+    const view = inScript({ ...notchView(initialState), title: "ऊपर Insert tab पर click कीजिए।", detail: "Insert tab खोलिए" }, romanize);
+    expect(view.title).toBe("Upar Insert tab par click kijiye.");
+    expect(view.detail).toBe("Insert tab kholiye");
   });
 });

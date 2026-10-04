@@ -1,3 +1,5 @@
+import type { HindiScript } from "../data/settings";
+import { asrLanguage } from "../lib/language";
 import { invoke } from "@tauri-apps/api/core";
 import { ActivityTracker, mirrorRemoteActivity, withScreenActivity } from "../lib/activity";
 import { connectAppearance } from "../lib/appearance";
@@ -60,6 +62,7 @@ async function boot(): Promise<void> {
   /** Talk back and forth (Settings > Voice); updated when settings load or change. */
   let conversation = true;
   let wakeWords: string[] = [];
+  let script: HindiScript = "devanagari";
   const voice = createLocalVoice({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
   showMicDot(voice.speech, activity);
   showStandbyDot(voice.status, activity);
@@ -76,7 +79,8 @@ async function boot(): Promise<void> {
       voice.apply(settings);
       conversation = settings.conversation;
       wakeWords = settings.wakeWords;
-      invoke<void>("set_speech_language", { language: settings.language }).catch((error) => console.error("Couldn't set the speech language", error));
+      script = settings.hindiScript;
+      invoke<void>("set_speech_language", { language: asrLanguage(settings.language) }).catch((error) => console.error("Couldn't set the speech language", error));
       voice.speech.setHandsFree(settings.handsFree, settings.wakeWords).catch((error) => console.error("Couldn't switch hands-free listening", error));
     },
     applyHodeyKey: (key) => {
@@ -93,10 +97,11 @@ async function boot(): Promise<void> {
     onHodeyDoneSpeaking: (listener) => runtime.onSpeechFinished(listener),
     conversation: () => conversation,
     wakeWords: () => wakeWords,
+    heard: (text) => runtime.noticeLanguage(text),
     packs: TASK_PACKS,
     openAllowed: () => vision.current().state === "ready",
   });
-  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} />);
+  mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} />);
 }
 
 boot().catch((error) => console.error("Hodey failed to start", error));

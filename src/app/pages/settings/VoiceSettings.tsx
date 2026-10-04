@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SETTINGS_LIMITS, type Settings, type SpeechLanguage } from "../../../data/settings";
+import { SETTINGS_LIMITS, type HindiScript, type Settings, type SpeechLanguage } from "../../../data/settings";
 import { localVoices } from "../../../lib/appearance";
 import { WebSpeechTTSProvider } from "../../../providers/web-speech-tts";
 import { NATURAL_PREFIX, type NaturalVoice } from "../../../providers/speech/native-voice";
@@ -9,10 +9,15 @@ import { VoiceGallery } from "./VoiceGallery";
 import { WakeWords } from "./WakeWords";
 
 const LANGUAGE_OPTIONS: [SpeechLanguage, string][] = [
-  ["en", "English (US)"],
-  ["en-GB", "English (UK)"],
-  ["hi", "हिन्दी Hindi"],
-  ["auto", "Hinglish"],
+  ["auto", "Auto"],
+  ["en", "English US"],
+  ["en-GB", "English UK"],
+  ["hi", "हिन्दी"],
+  ["hinglish", "Hinglish"],
+];
+const SCRIPT_OPTIONS: [HindiScript, string][] = [
+  ["devanagari", "देवनागरी"],
+  ["roman", "English letters"],
 ];
 const PREVIEW_TEXT = "Hi, I'm Hodey. Click the Insert tab, and I'll show you what comes next.";
 const HINDI_PREVIEW_TEXT = "नमस्ते, मैं होडी हूँ। ऊपर इंसर्ट टैब पर क्लिक कीजिए, फिर आगे का रास्ता साथ में देखते हैं।";
@@ -77,10 +82,15 @@ export function VoiceSettings({ voice, natural, onChange }: { voice: Settings["v
       <Row label="Hands-free" detail="Say “Hey Hodey” any time, no key needed. The mic stays on (orange dot) and speech is checked on this PC for a wake word; anything else is dropped at once. Nothing is recorded or sent. Uses some CPU.">
         <input type="checkbox" className="hswitch" checked={voice.handsFree} onChange={(e) => onChange({ ...voice, handsFree: e.target.checked })} aria-label="Hands-free" />
       </Row>
-      <Row label="Language" detail="Hodey listens for this and answers in it. Hinglish follows you switching between Hindi and English. There's no Indian-English option in the speech model; if English (US) mishears you, try English (UK).">
+      <Row label="Language" detail="Auto answers in whatever you speak: English, Hindi, or Hinglish. Or fix one. There's no Indian-English option in the speech model; if Auto or English US mishears you, try English UK.">
         <Segmented label="Language" options={LANGUAGE_OPTIONS} value={voice.language} onSelect={(language) => onChange({ ...voice, language })} />
       </Row>
-      {(voice.language === "hi" || voice.language === "auto") && naturalVoices.some(isHindiVoice) && (
+      {voice.language !== "en" && voice.language !== "en-GB" && (
+        <Row label="Hindi written as" detail="How Hodey's Hindi and Hinglish show on screen: देवनागरी, or English letters (“Insert tab par click kijiye”). It sounds the same either way.">
+          <Segmented label="Hindi written as" options={SCRIPT_OPTIONS} value={voice.hindiScript} onSelect={(hindiScript) => onChange({ ...voice, hindiScript })} />
+        </Row>
+      )}
+      {voice.language !== "en" && voice.language !== "en-GB" && naturalVoices.some(isHindiVoice) && (
         <>
           <Row label="Hindi voice" detail="Says Hodey's Hindi and Hinglish answers. Press ▶ to hear one.">
             <span />

@@ -45,6 +45,12 @@ const QUIET_LEVELS = new Set(["hint", "observe", "independent"]);
 const QUESTION_CHARS = 60;
 const clip = (text: string) => (text.length > QUESTION_CHARS ? `${text.slice(0, QUESTION_CHARS - 1)}…` : text);
 
+/** The view's words as the learner reads them (Hindi in Devanagari, or in English letters). */
+export function inScript(view: NotchView, show: (text: string) => string): NotchView {
+  const optional = (text?: string) => (text === undefined ? undefined : show(text));
+  return { ...view, title: show(view.title), eyebrow: optional(view.eyebrow), detail: optional(view.detail), hintLabel: optional(view.hintLabel) };
+}
+
 export function isExpanded(view: NotchView): boolean {
   return EXPANDED.includes(view.size);
 }

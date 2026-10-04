@@ -28,10 +28,12 @@ export interface VoiceDeps {
   conversation: () => boolean;
   /** Settings: extra names the learner calls Hodey. */
   wakeWords?: () => string[];
+  /** Everything the learner says to Hodey, so Auto language can follow them (commands included). */
+  heard?: (text: string) => void;
 }
 
 /** Ways to close the conversation; they end it without being treated as a command or question. */
-const CLOSERS = /^(?:(?:ok(?:ay)?|thanks|thank you)[ ,]*)?(?:that'?s all|that is all|bye|goodbye|stop listening|no thanks|nothing|never ?mind|i'?m good|all good)[.!]?$|^(?:(?:ठीक है|ओके|धन्यवाद|शुक्रिया)[ ,]*)?(?:बस|बस इतना ही|बस इतना|धन्यवाद|शुक्रिया|थैंक यू|कुछ नहीं|बाय)[।.!]?$/iu;
+const CLOSERS = /^(?:(?:ok(?:ay)?|thanks|thank you)[ ,]*)?(?:that'?s all|that is all|bye|goodbye|stop listening|no thanks|nothing|never ?mind|i'?m good|all good)[.!]?$|^(?:(?:ठीक है|ओके|धन्यवाद|शुक्रिया)[ ,]*)?(?:बस|बस इतना ही|बस इतना|धन्यवाद|शुक्रिया|थैंक यू|कुछ नहीं|बाय)[।.!]?$|^(?:(?:theek hai|thik hai|ok)[ ,]*)?(?:bas|bas itna hi|bas itna|shukriya|dhanyavaad|dhanyavad|kuch nahi)[.!]?$/iu;
 
 /** Words, keeping Devanagari vowel signs (marks) inside their words. */
 const wordsOf = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}' ]/gu, " ").split(/\s+/).filter(Boolean);
@@ -120,6 +122,7 @@ class Conversation {
     const said = saying ? stripEcho(text, saying) : text;
     if (CLOSERS.test(said.trim())) return this.end(true);
     this.conversing = this.deps.conversation();
+    this.deps.heard?.(said);
     routeUtterance(this.deps.getState(), said, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? []).forEach(this.deps.dispatch);
     if (this.conversing && this.deps.speech.status() === "idle") this.openMic();
   }
@@ -138,6 +141,7 @@ class Conversation {
       return;
     }
     this.conversing = this.deps.conversation();
+    this.deps.heard?.(rest);
     routeUtterance(this.deps.getState(), rest, this.deps.packs, this.deps.openAllowed()).forEach(this.deps.dispatch);
     if (this.conversing) this.openMic();
   }

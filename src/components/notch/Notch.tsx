@@ -1,3 +1,5 @@
+import type { HindiScript } from "../../data/settings";
+import { romanize } from "../../lib/hinglish";
 import { useEffect, useRef, useState, type CSSProperties, type Ref, type RefObject } from "react";
 import type { Bus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
@@ -14,7 +16,7 @@ import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
-import { NOTCH_WIDTHS, islandSize, notchView, stepItems, type NotchSize, type NotchView } from "./notch-view";
+import { NOTCH_WIDTHS, inScript, islandSize, notchView, stepItems, type NotchSize, type NotchView } from "./notch-view";
 import { HodeyFace } from "../hodey/HodeyFace";
 import { hodeyMood, type HodeyMood } from "../hodey/mood";
 import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
@@ -35,6 +37,8 @@ export interface NotchProps {
   vision?: VisionStatusSource;
   activity: ActivityTracker;
   speech: SpeechInput;
+  /** How Hindi words are shown (Settings > Voice): Devanagari, or English letters. */
+  script?: () => HindiScript;
 }
 
 const TOAST_MS = 4000;
@@ -189,10 +193,11 @@ function useNotchActions(speech: SpeechInput, shell: NativeShell, surfaceRef: Re
 }
 
 /** Hodey's surface: a top-centre notch or a side sidebar, draggable between them, with auto-hide. */
-export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity: tracker, speech }: NotchProps) {
+export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity: tracker, speech, script }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
-  const view = notchView(state);
+  const show = script?.() === "roman" ? romanize : (text: string) => text;
+  const view = inScript(notchView(state), show);
   const surfaceRef = useRef<HTMLElement>(null);
   const [muted, setMuted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -210,7 +215,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
   const props: SurfaceProps = {
     view,
     mood: micStatus === "listening" ? "listening" : hodeyMood(state, hovered),
-    steps: stepItems(state),
+    steps: stepItems(state).map((item) => ({ ...item, objective: show(item.objective) })),
     hovered,
     revealed,
     muted,
@@ -232,7 +237,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
     activity,
     micStatus,
     toast,
-    heard,
+    heard: heard === undefined ? undefined : show(heard),
     onToggleMic: toggleMic,
     onOpenApp: () => {
       // The notch grows into the app, then gets out of its way: goal entry continues on the app's home page.

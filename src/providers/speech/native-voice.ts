@@ -1,3 +1,4 @@
+import { speakable } from "../../lib/hinglish";
 import { DEFAULT_HINDI_VOICE } from "../../data/settings";
 import { hasDevanagari } from "../../lib/language";
 import type { TTSProvider } from "../interfaces";
@@ -157,7 +158,7 @@ export class NativeTTSProvider implements TTSProvider {
   }
 
   async speak(text: AsyncIterable<string>, signal: AbortSignal): Promise<void> {
-    const content = await collect(text, signal);
+    const content = speakable(await collect(text, signal));
     if (content === "" || signal.aborted) return;
     const id = crypto.randomUUID();
     const finished = new Promise<void>((resolve, reject) => {
@@ -181,7 +182,8 @@ export class NativeTTSProvider implements TTSProvider {
   }
 
   /** Synthesizes likely lines ahead of time (silently) so they start instantly when needed. */
-  async prepare(texts: string[]): Promise<void> {
+  async prepare(lines: string[]): Promise<void> {
+    const texts = lines.map(speakable);
     const hindi = texts.filter(hasDevanagari);
     const english = texts.filter((text) => !hasDevanagari(text));
     if (english.length > 0) await this.bridge.invoke<void>("tts_prepare", { texts: english, voiceId: this.voiceId, speed: this.rate });

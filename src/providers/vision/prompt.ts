@@ -88,7 +88,7 @@ const LANGUAGE_LINES: Record<ReplyLanguage, string | undefined> = {
   en: undefined,
   hi: 'Write "speech" in Hindi, in Devanagari script. Write English words and control names in Devanagari too, as they sound (Insert → इंसर्ट, PivotTable → पिवट टेबल).',
   hinglish:
-    'Write "speech" in Hinglish: everyday Hindi with English computer words mixed in, the way people in India talk about computers. Use Devanagari script for all of it, English words included (Insert tab → इंसर्ट टैब).',
+    'Write "speech" in Hinglish: everyday Hindi with English computer words mixed in, the way people in India talk about computers. Write the Hindi words in Devanagari and the English words in English letters (e.g. "ऊपर Insert tab पर click कीजिए").',
 };
 
 function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {

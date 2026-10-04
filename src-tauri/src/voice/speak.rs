@@ -342,4 +342,26 @@ mod tests {
         }
         set_language("en").unwrap();
     }
+
+    /// Needs the real models: what Nemotron writes in "auto" for English, Hindi and Hinglish speech, so
+    /// the frontend can tell which language the learner used (`cargo test --lib -- --ignored auto_language --nocapture`).
+    #[test]
+    #[ignore]
+    fn auto_language_transcripts() {
+        let root = voice_root();
+        let engines = Engines { kokoro: Some(load_kokoro(&kokoro_files(&root).unwrap()).unwrap()), supertonic: None };
+        let mut cache = PhraseCache::new(PHRASE_CACHE_SIZE);
+        let stop = Arc::new(StopSwitch::default());
+        let mut asr = load_engines(&asr_files(&root).unwrap()).unwrap();
+        set_language("auto").unwrap();
+        let lines = [("kokoro:3", "Teach me how to make a pivot table in Excel."), ("kokoro:31", "मुझे यह समझ नहीं आ रहा है।"), ("kokoro:31", "मुझे पिवट टेबल बनाना सिखाओ।"), ("kokoro:33", "ये बटन क्या करता है?")];
+        for (voice, line) in lines {
+            let job = SpeakJob { id: String::new(), text: line.into(), voice: voice.into(), speed: 1.0, generation: 0, play: false };
+            let (samples, rate) = chunk_audio(&engines, &mut cache, line, &job, &stop).unwrap().unwrap();
+            let mut audio = vec![0.0; ASR_RATE as usize / 2];
+            audio.extend(LinearResampler::create(rate as i32, ASR_RATE).unwrap().resample(&samples, true));
+            println!("said {line:?}; heard {:?}", transcribe(&mut asr, &audio));
+        }
+        set_language("en").unwrap();
+    }
 }

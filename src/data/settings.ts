@@ -16,8 +16,11 @@ export type HodeyColor = (typeof HODEY_COLORS)[number];
 export const HODEY_ACCESSORIES = ["none", "glasses", "headphones", "beanie"] as const;
 export type HodeyAccessory = (typeof HODEY_ACCESSORIES)[number];
 /** Must match ASR_LANGUAGES in src-tauri/src/voice/listen.rs. */
-export const SPEECH_LANGUAGES = ["en", "en-GB", "hi", "auto"] as const;
+/** "auto": Hodey follows whichever of English, Hindi or Hinglish the learner speaks. */
+export const SPEECH_LANGUAGES = ["auto", "en", "en-GB", "hi", "hinglish"] as const;
 export type SpeechLanguage = (typeof SPEECH_LANGUAGES)[number];
+export const HINDI_SCRIPTS = ["devanagari", "roman"] as const;
+export type HindiScript = (typeof HINDI_SCRIPTS)[number];
 /** Kokoro's "Alpha" (Hindi, female). */
 export const DEFAULT_HINDI_VOICE = "kokoro:31";
 export const MAX_WAKE_WORDS = 8;
@@ -46,8 +49,10 @@ export const settingsSchema = z.object({
     conversation: z.boolean().default(true),
     /** Hands-free: the mic stays on, waiting for a wake word (opt-in; off by default). */
     handsFree: z.boolean().default(false),
-    /** What the learner speaks: Nemotron's language prompt (no en-IN exists; en-GB can suit Indian English). */
-    language: z.enum(SPEECH_LANGUAGES).catch("en").default("en"),
+    /** What the learner speaks and Hodey answers in; "auto" detects it from each thing the learner says. */
+    language: z.enum(SPEECH_LANGUAGES).catch("auto").default("auto"),
+    /** How Hindi words are shown: in Devanagari, or in English letters ("click kijiye"). Speech is the same. */
+    hindiScript: z.enum(HINDI_SCRIPTS).catch("devanagari").default("devanagari"),
     /** The natural voice for Hindi and Hinglish sentences (Kokoro's Hindi speakers). */
     hindiVoice: z.string().max(MAX_VOICE_NAME).default(DEFAULT_HINDI_VOICE),
     /** Extra names for Hodey ("Hey Hodes"), recognised like "Hey Hodey". */
@@ -68,7 +73,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type Appearance = Settings["appearance"];
 
 export const DEFAULT_SETTINGS: Settings = {
-  voice: { enabled: true, rate: 1.05, name: "", conversation: true, handsFree: false, language: "en", hindiVoice: DEFAULT_HINDI_VOICE, wakeWords: [] },
+  voice: { enabled: true, rate: 1.05, name: "", conversation: true, handsFree: false, language: "auto", hindiScript: "devanagari", hindiVoice: DEFAULT_HINDI_VOICE, wakeWords: [] },
   mode: "teach",
   stuckSeconds: 12,
   appearance: { ...DEFAULT_APPEARANCE },
