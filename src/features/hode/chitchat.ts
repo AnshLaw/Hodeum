@@ -10,5 +10,6 @@ export function onChitchat(s: HodeState, e: EventOf<"CHITCHAT">): Transition {
   const words = spoken(s.language);
   const line = e.kind === "greeting" ? words.greeting : words.notATask;
   if (s.notice === line) return noop(s);
-  return { state: { ...s, notice: line }, effects: [{ type: "say", text: line }] };
+  // The reply takes the card's place, and with it any "Did you mean …?" still waiting for an answer.
+  return { state: { ...s, notice: line, appChoice: undefined }, effects: [{ type: "say", text: line }] };
 }

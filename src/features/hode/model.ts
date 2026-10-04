@@ -74,6 +74,8 @@ export interface HodeState {
   correction?: string;
   explanation?: string;
   notice?: string;
+  /** "Did you mean Outlook or Outlook (classic)?": the apps offered, so a reply naming one, or "the second one", opens it (open-app.ts). */
+  appChoice?: string[];
   /** Latest reasoning request; results for older ids are stale and dropped. */
   requestId: number;
   reobserved: boolean;

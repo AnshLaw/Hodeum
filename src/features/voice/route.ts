@@ -1,7 +1,7 @@
 import type { InstalledApp, TaskPack } from "../../lib/types";
 import { goalEvent, goalEvents } from "../hode/bridge";
 import type { HodeEvent, HodeState } from "../hode/model";
-import { idleOpenAppEvent, openAppEvent } from "../hode/open-app";
+import { appChoiceEvent, idleOpenAppEvent, openAppEvent } from "../hode/open-app";
 import { classify, isAcknowledgement } from "./intent";
 
 export { isAcknowledgement } from "./intent";
@@ -189,9 +189,12 @@ function routeInHode(s: HodeState, text: string, apps: InstalledApp[]): HodeEven
   return [open ?? question(text)];
 }
 
-/** Idle: only a real task (or a pack's own words) starts a Hode; a greeting gets a reply, noise nothing. */
-function routeIdle(text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[]): HodeEvent[] {
-  const open = idleOpenAppEvent(text, apps, openAllowed);
+/**
+ * Idle: only a real task (or a pack's own words) starts a Hode; a greeting gets a reply, noise nothing. A reply
+ * to "Did you mean Outlook or Outlook (classic)?" that picks one opens it.
+ */
+function routeIdle(s: HodeState, text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[]): HodeEvent[] {
+  const open = appChoiceEvent(s, text, apps) ?? idleOpenAppEvent(text, apps, openAllowed);
   if (open) return [open];
   // App requests are settled above: one that names no app is judged by its words ("open a new tab").
   const intent = classify(text, { isCommand, isApp: () => false });
@@ -219,5 +222,5 @@ export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], ope
   if (answering && !isAcknowledgement(text)) return [asCommand(text) ?? { type: "REVIEW_ANSWERED", said: text }];
   const lookUp = lookUpRequest(s, text);
   if (lookUp) return [lookUp];
-  return s.phase === "idle" ? routeIdle(text, packs, openAllowed, apps) : routeInHode(s, text, apps);
+  return s.phase === "idle" ? routeIdle(s, text, packs, openAllowed, apps) : routeInHode(s, text, apps);
 }

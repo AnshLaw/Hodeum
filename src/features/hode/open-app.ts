@@ -1,6 +1,6 @@
 import { spoken } from "../../lib/spoken";
 import type { InstalledApp } from "../../lib/types";
-import { resolveApp } from "../apps/resolve";
+import { pickOption, resolveApp } from "../apps/resolve";
 import { appQuery } from "../voice/intent";
 import { noop, type EventOf, type HodeEffect, type HodeEvent, type HodeState, type Transition } from "./model";
 
@@ -33,6 +33,18 @@ export function idleOpenAppEvent(text: string, apps: InstalledApp[], openAllowed
 }
 
 /**
+ * A reply to "Did you mean Outlook or Outlook (classic)?" that picks one, by name ("Outlook classic", "classic wala")
+ * or by place ("the second one", "doosra"), opens it. Undefined when nothing was asked or the reply picks neither.
+ */
+export function appChoiceEvent(s: HodeState, text: string, apps: InstalledApp[]): HodeEvent | undefined {
+  if (!s.appChoice) return undefined;
+  const picked = pickOption(text, s.appChoice);
+  const name = picked === undefined ? undefined : s.appChoice[picked];
+  const app = apps.find((candidate) => candidate.name === name);
+  return app ? { type: "OPEN_APP", app, said: text } : undefined;
+}
+
+/**
  * Opens the app: from idle (closing the goal form), or as a side errand that leaves a running Hode's step alone.
  * A Hode waiting for that app carries on when its window comes forward (the runtime's app-switch check).
  */
@@ -44,7 +56,7 @@ export function onOpenApp(s: HodeState, e: EventOf<"OPEN_APP">): Transition {
   // Teach mode: opening apps is a skill too, so Hodey says how to do it without asking next time.
   const line = mode === "teach" ? `${words.opening(e.app.name)} ${words.openTip}` : words.opening(e.app.name);
   const effects: HodeEffect[] = [{ type: "say", text: line }, { type: "launchApp", app: e.app }];
-  return { state: idle ? { ...s, phase: "idle", notice: line } : s, effects };
+  return { state: idle ? { ...s, phase: "idle", notice: line, appChoice: undefined } : s, effects };
 }
 
 function failureLine(s: HodeState, e: EventOf<"APP_OPEN_FAILED">): string {
@@ -54,9 +66,10 @@ function failureLine(s: HodeState, e: EventOf<"APP_OPEN_FAILED">): string {
   return words.openFailed(e.app.name);
 }
 
-/** Says why the app didn't open; shown on the card too when no Hode's guidance is there. */
+/** Says why the app didn't open; shown on the card too when no Hode's guidance is there. Asking which app, it keeps the choice open. */
 export function onAppOpenFailed(s: HodeState, e: EventOf<"APP_OPEN_FAILED">): Transition {
   if (s.phase === "annotating") return noop(s);
   const line = failureLine(s, e);
-  return { state: noHode(s) ? { ...s, notice: line } : s, effects: [{ type: "say", text: line }] };
+  const appChoice = e.reason === APP_AMBIGUOUS ? (e.options ?? [e.app.name]) : undefined;
+  return { state: noHode(s) ? { ...s, notice: line, appChoice } : s, effects: [{ type: "say", text: line }] };
 }

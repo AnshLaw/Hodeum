@@ -3,7 +3,7 @@ import { spoken } from "../../lib/spoken";
 import type { InstalledApp } from "../../lib/types";
 import catalog from "../apps/__fixtures__/start-apps.json";
 import { initialState, type HodeState } from "./model";
-import { APP_AMBIGUOUS, APP_NOT_FOUND, idleOpenAppEvent, openAppEvent } from "./open-app";
+import { APP_AMBIGUOUS, APP_NOT_FOUND, appChoiceEvent, idleOpenAppEvent, openAppEvent } from "./open-app";
 import { step } from "./reducer";
 import { PACK, guideAction } from "./test-fixtures";
 
@@ -66,6 +66,34 @@ describe("APP_OPEN_FAILED", () => {
     const t = step(guiding, { type: "APP_OPEN_FAILED", app: EXCEL, reason: "timeout" });
     expect(t.state).toBe(guiding);
     expect(t.effects).toEqual([{ type: "say", text: en.openFailed("Excel") }]);
+  });
+});
+
+describe("choosing between the apps Hodey asked about", () => {
+  const OUTLOOKS = ["Outlook", "Outlook (classic)"];
+  const asked = step(initialState, { type: "APP_OPEN_FAILED", app: APPS[0], reason: APP_AMBIGUOUS, options: OUTLOOKS }).state;
+
+  it("keeps the apps it offered while the question is on the card", () => {
+    expect(asked.appChoice).toEqual(OUTLOOKS);
+  });
+
+  it("forgets them once an app opens, or another reply takes the question's place", () => {
+    expect(step(asked, { type: "OPEN_APP", app: EXCEL, said: "open excel" }).state.appChoice).toBeUndefined();
+    expect(step(asked, { type: "APP_OPEN_FAILED", app: { id: "", name: "photoshop", kind: "desktop" }, reason: APP_NOT_FOUND }).state.appChoice).toBeUndefined();
+    expect(step(asked, { type: "CHITCHAT", kind: "greeting" }).state.appChoice).toBeUndefined();
+  });
+
+  it("opens the app a reply picks, by name or by place", () => {
+    const classic = { type: "OPEN_APP", app: { id: "Microsoft.Office.OUTLOOK.EXE.15", name: "Outlook (classic)" } };
+    expect(appChoiceEvent(asked, "Outlook classic", APPS)).toMatchObject({ ...classic, said: "Outlook classic" });
+    expect(appChoiceEvent(asked, "the second one", APPS)).toMatchObject(classic);
+    expect(appChoiceEvent(asked, "the first", APPS)).toMatchObject({ type: "OPEN_APP", app: { name: "Outlook" } });
+  });
+
+  it("is no choice when nothing was asked, the reply picks neither, or the app is gone", () => {
+    expect(appChoiceEvent(initialState, "the second one", APPS)).toBeUndefined();
+    expect(appChoiceEvent(asked, "the third one", APPS)).toBeUndefined();
+    expect(appChoiceEvent(asked, "the second one", APPS.filter((app) => app.name !== "Outlook (classic)"))).toBeUndefined();
   });
 });
 

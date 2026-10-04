@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initialState, type HodeState } from "../hode/model";
+import { step } from "../hode/reducer";
 import { PACK } from "../hode/test-fixtures";
 import { TASK_PACKS } from "../../task-packs";
 import type { InstalledApp } from "../../lib/types";
@@ -195,6 +196,10 @@ describe("what the learner means", () => {
     expect(routeApps(initialState, "open outlook")).toMatchObject([{ type: "APP_OPEN_FAILED", reason: "ambiguous" }]);
   });
 
+  it("opens the variant asked for by its whole name", () => {
+    expect(routeApps(initialState, "open outlook classic")).toMatchObject([{ type: "OPEN_APP", app: { name: "Outlook (classic)" } }]);
+  });
+
   it("without a catalog, an app request is an ordinary goal", () => {
     expect(types(route(initialState, "open excel", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
   });
@@ -213,6 +218,32 @@ describe("what the learner means", () => {
     expect(route(guiding, "Hodee, repeat that")).toEqual([{ type: "REPEAT" }]);
     expect(route(guiding, "Holdie stop")).toEqual([{ type: "END_HODE" }]);
     expect(route(guiding, "hold it")).toEqual([{ type: "VOICE_QUESTION", question: "hold it" }]);
+  });
+});
+
+describe("answering \"Did you mean Outlook or Outlook (classic)?\"", () => {
+  const asked = routeApps(initialState, "open outlook").reduce((s, e) => step(s, e).state, initialState);
+  const opened = (name: string) => [{ type: "OPEN_APP", app: { name } }];
+
+  it("opens the one the learner names", () => {
+    expect(routeApps(asked, "Outlook classic")).toMatchObject(opened("Outlook (classic)"));
+    expect(routeApps(asked, "classic wala")).toMatchObject(opened("Outlook (classic)"));
+    expect(routeApps(asked, "Outlook")).toMatchObject(opened("Outlook"));
+  });
+
+  it("opens the one the learner picks by place", () => {
+    expect(routeApps(asked, "the second one")).toMatchObject(opened("Outlook (classic)"));
+    expect(routeApps(asked, "the first")).toMatchObject(opened("Outlook"));
+    expect(routeApps(asked, "doosra wala")).toMatchObject(opened("Outlook (classic)"));
+    expect(routeApps(asked, "पहला वाला")).toMatchObject(opened("Outlook"));
+  });
+
+  it("leaves the question as it was when the reply picks neither", () => {
+    for (const said of ["the third one", "thunderbird"]) {
+      const events = routeApps(asked, said);
+      expect(types(events), said).not.toContain("OPEN_APP");
+      expect(events.reduce((s, e) => step(s, e).state, asked), said).toEqual(asked);
+    }
   });
 });
 
