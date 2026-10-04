@@ -46,6 +46,13 @@ pub struct Voice {
     stop: Arc<StopSwitch>,
 }
 
+impl Voice {
+    /// The speaker's stop switch, for engines that play through Hodey's speaker (the cloud voice).
+    pub(crate) fn stop_switch(&self) -> Arc<StopSwitch> {
+        Arc::clone(&self.stop)
+    }
+}
+
 fn update(app: &AppHandle, change: impl FnOnce(&mut VoiceStatus)) {
     let voice = app.state::<Voice>();
     let snapshot = match voice.status.lock() {

@@ -2172,6 +2172,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-sql",
+ "tokio",
  "uiautomation",
  "windows",
  "xcap",

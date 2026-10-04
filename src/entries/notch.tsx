@@ -12,6 +12,8 @@ import { Notch } from "../components/notch/Notch";
 import { connectAccount } from "../features/account/connect";
 import { CloudContext } from "../components/notch/cloud-context";
 import { connectCloud } from "../providers/cloud/connect";
+import { CloudFirstTTS, ElevenLabsTTSProvider } from "../providers/cloud/elevenlabs-tts";
+import { lessonSpeech } from "../providers/cloud/shareable";
 import { GatedReasoner } from "../providers/cloud/gated";
 import { GeminiReasoningProvider } from "../providers/cloud/gemini-reasoner";
 import { connectHodeBridge } from "../features/hode/bridge";
@@ -92,7 +94,10 @@ async function boot(): Promise<void> {
   const cloud = connectCloud({ invoke, bus, activeApp: () => runtime.getState().observation });
   // Gemini only when opted in and allowed for this app; local always answers last.
   const gemini = new GatedReasoner(new GeminiReasoningProvider({ invoke }), "gemini", cloud.policy, activity);
-  const runtime = new HodeRuntime({ perception, reasoners: [gemini, local], skills: learning, bus, tts: voice.tts });
+  // ElevenLabs first when Settings > Cloud allows it right now; the local voice says anything it skips or fails.
+  const elevenlabs = new ElevenLabsTTSProvider(invoke);
+  const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity, shareable: (): boolean => lessonSpeech(runtime.getState()) });
+  const runtime = new HodeRuntime({ perception, reasoners: [gemini, local], skills: learning, bus, tts });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   runtime.subscribe(() => {
     const state = runtime.getState();
@@ -109,6 +114,7 @@ async function boot(): Promise<void> {
     openGoalsAllowed: () => vision.current().state === "ready",
     applyVoice: (settings) => {
       voice.apply(settings);
+      elevenlabs.rate = settings.rate;
       conversation = settings.conversation;
       wakeWords = settings.wakeWords;
       script = settings.hindiScript;

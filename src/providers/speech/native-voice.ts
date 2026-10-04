@@ -133,7 +133,8 @@ export class NativeSpeechInput implements SpeechInput {
   }
 }
 
-async function collect(text: AsyncIterable<string>, signal: AbortSignal): Promise<string> {
+/** The whole utterance from a text stream; empty if it was aborted part way. */
+export async function collect(text: AsyncIterable<string>, signal: AbortSignal): Promise<string> {
   let content = "";
   for await (const chunk of text) {
     if (signal.aborted) return "";
@@ -229,7 +230,7 @@ export class RoutedTTS implements TTSProvider {
   }
 }
 
-async function* once(text: string): AsyncGenerator<string> {
+export async function* once(text: string): AsyncGenerator<string> {
   yield text;
 }
 
