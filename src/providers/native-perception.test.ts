@@ -82,6 +82,17 @@ describe("NativePerception", () => {
     ]);
   });
 
+  it("passes Enter on as a submit, never what was typed", async () => {
+    const { bridge, fire } = fakeBridge([HOME_SELECTED]);
+    const perception = new NativePerception(bridge);
+    const handler = vi.fn();
+    perception.onLearnerAction(handler);
+    perception.setWatching(true);
+    fire([{ kind: "submit" }]);
+    await settle();
+    expect(handler.mock.calls.map(([o]) => o)).toEqual([{ ...HOME_SELECTED, inputs: [{ kind: "submit" }] }]);
+  });
+
   it("logs malformed input reports and still reads the screen", async () => {
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { bridge, fire } = fakeBridge([HOME_SELECTED]);
@@ -157,6 +168,23 @@ describe("NativePerception.onAppSwitched", () => {
     vi.advanceTimersByTime(APP_SWITCH_SETTLE_MS);
     expect(handler).not.toHaveBeenCalled();
     vi.useRealTimers();
+  });
+});
+
+describe("NativePerception.shellTargets", () => {
+  const SEARCH = { id: "shell:search", name: "Search", role: "edit", bounds: { x: 400, y: 1040, width: 200, height: 40 }, source: "uia", confidence: 0.95 };
+
+  it("reads the taskbar's Start button and search box through the native command", async () => {
+    const invoke = vi.fn(async () => [SEARCH]);
+    const perception = new NativePerception({ invoke, listen: () => () => undefined } as unknown as NativeBridge);
+    await expect(perception.shellTargets()).resolves.toEqual([SEARCH]);
+    expect(invoke).toHaveBeenCalledWith("shell_targets");
+  });
+
+  it("rejects a malformed report rather than pointing at something it can't place", async () => {
+    const invoke = vi.fn(async () => [{ name: "Search" }]);
+    const perception = new NativePerception({ invoke, listen: () => () => undefined } as unknown as NativeBridge);
+    await expect(perception.shellTargets()).rejects.toThrow(/taskbar/);
   });
 });
 

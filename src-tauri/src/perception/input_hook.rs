@@ -10,7 +10,7 @@ use windows::Win32::Foundation::{LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, VK_BACK, VK_BROWSER_BACK, VK_CONTROL, VK_DELETE, VK_DIVIDE, VK_ESCAPE, VK_LEFT, VK_NUMPAD0, VK_OEM_1, VK_OEM_102, VK_OEM_3,
-    VK_OEM_4, VK_OEM_8, VK_RETURN, VK_SPACE, VK_TAB,
+    VK_OEM_4, VK_OEM_8, VK_RETURN, VK_SHIFT, VK_SPACE, VK_TAB,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, SetWindowsHookExW,
@@ -68,6 +68,8 @@ pub enum LearnerInput {
     Click { at: PointDto, button: MouseButton },
     Undo,
     Back,
+    /// Enter in the learner's app (sending a message, confirming a box); never what was typed.
+    Submit,
 }
 
 /// Physical screen pixels, like UI Automation bounds.
@@ -112,6 +114,15 @@ fn edits_text(vk_code: u32) -> bool {
 pub fn commits(vk_code: u32, since_typed: Option<Duration>) -> bool {
     let separator = WORD_SEPARATORS.iter().any(|&key| u32::from(key) == vk_code);
     is_action_key(vk_code) && !(separator && since_typed.is_some_and(|since| since < TYPING_WINDOW))
+}
+
+/// Releasing a key. The learner's Enter is a submit and Shift+Enter a new line in the text; other committing
+/// keys (and Enter that Hodeum injected) are worth a re-read with nothing more to report.
+fn key_up_signal(vk_code: u32, shift: bool, injected: bool, since_typed: Option<Duration>) -> Option<Signal> {
+    if vk_code == u32::from(VK_RETURN.0) && !injected {
+        return Some(if shift { Signal::Typed } else { Signal::Action(Some(LearnerInput::Submit)) });
+    }
+    commits(vk_code, since_typed).then_some(Signal::Action(None))
 }
 
 fn now_stamp() -> u64 {
@@ -233,6 +244,12 @@ fn ctrl_down() -> bool {
     state < 0
 }
 
+fn shift_down() -> bool {
+    // SAFETY: GetAsyncKeyState has no preconditions.
+    let state = unsafe { GetAsyncKeyState(i32::from(VK_SHIFT.0)) };
+    state < 0
+}
+
 unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     let message = wparam.0 as u32;
     if code >= 0 {
@@ -252,7 +269,8 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
             let typed = (info.flags.0 & LLKHF_INJECTED.0 == 0 && edits_text(vk_code)).then_some(Signal::Typed);
             shortcut_input(vk_code, ctrl_down(), alt).map(|input| Signal::Action(Some(input))).or(typed)
         } else {
-            (message == WM_KEYUP && commits(vk_code, since_typed())).then_some(Signal::Action(None))
+            let injected = info.flags.0 & LLKHF_INJECTED.0 != 0;
+            (message == WM_KEYUP).then(|| key_up_signal(vk_code, shift_down(), injected, since_typed())).flatten()
         };
         // SAFETY: GetForegroundWindow has no preconditions.
         if let Some(report) = report.filter(|_| !is_own(unsafe { GetForegroundWindow() })) {
@@ -456,6 +474,18 @@ mod tests {
         let click = LearnerInput::Click { at: PointDto { x: 1.0, y: 2.0 }, button: MouseButton::Right };
         assert_eq!(serde_json::to_string(&click).unwrap(), r#"{"kind":"click","at":{"x":1.0,"y":2.0},"button":"right"}"#);
         assert_eq!(serde_json::to_string(&LearnerInput::Undo).unwrap(), r#"{"kind":"undo"}"#);
+        assert_eq!(serde_json::to_string(&LearnerInput::Submit).unwrap(), r#"{"kind":"submit"}"#);
+    }
+
+    #[test]
+    fn enter_in_the_learners_app_is_a_submit_and_shift_enter_a_new_line() {
+        let typed = |ms| Some(Duration::from_millis(ms));
+        assert_eq!(key_up_signal(0x0D, false, false, None), Some(Signal::Action(Some(LearnerInput::Submit))));
+        assert_eq!(key_up_signal(0x0D, false, false, typed(50)), Some(Signal::Action(Some(LearnerInput::Submit))), "sending what was just typed");
+        assert_eq!(key_up_signal(0x0D, true, false, typed(50)), Some(Signal::Typed), "Shift+Enter is a new line in a chat box");
+        assert_eq!(key_up_signal(0x0D, false, true, None), Some(Signal::Action(None)), "a press Hodeum injected isn't the learner's");
+        assert_eq!(key_up_signal(0x09, false, false, typed(200)), Some(Signal::Action(None)), "Tab still commits");
+        assert_eq!(key_up_signal(0x41, false, false, None), None, "a letter is never a commit");
     }
 
     fn ms(start: Instant, millis: u64) -> Instant {

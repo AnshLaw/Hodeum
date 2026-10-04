@@ -1,4 +1,4 @@
-import type { AppLaunch, LearnerInput, PerformRequest, Rect, ScreenObservation } from "../lib/types";
+import type { AppLaunch, LearnerInput, PerformRequest, Rect, ScreenObservation, UiElement } from "../lib/types";
 import type { AppSwitch, PerceptionAdapter } from "./interfaces";
 
 /** Must match `LEARNER_ACTION_EVENT` in src-tauri/src/perception/input_hook.rs. */
@@ -47,6 +47,13 @@ export class NativePerception implements PerceptionAdapter {
   /** Opens the app through the Start menu's entry (the native side only accepts ids from its own catalog). */
   async openInstalledApp(id: string): Promise<boolean> {
     return (await this.bridge.invoke<{ title: string } | null>("open_installed_app", { id })) !== null;
+  }
+
+  /** The taskbar's Start button and search box, read by UI Automation although the taskbar isn't in front. */
+  async shellTargets(): Promise<UiElement[]> {
+    const found = await this.bridge.invoke<unknown>("shell_targets");
+    if (!Array.isArray(found) || !found.every(isElement)) throw new Error("The taskbar read came back malformed");
+    return found;
   }
 
   /** The window watcher also reports moves and resizes; only a different window counts as a switch, once settled. */
@@ -126,10 +133,19 @@ function appOf(payload: unknown): AppSwitch {
 const isPoint = (value: unknown): boolean =>
   typeof value === "object" && value !== null && typeof (value as { x?: unknown }).x === "number" && typeof (value as { y?: unknown }).y === "number";
 
+const isRect = (value: unknown): boolean =>
+  isPoint(value) && typeof (value as { width?: unknown }).width === "number" && typeof (value as { height?: unknown }).height === "number";
+
+function isElement(value: unknown): value is UiElement {
+  if (typeof value !== "object" || value === null) return false;
+  const element = value as { id?: unknown; name?: unknown; role?: unknown; bounds?: unknown };
+  return typeof element.id === "string" && typeof element.name === "string" && typeof element.role === "string" && isRect(element.bounds);
+}
+
 function isInput(value: unknown): value is LearnerInput {
   if (typeof value !== "object" || value === null) return false;
   const input = value as { kind?: unknown; at?: unknown; button?: unknown };
-  if (input.kind === "undo" || input.kind === "back") return true;
+  if (input.kind === "undo" || input.kind === "back" || input.kind === "submit") return true;
   return input.kind === "click" && isPoint(input.at) && (input.button === "left" || input.button === "right");
 }
 
