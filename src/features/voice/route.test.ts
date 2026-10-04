@@ -56,6 +56,11 @@ describe("pressing the mic and asking to be taught", () => {
     expect(types(route(initialState, "excel mein chart kaise banate hain", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
   });
 
+  it("plans an English how-to with no lesson and no task wording into a Hode, not a one-off answer", () => {
+    expect(types(route(initialState, "how do I add a column", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
+    expect(types(route(initialState, "how can I share my screen", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
+  });
+
   it("starts it while vision is still loading, so Hodey can say so", () => {
     const events = routeUtterance(initialState, "how do I send a message on discord", TASK_PACKS, false, [], [], true);
     expect(events).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", openAllowed: false, visionStarting: true }]);

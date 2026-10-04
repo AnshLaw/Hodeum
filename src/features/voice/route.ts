@@ -189,9 +189,13 @@ function routeInHode(s: HodeState, text: string, apps: InstalledApp[]): HodeEven
   return [open ?? question(text)];
 }
 
+/** Asking what something is, or a yes/no question: answered even when it names a lesson's task. */
+const ANSWER_ONLY =
+  /^(?:what(?:'s| is| are) (?:a|an|the)\b|what does\b|(?:is|are|does|do|did|can|could|was|were|has|have)\b|kya\b|क्या(?:\s|$))|\b(?:kya (?:hai|hota|hoti|hote)|kahan|kahaan|matlab kya)\b|क्या (?:है|होता|होती|करता|करती)|कहाँ|कहां/i;
+
 /** "How do I…", "teach me…", "help me…": a request to be taught, planned into a Hode rather than answered once. */
 const TEACH_ME =
-  /^(?:how (?:do|can|would|should|could) (?:i|we|you)|how to|where do i|teach me|show me how|help me|i want to|i need to|i'd like to|(?:can|could|will|would) you (?:teach|show|help))|(?:kaise|sikhao|sikha do)|कैसे|सिखाओ|सिखा दो/i;
+  /^(?:how (?:do|can|would|should|could) (?:i|we|you)|how to|where do i|teach me|show me how|help me|i want to|i need to|i'd like to|(?:can|could|will|would) you (?:teach|show|help))\b|\b(?:kaise|sikhao|sikha do)\b|कैसे|सिखाओ|सिखा दो/i;
 
 /**
  * Idle, once it's neither small talk nor noise. Asking to be taught ("how do I…", "teach me…", "kaise…", "सिखाओ") or
@@ -203,8 +207,10 @@ const TEACH_ME =
 function askOrStart(text: string, intent: Intent, packs: TaskPack[], openAllowed: boolean, visionStarting: boolean, apps: InstalledApp[]): HodeEvent[] {
   const goal = goalEvent(text, { packs, openAllowed, apps, visionStarting });
   if (intent === "task" || TEACH_ME.test(text)) return [{ type: "START_HODE" }, goal];
+  // "What is 15% of 200?" is the lesson's task; "what is a pivot table?" or "is dark mode on?" is answered.
+  const lesson = goal.type === "GOAL_SUBMITTED" && goal.pack !== undefined;
+  if (lesson && !(intent === "question" && ANSWER_ONLY.test(text.trim()))) return [{ type: "START_HODE" }, goal];
   if (intent === "question") return [question(text)];
-  if (goal.type === "GOAL_SUBMITTED" && goal.pack) return [{ type: "START_HODE" }, goal];
   return asksAboutScreen(text) ? [question(text)] : [];
 }
 
