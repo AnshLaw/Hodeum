@@ -43,9 +43,9 @@ export class MockPerception implements PerceptionAdapter {
   }
 
   /** Agent · Do it for me presses the practice app's control, if it's still where Hodey saw it. */
-  async perform({ target, button }: PerformRequest): Promise<void> {
+  async perform({ target, button, name }: PerformRequest): Promise<void> {
     const app = this.currentApp();
-    if (!app.snapshot().elements.some((e) => e.id === target.elementId)) throw new Error(`${target.label} isn't on the screen anymore.`);
+    if (!app.snapshot().elements.some((e) => e.id === target.elementId && e.name === name)) throw new Error(`${target.label} isn't on the screen anymore.`);
     app.press(target.elementId, button);
     this.pressedListeners.forEach((listener) => listener());
   }

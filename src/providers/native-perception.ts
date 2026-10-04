@@ -36,9 +36,9 @@ export class NativePerception implements PerceptionAdapter {
     return (await this.bridge.invoke<{ title: string } | null>("focus_app", { app })) !== null;
   }
 
-  /** Clicks the control through Windows, after checking it's still the one Hodey saw at those bounds. */
-  perform({ target, button }: PerformRequest): Promise<void> {
-    return this.bridge.invoke<void>("perform_click", { bounds: target.bounds, button });
+  /** Clicks the element from screen read `observedAt` through Windows; the native side re-checks it's still that control. */
+  perform({ target, button, name, observedAt }: PerformRequest): Promise<void> {
+    return this.bridge.invoke<void>("perform_click", { elementId: target.elementId, name, observedAt, button });
   }
 
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void {

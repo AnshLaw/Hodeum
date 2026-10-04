@@ -135,7 +135,7 @@ function checkpointView(s: HodeState): NotchView {
     size: "guidance",
     eyebrow: stepEyebrow(s),
     title: COPY.checkpointTitle,
-    detail: finished ? COPY.checkpointDetail(finished.objective) : COPY.checkpointOpenDetail,
+    detail: finished ? COPY.checkpointDetail(finished.objective) : undefined,
     progress: s.pack ? { current: s.stepIndex, total: s.pack.steps.length } : undefined,
     busy: false,
     controls: ["approve", "take_over", "point", "end"],

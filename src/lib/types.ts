@@ -123,8 +123,13 @@ export interface ActionTarget {
 
 /** Agent · Do it for me: the control Hodey presses for the learner, as last seen on screen. */
 export interface PerformRequest {
+  /** Bounds and id from the screen read, never from a model. */
   target: ActionTarget;
   button: MouseButton;
+  /** The element's name as read, re-checked on the native side before clicking. */
+  name: string;
+  /** Which screen read the element came from (`ScreenObservation.at`); a press of an older read is refused. */
+  observedAt: number;
 }
 
 /** `complete` ends an open-ended Hode when the screen shows the goal is reached. */

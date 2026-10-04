@@ -52,7 +52,6 @@ export const COPY = {
   actingDetail: "Hodey is doing this step. Pause or take over before it clicks if something looks wrong.",
   checkpointTitle: "Check Hodey's work",
   checkpointDetail: (objective: string) => `Just done: ${objective}. Continue when it looks right.`,
-  checkpointOpenDetail: "Hodey did a few steps. Continue when everything looks right.",
   hodeyDidIt: "Hodey did the clicking. Check the result.",
   switchToApp: (app: string) => `Open ${app}, or switch to it, and I'll pick up there.`,
   connectPhone: "Connect your iPhone: open Show iPhone in Hodey's menu and start mirroring. I'll pick up there.",

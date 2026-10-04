@@ -17,7 +17,7 @@ use crate::dock::geometry::PxRect;
 use crate::surfaces;
 
 use model::{app_name, Observation, RectDto};
-use press::PressButton;
+use press::{PressButton, PressRequest, Seen};
 use uia::UiaReader;
 
 /// Logged so slow trees (large workbooks) show up during rehearsal.
@@ -29,7 +29,7 @@ type Observed = (Observation, Option<PxRect>);
 /// Work for the UI Automation thread: read the learner's app, or click a control in it.
 enum Job {
     Observe { region: Option<RectDto>, reply: mpsc::Sender<Result<Observed, String>> },
-    Press { bounds: RectDto, button: PressButton, reply: mpsc::Sender<Result<(), String>> },
+    Press { request: PressRequest, reply: mpsc::Sender<Result<(), String>> },
 }
 
 /// UI Automation needs a COM (MTA) thread of its own; all reads are serialized through it.
@@ -75,8 +75,8 @@ fn worker(jobs: mpsc::Receiver<Job>, last_external: Arc<AtomicIsize>) {
             Job::Observe { region, reply } => {
                 let _ = reply.send(reader.and_then(|r| observe_once(r, &last_external, region)));
             }
-            Job::Press { bounds, button, reply } => {
-                let _ = reply.send(reader.and_then(|r| r.press(&bounds, button)));
+            Job::Press { request, reply } => {
+                let _ = reply.send(reader.and_then(|r| r.press(&request, now_ms())));
             }
         }
     }
@@ -89,7 +89,7 @@ fn now_ms() -> u64 {
 fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<RectDto>) -> Result<Observed, String> {
     let started = Instant::now();
     let hwnd = foreground::target_window(last_external)?;
-    let elements = reader.read(hwnd.0 as isize, region)?;
+    let (elements, handles) = reader.read(hwnd.0 as isize, region)?;
     let elapsed = started.elapsed().as_millis();
     if elapsed > SLOW_SNAPSHOT_MS {
         eprintln!("UIA snapshot took {elapsed} ms for {} elements", elements.len());
@@ -98,7 +98,9 @@ fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<
         eprintln!("couldn't read the app's process name: {error}");
         String::new()
     });
-    let observation = Observation { app: app_name(&stem), window_title: foreground::window_title(hwnd), elements, at: now_ms() };
+    let at = now_ms();
+    reader.remember(Seen { at, pid: foreground::window_pid(hwnd), elements: handles });
+    let observation = Observation { app: app_name(&stem), window_title: foreground::window_title(hwnd), elements, at };
     Ok((observation, foreground::monitor_rect(hwnd)))
 }
 
@@ -123,16 +125,33 @@ pub async fn observe(app: AppHandle, region: Option<RectDto>, state: State<'_, P
     Ok(observation)
 }
 
-/// Agent · Do it for me: clicks the control Hodey last saw at `bounds` in the learner's app.
-/// Refuses (with a message for the learner) when something else is there now.
+/// Only the notch runs Hodes, so only it may ask Hodey to click.
+fn may_press(window_label: &str) -> bool {
+    window_label == surfaces::NOTCH
+}
+
+/// Agent · Do it for me: clicks element `element_id` of screen read `observed_at` in the learner's app.
+/// Refuses (with a message for the learner) for any other window, an older read, or a control that
+/// changed, moved, left the learner's app or is covered.
 #[tauri::command]
-pub async fn perform_click(bounds: RectDto, button: PressButton, state: State<'_, Perception>) -> Result<(), String> {
+pub async fn perform_click(
+    window: tauri::WebviewWindow,
+    element_id: String,
+    name: String,
+    observed_at: u64,
+    button: PressButton,
+    state: State<'_, Perception>,
+) -> Result<(), String> {
+    if !may_press(window.label()) {
+        return Err("Only Hodey's notch can click for the learner.".into());
+    }
+    let request = PressRequest { element_id, name, observed_at, button };
     let (reply, result) = mpsc::channel();
     state
         .jobs
         .lock()
         .map_err(|e| e.to_string())?
-        .send(Job::Press { bounds, button, reply })
+        .send(Job::Press { request, reply })
         .map_err(|_| "The screen reader stopped.".to_string())?;
     tauri::async_runtime::spawn_blocking(move || result.recv().map_err(|_| "The screen reader stopped.".to_string())?)
         .await
@@ -159,4 +178,16 @@ pub async fn capture_active_window(state: State<'_, Perception>) -> Result<Captu
 pub fn capture_frame(hwnd: isize) -> Result<CapturedFrame, String> {
     let capture = capture::capture_png(hwnd)?;
     Ok(CapturedFrame { png: BASE64_STANDARD.encode(capture.png), rect: capture.rect })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::may_press;
+
+    #[test]
+    fn only_the_notch_may_click_for_the_learner() {
+        assert!(may_press("main_notch"));
+        assert!(!may_press("hodeum_app"));
+        assert!(!may_press("guidance_overlay"));
+    }
 }

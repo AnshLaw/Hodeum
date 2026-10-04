@@ -58,11 +58,35 @@ describe("Agent · Do it for me", () => {
       type: "perform",
       requestId: t.state.requestId,
       delayMs: PREVIEW_MS,
-      request: { target: guideAction().target, button: "left" },
+      request: { target: { ...guideAction().target!, bounds: { x: 50, y: 0, width: 40, height: 20 } }, button: "left", name: "Insert", observedAt: HOME_SELECTED.at },
     });
     expect(said(t)).toEqual([words.doing("Insert", "left")]);
     expect(types(t)).toContain("renderOverlay");
     expect(types(t)).not.toContain("startStuckTimer");
+  });
+
+  it("only ever clicks the step's own control, whatever the model points at", () => {
+    const begun = fold(
+      initialState,
+      { type: "START_HODE" },
+      { type: "GOAL_SUBMITTED", goal: "do it", pack: PACK, mode: "agent", agentStyle: "execute" },
+      { type: "SKILL_LOADED", skillId: PACK.steps[0].skill, record: null },
+      { type: "OBSERVED", observation: HOME_SELECTED },
+    ).state;
+    const elsewhere = guideAction({ target: { elementId: "tab item:Data", bounds: { x: 100, y: 0, width: 40, height: 20 }, confidence: 0.99, label: "Insert" } });
+    const t = step(begun, { type: "ACTION_READY", requestId: begun.requestId, action: elsewhere, failures: [] });
+    expect(t.state).toMatchObject({ phase: "guiding", handedBack: true });
+    expect(types(t)).not.toContain("perform");
+    const unseen = guideAction({ target: { elementId: "button:Delete", bounds: { x: 0, y: 0, width: 10, height: 10 }, confidence: 0.99, label: "Insert" } });
+    expect(types(step(begun, { type: "ACTION_READY", requestId: begun.requestId, action: unseen, failures: [] }))).not.toContain("perform");
+  });
+
+  it("clicks where the screen read saw the control, not where the model said it was", () => {
+    const begun = acting().state;
+    const reasoning = { ...begun, phase: "reasoning" as const, requestId: begun.requestId + 1 };
+    const moved = guideAction({ target: { ...guideAction().target!, bounds: { x: 900, y: 900, width: 40, height: 20 } } });
+    const perform = step(reasoning, { type: "ACTION_READY", requestId: reasoning.requestId, action: moved, failures: [] }).effects.find((e) => e.type === "perform");
+    expect(perform).toMatchObject({ request: { target: { bounds: { x: 50, y: 0, width: 40, height: 20 } } } });
   });
 
   it("right-clicks a step the pack marks as a right-click", () => {
@@ -240,32 +264,17 @@ describe("Agent · Do it for me", () => {
 });
 
 describe("Agent · Do it for me on an open-ended Hode", () => {
-  const screen = obs([el("Insert", "tab item", { bounds: { x: 50, y: 0, width: 40, height: 20 } })]);
-
-  function openActing(): Transition {
-    return fold(
+  it("guides instead: without a task pack nothing limits what the model could click", () => {
+    const screen = obs([el("Insert", "tab item", { bounds: { x: 50, y: 0, width: 40, height: 20 } })]);
+    const t = fold(
       initialState,
       { type: "START_HODE" },
       { type: "GOAL_SUBMITTED", goal: "do something", openAllowed: true, mode: "agent", agentStyle: "execute" },
       { type: "OBSERVED", observation: screen },
       { type: "ACTION_READY", requestId: 1, action: guideAction(), failures: [] },
     );
-  }
-
-  it("asks the model for the next step after each click, and checks in every few", () => {
-    let t = openActing();
-    expect(t.state.phase).toBe("acting");
-    for (let i = 1; i < CHECKPOINT_EVERY; i++) {
-      t = step(t.state, { type: "HODEY_ACTED", requestId: t.state.requestId, observation: screen });
-      expect(t.state.phase).toBe("reasoning");
-      t = step(t.state, { type: "ACTION_READY", requestId: t.state.requestId, action: guideAction(), failures: [] });
-    }
-    const check = step(t.state, { type: "HODEY_ACTED", requestId: t.state.requestId, observation: screen });
-    expect(check.state.phase).toBe("checkpoint");
-    expect(said(check)).toEqual([words.checkpointOpen]);
-    const resumed = step(check.state, { type: "RESUME" });
-    expect(resumed.state.phase).toBe("observing");
-    expect(types(resumed)).toEqual(["observe"]);
+    expect(t.state.phase).toBe("guiding");
+    expect(types(t)).not.toContain("perform");
   });
 });
 

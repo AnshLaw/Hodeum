@@ -1,6 +1,6 @@
 import { COPY } from "../../lib/copy";
 import { spoken } from "../../lib/spoken";
-import type { TaskStep, TeachingAction } from "../../lib/types";
+import type { ActionTarget, TaskStep, TeachingAction, UiElement } from "../../lib/types";
 import { beginStep, onActionReady, requestReason, showGuidance } from "./flow";
 import {
   CHECKPOINT_EVERY,
@@ -16,27 +16,41 @@ import {
   type Transition,
 } from "./model";
 import { confidenceBand, overlayFor } from "./policy";
-import { evaluateSignal } from "./signals";
+import { evaluateSignal, nameMatches } from "./signals";
 
 /**
  * Agent · Do it for me: Hodey presses each step's control itself, verifies the result the same way it
  * verifies the learner's, and stops at checkpoints so the learner stays in the loop. Anything it
  * can't press with confidence goes back to the learner as ordinary guidance.
+ *
+ * Only task-pack steps are done this way, and only on the step's own target: an element from the
+ * latest screen read whose name (and role) the pack names. Nothing a model or the screen says can
+ * pick another control, so open-ended Hodes are always guided.
  */
 
 const CANCEL_TIMER: HodeEffect = { type: "cancelStuckTimer" };
 const ACTIONABLE: TeachingAction["kind"][] = ["guide", "correct"];
 
-/** Hodey does this step itself: Agent · Do it for me on the desktop, a step it hasn't handed back, no question open. */
+/** Hodey does this step itself: Agent · Do it for me, a desktop task pack, a step it hasn't handed back, no question open. */
 export function executing(s: HodeState): boolean {
   const asking = s.question !== undefined || s.spokenQuestion !== undefined;
-  return s.mode === "agent" && s.agentStyle === "execute" && !s.handedBack && s.pack?.surface !== "phone" && !asking;
+  const desktopPack = s.pack !== undefined && !s.open && s.pack.surface !== "phone";
+  return s.mode === "agent" && s.agentStyle === "execute" && desktopPack && !s.handedBack && !asking;
 }
 
-/** Shows what Hodey is about to press and asks the runtime to press it after a short preview. */
-function startActing(s: HodeState, action: TeachingAction): Transition {
-  const target = action.target;
-  if (!target) return showGuidance(s, action);
+/** The element the action points at, if the latest screen read has it and the step's target names it. */
+function stepTarget(s: HodeState, target: ActionTarget): UiElement | undefined {
+  const step = currentStep(s);
+  const element = s.observation?.elements.find((e) => e.id === target.elementId);
+  if (!step || !element) return undefined;
+  const named = step.target.names.some((name) => nameMatches(name, element.name));
+  const role = step.target.role;
+  return named && (role === undefined || element.role.toLowerCase() === role.toLowerCase()) ? element : undefined;
+}
+
+/** Shows what Hodey is about to press and asks the runtime to press it, as the screen read saw it, after a short preview. */
+function startActing(s: HodeState, action: TeachingAction, element: UiElement, observedAt: number): Transition {
+  const target: ActionTarget = { ...action.target!, elementId: element.id, bounds: element.bounds };
   const button = currentStep(s)?.press ?? "left";
   const shown = overlayFor({ ...action, assistanceLevel: "demonstrate" }, pinFor(s));
   // A step the learner just finished (one handed back) is still acknowledged first.
@@ -47,7 +61,7 @@ function startActing(s: HodeState, action: TeachingAction): Transition {
       CANCEL_TIMER,
       { type: "renderOverlay", primitives: shown },
       { type: "say", text: line },
-      { type: "perform", requestId: s.requestId, request: { target, button }, delayMs: PREVIEW_MS },
+      { type: "perform", requestId: s.requestId, request: { target, button, name: element.name, observedAt }, delayMs: PREVIEW_MS },
     ],
   };
 }
@@ -67,8 +81,9 @@ export function onActionReadyActing(s: HodeState, e: EventOf<"ACTION_READY">): T
   // Too unsure to point precisely: re-look first, then ask, exactly as guidance does.
   if (band === "uncertain") return onActionReady(s, e);
   const withNotice = { ...s, notice: e.failures.length > 0 ? COPY.fallbackNotice : s.notice };
-  if (band === "broad") return showGuidance({ ...withNotice, handedBack: true, notice: spoken(s.language).overToYou }, e.action);
-  return startActing(withNotice, e.action);
+  const element = stepTarget(s, target);
+  if (band === "broad" || !element || !s.observation) return showGuidance({ ...withNotice, handedBack: true, notice: spoken(s.language).overToYou }, e.action);
+  return startActing(withNotice, e.action, element, s.observation.at);
 }
 
 /** Hodey did a step. It never counts as the learner's skill (and is never praised); checkpoints pause before the next one. */
@@ -89,19 +104,9 @@ function finishHodeyStep(acted: HodeState, step: TaskStep): Transition {
   return withLeadingEffects(beginStep({ ...s, hodeyDid, sinceCheckpoint }, nextIndex), done);
 }
 
-/** Open-ended Hodes have no success signal: the model plans the next press, with a check-in every few. */
-function afterOpenPress(s: HodeState): Transition {
-  const sinceCheckpoint = s.sinceCheckpoint + 1;
-  const hodeyDid = s.hodeyDid + 1;
-  if (sinceCheckpoint < CHECKPOINT_EVERY) return requestReason({ ...s, sinceCheckpoint, hodeyDid });
-  const state: HodeState = { ...s, hodeyDid, phase: "checkpoint", sinceCheckpoint: 0, action: undefined };
-  return { state, effects: [CANCEL_TIMER, { type: "clearOverlay" }, { type: "say", text: spoken(s.language).checkpointOpen }] };
-}
-
 export function onHodeyActed(s: HodeState, e: EventOf<"HODEY_ACTED">): Transition {
   if (s.phase !== "acting" || e.requestId !== s.requestId) return noop(s);
   const observed: HodeState = { ...s, observation: e.observation };
-  if (s.open) return afterOpenPress(observed);
   const step = currentStep(s);
   if (!step) return noop(s);
   if (evaluateSignal(step.success, e.observation)) return finishHodeyStep(observed, step);
@@ -116,9 +121,8 @@ export function onPerformFailed(s: HodeState, e: EventOf<"PERFORM_FAILED">): Tra
   return handBack(s, s.action, e.message);
 }
 
-/** Carry on after a checkpoint: the next step (pack), or a fresh look for the model to plan (open). */
+/** Carry on after a checkpoint with the next step. */
 export function continueAfterCheckpoint(s: HodeState): Transition {
-  if (s.open) return { state: { ...s, phase: "observing" }, effects: [{ type: "observe" }] };
   return beginStep(s, s.stepIndex);
 }
 

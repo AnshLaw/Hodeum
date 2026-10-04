@@ -1,10 +1,13 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use uiautomation::core::UICacheRequest;
 use uiautomation::types::{ControlType, Handle, ToggleState, TreeScope, UIProperty};
 use uiautomation::variants::Value;
 use uiautomation::{UIAutomation, UIElement, UITreeWalker};
 
 use super::model::{normalize_role, ElementDto, RectDto};
-use super::press::{self, PressButton};
+use super::press::{self, PressRequest, Seen};
 
 pub const MAX_ELEMENTS: usize = 1500;
 pub const MAX_DEPTH: usize = 40;
@@ -35,7 +38,12 @@ pub struct UiaReader {
     automation: UIAutomation,
     walker: UITreeWalker,
     cache: UICacheRequest,
+    /// The latest read's elements, for Agent · Do it for me to press one of them.
+    seen: RefCell<Option<Seen>>,
 }
+
+/// Elements by the id the web side gets, with the box each had when read.
+pub type ReadElements = HashMap<String, (UIElement, RectDto)>;
 
 impl UiaReader {
     pub fn new() -> Result<Self, String> {
@@ -46,14 +54,15 @@ impl UiaReader {
             cache.add_property(property).map_err(err)?;
         }
         cache.set_tree_scope(TreeScope::Element).map_err(err)?;
-        Ok(Self { automation, walker, cache })
+        Ok(Self { automation, walker, cache, seen: RefCell::new(None) })
     }
 
     /// Depth-first walk of the window's control view, batching property reads through the cache.
-    pub fn read(&self, hwnd: isize, region: Option<RectDto>) -> Result<Vec<ElementDto>, String> {
+    pub fn read(&self, hwnd: isize, region: Option<RectDto>) -> Result<(Vec<ElementDto>, ReadElements), String> {
         let root = self.automation.element_from_handle(Handle::from(hwnd)).map_err(err)?;
         let root = root.build_updated_cache(&self.cache).map_err(err)?;
         let mut out = Vec::new();
+        let mut handles = ReadElements::new();
         let mut stack = vec![(root, 0usize)];
         let mut sequence = 0usize;
         while let Some((element, depth)) = stack.pop() {
@@ -66,6 +75,7 @@ impl UiaReader {
             }
             sequence += 1;
             if let Some(dto) = describe(&element, sequence).filter(|d| region.map_or(true, |r| r.intersects(&d.bounds))) {
+                handles.insert(dto.id.clone(), (element.clone(), dto.bounds));
                 out.push(dto);
             }
             let pruned = element.get_cached_control_type().map(is_pruned).unwrap_or(false);
@@ -73,12 +83,18 @@ impl UiaReader {
                 self.push_children(&element, depth + 1, &mut stack);
             }
         }
-        Ok(out)
+        Ok((out, handles))
     }
 
-    /// Agent · Do it for me: clicks the control Hodey saw at `bounds`, if it's still there.
-    pub fn press(&self, bounds: &RectDto, button: PressButton) -> Result<(), String> {
-        press::press(&self.automation, &self.walker, bounds, button)
+    /// Replaces the elements a press may target with this read's.
+    pub fn remember(&self, seen: Seen) {
+        self.seen.replace(Some(seen));
+    }
+
+    /// Agent · Do it for me: clicks one element of the latest read, once; any later press needs a new read.
+    pub fn press(&self, request: &PressRequest, now: u64) -> Result<(), String> {
+        let seen = self.seen.take().ok_or(press::STALE)?;
+        press::press(&self.automation, &self.walker, &seen, request, now)
     }
 
     fn push_children(&self, element: &UIElement, depth: usize, stack: &mut Vec<(UIElement, usize)>) {
