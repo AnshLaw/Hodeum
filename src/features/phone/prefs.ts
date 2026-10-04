@@ -3,7 +3,8 @@ import type { PhoneSourceKind } from "./phone-source";
 
 const STORAGE_KEY = "hodeum.phone";
 const prefsSchema = z.object({ source: z.enum(["camera", "airplay"]), cameraLabel: z.string().optional() });
-const DEFAULT_PREFS: PhonePrefs = { source: "camera" };
+// AirPlay needs no extra hardware or driver, so it is the source a first-time learner can actually use.
+const DEFAULT_PREFS: PhonePrefs = { source: "airplay" };
 
 export interface PhonePrefs {
   source: PhoneSourceKind;

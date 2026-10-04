@@ -26,7 +26,7 @@ pub const RECEIVER_NAME: &str = "Hodeum";
 /// and shared folders other users can write to (C:\msys64 by default) are never searched.
 pub const LOCAL_RECEIVER: &str = "runtime/uxplay/uxplay.exe";
 const LOG_FILE: &str = "runtime/uxplay.log";
-pub const AIRPLAY_MISSING: &str = "AirPlay receiver not installed. See docs/iphone-mirroring.md to install UxPlay.";
+pub const AIRPLAY_MISSING: &str = "AirPlay receiver not installed. Run scripts\\setup-airplay.ps1 (see docs/iphone-mirroring.md).";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const POLL: Duration = Duration::from_millis(250);
 /// Large enough for any RTP packet on loopback.

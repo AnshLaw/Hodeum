@@ -7,9 +7,9 @@ describe("parsePhonePrefs", () => {
     expect(parsePhonePrefs('{"source":"camera","cameraLabel":"USB Video"}')).toEqual({ source: "camera", cameraLabel: "USB Video" });
   });
 
-  it("falls back to the camera source for missing or broken prefs", () => {
-    expect(parsePhonePrefs(null)).toEqual({ source: "camera" });
-    expect(parsePhonePrefs("{nope")).toEqual({ source: "camera" });
-    expect(parsePhonePrefs('{"source":"bluetooth"}')).toEqual({ source: "camera" });
+  it("falls back to AirPlay for missing or broken prefs", () => {
+    expect(parsePhonePrefs(null)).toEqual({ source: "airplay" });
+    expect(parsePhonePrefs("{nope")).toEqual({ source: "airplay" });
+    expect(parsePhonePrefs('{"source":"bluetooth"}')).toEqual({ source: "airplay" });
   });
 });

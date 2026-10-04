@@ -13,8 +13,8 @@ import { markRect } from "./phone-layout";
 const MARK_RADIUS = 6;
 
 const SOURCES: [PhoneSourceKind, string][] = [
-  ["camera", COPY.phoneSourceCamera],
   ["airplay", COPY.phoneSourceAirplay],
+  ["camera", COPY.phoneSourceCamera],
 ];
 
 export function usePhoneMirror(mirror: PhoneMirror | undefined) {

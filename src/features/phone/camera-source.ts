@@ -43,7 +43,7 @@ export class CameraPhoneSource implements PhoneSource {
 
   async start(sink: FrameSink): Promise<void> {
     const camera = pickCamera(await listCameras(), this.preferredLabel());
-    if (!camera) throw new Error("No iPhone camera found. Start iPhoneMirror or plug in the capture card, or pick the camera above.");
+    if (!camera) throw new Error("No iPhone video input found. A USB cable needs iPhoneMirror or a capture card running; pick it above. No cable app? Use Wi-Fi (AirPlay).");
     const constraints = { deviceId: { exact: camera.deviceId }, width: { ideal: IDEAL.width }, height: { ideal: IDEAL.height }, frameRate: { ideal: IDEAL.frameRate } };
     this.stream = await navigator.mediaDevices.getUserMedia({ video: constraints });
     this.stream.getVideoTracks()[0]?.addEventListener("ended", () => this.emit({ state: "error", message: `${camera.label} stopped. Is it still plugged in?` }));
