@@ -2,6 +2,7 @@
 //! reach the webview; the UI only learns whether a key is saved.
 
 pub mod backboard;
+pub mod catalog;
 pub mod elevenlabs;
 pub mod gemini;
 pub mod keys;

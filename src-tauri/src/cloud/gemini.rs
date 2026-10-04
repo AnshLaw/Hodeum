@@ -7,8 +7,12 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 const API_BASE: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+/// Dev builds only: overrides the model chosen in Settings > Cloud.
 const MODEL_ENV: &str = "GEMINI_MODEL";
-const DEFAULT_MODEL: &str = "gemini-3.7-flash";
+/// Must match `DEFAULT_GEMINI_MODEL` in src/data/settings.ts.
+const DEFAULT_MODEL: &str = "gemini-3.8-flash";
+/// Longer than any Gemini model id; the id goes into the request URL.
+const MAX_MODEL_CHARS: usize = 80;
 /// A slow cloud answer is worse than the local one; the policy then cools Gemini down.
 const TIMEOUT: Duration = Duration::from_secs(6);
 /// Gemini 3 models think by default; a tutor's next step needs little of it.
@@ -28,10 +32,18 @@ pub struct GeminiRequest {
     pub prompt: String,
 }
 
-pub fn model_id(env: Option<String>) -> Result<String, String> {
-    let model = env.map(|m| m.trim().to_string()).filter(|m| !m.is_empty()).unwrap_or_else(|| DEFAULT_MODEL.to_string());
-    if !model.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_')) {
-        return Err(format!("{MODEL_ENV} \"{model}\" isn't a model id"));
+/// Letters, digits, `-`, `.` and `_` only, so the id is safe inside the request URL.
+pub fn valid_model(id: &str) -> bool {
+    !id.is_empty() && id.len() <= MAX_MODEL_CHARS && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_'))
+}
+
+/// The model for one request: the dev override, else the learner's choice, else the default.
+pub fn model_id(setting: Option<String>, env: Option<String>, dev: bool) -> Result<String, String> {
+    let clean = |v: Option<String>| v.map(|m| m.trim().to_string()).filter(|m| !m.is_empty());
+    let env = if dev { clean(env) } else { None };
+    let model = env.or_else(|| clean(setting)).unwrap_or_else(|| DEFAULT_MODEL.to_string());
+    if !valid_model(&model) {
+        return Err(format!("\"{model}\" isn't a Gemini model id"));
     }
     Ok(model)
 }
@@ -119,10 +131,10 @@ async fn post(key: &str, model: &str, body: &Value) -> Result<Value, String> {
 
 /// Asks Gemini for the next teaching action. The key is read here and never returned.
 #[tauri::command]
-pub async fn gemini_reason(request: GeminiRequest) -> Result<Value, String> {
+pub async fn gemini_reason(request: GeminiRequest, model: Option<String>) -> Result<Value, String> {
     validate(&request)?;
+    let model = model_id(model, std::env::var(MODEL_ENV).ok(), cfg!(debug_assertions))?;
     let key = super::keys::read("gemini").ok_or("No Gemini key is saved.")?;
-    let model = model_id(std::env::var(MODEL_ENV).ok())?;
     let response = post(&key, &model, &build_body(&request, &model)).await.inspect_err(|e| eprintln!("Gemini request failed: {e}"))?;
     extract_reply(&response).inspect_err(|e| eprintln!("Gemini reply unusable: {e}"))
 }
@@ -136,11 +148,20 @@ mod tests {
     }
 
     #[test]
-    fn model_is_configurable_and_safe_in_a_url() {
-        assert_eq!(model_id(None), Ok(DEFAULT_MODEL.to_string()));
-        assert_eq!(model_id(Some(" gemini-2.5-flash ".into())), Ok("gemini-2.5-flash".to_string()));
-        assert_eq!(model_id(Some("".into())), Ok(DEFAULT_MODEL.to_string()));
-        assert!(model_id(Some("x/../../evil?y".into())).is_err());
+    fn model_comes_from_settings_with_a_dev_only_env_override() {
+        assert_eq!(model_id(None, None, true), Ok(DEFAULT_MODEL.to_string()));
+        assert_eq!(model_id(Some(" gemini-3.7-flash ".into()), None, false), Ok("gemini-3.7-flash".to_string()));
+        assert_eq!(model_id(Some("".into()), None, false), Ok(DEFAULT_MODEL.to_string()));
+        assert_eq!(model_id(Some("gemini-3.7-flash".into()), Some("gemini-2.5-flash".into()), true), Ok("gemini-2.5-flash".to_string()));
+        assert_eq!(model_id(Some("gemini-3.7-flash".into()), Some("gemini-2.5-flash".into()), false), Ok("gemini-3.7-flash".to_string()));
+    }
+
+    #[test]
+    fn model_is_safe_in_a_url() {
+        assert!(model_id(Some("x/../../evil?y".into()), None, false).is_err());
+        assert!(model_id(None, Some("a b".into()), true).is_err());
+        assert!(model_id(Some("g".repeat(MAX_MODEL_CHARS + 1)), None, false).is_err());
+        assert!(valid_model("gemini-2.5-flash-lite"));
         assert_eq!(endpoint("gemini-3.7-flash"), "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent");
     }
 
