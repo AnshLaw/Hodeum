@@ -62,3 +62,16 @@ The data path is: watcher frame → change detector → (settled) text reader + 
 ## Out of scope
 
 Voice conversation, Point & Ask on the phone, other packs, laptop companion mode, TestFlight and App Store, iOS < 27 (ReplayKit fallback only if iOS 27 capture proves unreliable).
+
+## Amendments (after API research, approved by the user)
+
+- **Phase 1 is a capture spike.** iOS 27 ScreenCaptureKit needs the `com.apple.developer.screen-recording` entitlement, and nothing confirms a free Apple ID (via Sideloadly) can sign it. The first installable build therefore tests the following before the Dark Mode engine is built on top:
+  - capture through ScreenCaptureKit, plus the ReplayKit broadcast extension as a fallback;
+  - on-device OCR;
+  - PiP with a drawn ring;
+  - speech in the background.
+- **CI ships two IPAs:** `Hodeum-sck.ipa` (with the entitlement) and `Hodeum-basic.ipa` (without it). If the first won't install, the second still tests ReplayKit capture, PiP and voice.
+- **Build:** GitHub's `xcode-27` runner image (iOS 27 SDK). Pure logic lives in a SwiftPM package, `HodeyCore`, tested with `swift test` on the macOS host, because ScreenCaptureKit doesn't build for the Simulator.
+- **Known iOS behaviour handled:**
+  - ScreenCaptureKit sends no frames while the screen is static, so the app keeps the last frame.
+  - PiP can only start from the foreground, or automatically as the app is backgrounded; its first start may fail, so the app retries.
