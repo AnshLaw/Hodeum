@@ -145,6 +145,59 @@
       }
     }
   },
+  "iphone-light-mode": {
+    "title": "iPhone पर Light Mode on करना",
+    "prerequisites": [
+      "अपने iPhone को Hodey में mirror कीजिए (menu → Show iPhone) और Dark mode में Home Screen से start कीजिए।"
+    ],
+    "concept": "Light Mode में light background पर dark text दिखता है, जो दिन में आँखों के लिए आसान है।",
+    "recap": "आपने Light Mode on कर दिया: Settings, Display & Brightness, फिर Light।",
+    "check": {
+      "question": "Quick check: Light और Dark के बीच कहाँ बदलते हैं?",
+      "options": [
+        "Display & Brightness",
+        "Wallpaper",
+        "Sounds"
+      ],
+      "explain": "Display & Brightness से तय होता है कि screen कैसी दिखे।"
+    },
+    "steps": {
+      "open-settings": {
+        "objective": "Settings खोलिए",
+        "speech": {
+          "demonstrate": "अपने iPhone पर Settings पर tap कीजिए, जो grey gear है। मैंने उसे highlight कर दिया है।",
+          "guide": "Settings पर tap कीजिए।",
+          "hint": "Phone के सारे options किस app में होते हैं?"
+        },
+        "explain": "iPhone का हर option Settings में होता है, screen कैसी दिखे ये भी।",
+        "corrections": []
+      },
+      "open-display": {
+        "objective": "Display & Brightness खोलिए",
+        "speech": {
+          "demonstrate": "थोड़ा नीचे scroll कीजिए और Display & Brightness पर tap कीजिए।",
+          "guide": "Display & Brightness पर tap कीजिए।",
+          "hint": "Screen वाली setting ढूँढिए।"
+        },
+        "explain": "Display & Brightness में light और dark look, text size और brightness होते हैं।",
+        "corrections": [
+          "ये Wallpaper है। वापस जाने के लिए top left में Settings पर tap कीजिए, फिर Display & Brightness चुनिए।"
+        ]
+      },
+      "choose-light": {
+        "objective": "Light चुनिए",
+        "speech": {
+          "demonstrate": "Appearance के नीचे Light पर tap कीजिए। पूरी screen light हो जाएगी।",
+          "guide": "Light पर tap कीजिए।",
+          "hint": "Appearance में दो choices हैं। इनमें से light कौन सी है?"
+        },
+        "explain": "Light Mode में light background पर dark text होता है, जो दिन में आँखों के लिए आसान है।",
+        "corrections": [
+          "इससे Text Size खुल गया। वापस जाइए; Light सबसे ऊपर Appearance में है।"
+        ]
+      }
+    }
+  },
   "windows-dark-mode": {
     "title": "Windows में Dark mode on करना",
     "prerequisites": [

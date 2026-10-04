@@ -12,6 +12,7 @@ describe("loadTaskPack", () => {
       "excel-pivot",
       "windows-zip",
       "iphone-dark-mode",
+      "iphone-light-mode",
       "windows-dark-mode",
       "windows-light-mode",
       "notepad-save-note",

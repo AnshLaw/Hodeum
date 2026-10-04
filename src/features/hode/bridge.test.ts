@@ -107,6 +107,15 @@ describe("goalEvents", () => {
     expect(goalEvents("send a pdf on whatsapp", options)).toMatchObject([{ type: "GOAL_SUBMITTED", goal: "send a pdf on whatsapp", openAllowed: true }]);
   });
 
+  it("teaches on the iPhone while its mirror is live, unless the goal names a desktop app", () => {
+    const live = { ...options, phoneLive: true };
+    expect(goalEvents("turn on dark mode", live)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "iphone-dark-mode" } }]);
+    expect(goalEvents("switch to light mode", live)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "iphone-light-mode" } }]);
+    expect(goalEvents("turn off dark mode", live)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "iphone-light-mode" } }]);
+    expect(goalEvents("make a chart in excel", live)).toMatchObject([{ type: "GOAL_SUBMITTED", app: "Excel" }]);
+    expect(goalEvents("turn on dark mode", { ...options, phoneLive: false })).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "windows-dark-mode" } }]);
+  });
+
   it("names the installed app a goal is about, as the app to wait for", () => {
     expect(goalEvents("How do I send a message on Discord", options)).toMatchObject([{ type: "GOAL_SUBMITTED", goal: "How do I send a message on Discord", app: "Discord" }]);
     expect(goalEvents("how do I make a playlist in spotify", options)).toMatchObject([{ type: "GOAL_SUBMITTED", app: "Spotify" }]);

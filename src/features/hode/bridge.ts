@@ -57,6 +57,19 @@ export interface GoalOptions {
   mode?: HodeMode;
   agentStyle?: AgentStyle;
   visionStarting?: boolean;
+  /** The iPhone mirror is live: a goal that names no desktop app is about the iPhone. Defaults to the mirror's own state. */
+  phoneLive?: boolean;
+}
+
+let phoneLiveNow: () => boolean = () => false;
+/** Lets every goal path (typed, spoken, app) know whether the iPhone mirror is live. */
+export function watchPhoneLive(isLive: () => boolean): void {
+  phoneLiveNow = isLive;
+}
+
+/** With the iPhone on screen, "turn on dark mode" means the iPhone's, not Windows'. */
+function phonePack(goal: string, packs: TaskPack[]): TaskPack | undefined {
+  return matchGoal(`${goal} iphone`, packs.filter((pack) => pack.surface === "phone"));
 }
 
 const sameApp = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -65,10 +78,11 @@ const sameApp = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
  * A typed goal as an event: its task pack, or (when vision can plan) the app it names, built in or installed.
  * A pack for another app isn't this goal's lesson: "dark mode in Discord" isn't Windows' dark mode.
  */
-export function goalEvent(goal: string, { packs, openAllowed, apps = [], mode, agentStyle, visionStarting }: GoalOptions): HodeEvent {
+export function goalEvent(goal: string, { packs, openAllowed, apps = [], mode, agentStyle, visionStarting, phoneLive = phoneLiveNow() }: GoalOptions): HodeEvent {
   const app = appFromGoal(goal) ?? appNamedIn(goal, apps);
-  const matched = matchGoal(goal, packs);
-  const pack = matched && (app === undefined || sameApp(matched.app, app)) ? matched : undefined;
+  const onPhone = phoneLive && app === undefined ? phonePack(goal, packs) : undefined;
+  const matched = onPhone ?? matchGoal(goal, packs);
+  const pack = matched && (onPhone !== undefined || app === undefined || sameApp(matched.app, app)) ? matched : undefined;
   const starting = !openAllowed && visionStarting === true ? { visionStarting: true } : {};
   return { type: "GOAL_SUBMITTED", goal, pack, openAllowed, app, mode, agentStyle, ...starting };
 }

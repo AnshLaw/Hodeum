@@ -24,7 +24,7 @@ import { CloudFirstTTS, ElevenLabsTTSProvider } from "../providers/cloud/elevenl
 import { lessonCorpus, shareableText } from "../providers/cloud/shareable";
 import { GatedReasoner } from "../providers/cloud/gated";
 import { GeminiReasoningProvider } from "../providers/cloud/gemini-reasoner";
-import { connectHodeBridge } from "../features/hode/bridge";
+import { connectHodeBridge, watchPhoneLive } from "../features/hode/bridge";
 import { connectVoice, withoutEcho } from "../features/voice/connect";
 import type { HodePhase } from "../features/hode/model";
 import { HodeRuntime } from "../features/hode/runtime";
@@ -91,6 +91,7 @@ function createPerception(activity: ActivityTracker) {
   const mirror = new PhoneMirror(new FrameCanvas(), (kind) =>
     kind === "camera" ? new CameraPhoneSource(() => loadPhonePrefs().cameraLabel) : new AirPlayPhoneSource(invoke, () => loadPhonePrefs().airplayNetwork ?? "direct"),
   );
+  watchPhoneLive(() => mirror.isLive());
   const phone = new PhonePerception(mirror, (png) => invoke<OcrSegment[]>("ocr_frame", { png }));
   const surfaces = new SurfacePerception({ windows: native, phone });
   const capture = (windowId?: number) =>
