@@ -162,7 +162,7 @@ describe("open-ended Hodes that name an app", () => {
     const begun = fold(initialState, { type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "add a table of contents in Word", openAllowed: true, app: "Word" });
     expect(begun.effects).toEqual([{ type: "focusApp", app: "Word" }, { type: "observe" }]);
     const t = step(begun.state, { type: "OBSERVED", observation: { ...HOME_SELECTED, app: "VS Code" } });
-    expect(t.state).toMatchObject({ waitingForApp: "Word", action: { speech: COPY.switchToApp("Word") } });
+    expect(t.state).toMatchObject({ waitingForApp: "Word", action: { speech: spoken("en").howToOpen("Word") } });
   });
 });
 

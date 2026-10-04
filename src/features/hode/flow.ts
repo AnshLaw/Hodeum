@@ -22,7 +22,7 @@ import {
 import { diffScreens, isUnchanged, summarizeActions } from "./change";
 import { neighboursOf } from "./neighbours";
 import { confidenceBand, nudgeStartLevel, overlayFor, quieterOf } from "./policy";
-import { regionAround } from "./region";
+import { areaAround, regionAround } from "./region";
 import { acknowledgement } from "./ack";
 
 /** Verbs that open an app, in English, Hindi and Roman Hinglish. */
@@ -86,8 +86,8 @@ export function sameApp(observed: string, expected: string): boolean {
 export function waitForApp(s: HodeState, observation: ScreenObservation): Transition {
   const app = s.app ?? "";
   const words = spoken(s.language);
-  // "How do I open it?" is answered with how, not "open it and I'll pick up there".
-  const speech = s.pack?.surface === "phone" ? words.connectPhone : s.openingApp ? words.howToOpen(app) : words.switchToApp(app);
+  // An open-ended Hode says how to open its app (a lesson's practice file opens by itself): not just "open it".
+  const speech = s.pack?.surface === "phone" ? words.connectPhone : s.open ? words.howToOpen(app) : words.switchToApp(app);
   const action: TeachingAction = { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
   // Already said: a fresh look that still finds another app keeps the waiting card, quietly.
   if (s.waitingForApp === app) return { state: { ...s, phase: "guiding", observation }, effects: [] };
@@ -182,6 +182,7 @@ function contextFor(s: HodeState, observation: ScreenObservation): TeachingConte
     lastInstruction: s.open ? (s.instructionSaid ?? s.action?.speech) : undefined,
     doneSteps: s.open ? s.openDone : undefined,
     history: s.dialogue,
+    lookUp: s.lookUp === true ? true : undefined,
     language: s.language,
     recentActions: summarizeActions(s.stepActions, currentStep(s)),
   };
@@ -207,6 +208,8 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   const withNotice = { ...s, notice: e.failures.length > 0 ? COPY.fallbackNotice : s.notice };
   // Whatever form a reply to a question takes (even "complete"), it's shown as the answer, so the question never lingers.
   const asking = s.spokenQuestion !== undefined || s.question !== undefined;
+  // The screen couldn't answer a how/where question: look it up once (offline help, then the web if it's on).
+  if (asking && shouldLookUp(s, e.action)) return requestReason({ ...withNotice, lookUp: true });
   if (asking) return showAnswer(withNotice, { ...e.action, kind: "answer" });
   // An answer nobody asked for is guidance: shown as an answer, it would fold away and end the Hode.
   const action: TeachingAction = e.action.kind === "answer" ? { ...e.action, kind: "guide" } : e.action;
@@ -219,6 +222,19 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
     return { state: { ...withNotice, phase: "observing", reobserved: true }, effects: [{ type: "observe" }] };
   }
   return showGuidance(withNotice, band === "uncertain" ? clarifyFor(s) : action);
+}
+
+/** "How do I…", "where is…", "which…": questions reference steps can answer when the screen can't. */
+const HOW_OR_WHERE = /^(?:how|where|which)\b|कैसे|कहाँ|कहां|\bkaise\b|\bkahan\b/i;
+
+/**
+ * A spoken how/where question whose screen-first answer couldn't help (the model asked back, or had
+ * nothing to point at) gets one more try with reference steps. Anything else never triggers a lookup.
+ */
+function shouldLookUp(s: HodeState, action: TeachingAction): boolean {
+  const question = s.spokenQuestion;
+  if (question === undefined || s.lookUp === true || !HOW_OR_WHERE.test(question.trim())) return false;
+  return action.kind === "clarify" || action.target === undefined;
 }
 
 /** Two instructions that share at least this share of their words are one step said two ways. */
@@ -288,12 +304,15 @@ export function overlayOf(s: HodeState, action: TeachingAction) {
   return overlayFor(action, pinFor(s), nearby, hintArea(action, elements, s.observation?.window?.bounds));
 }
 
-/** Where a hint says to look: the run of controls its target sits among, from the same screen read. */
+/**
+ * Where a hint says to look: the run of look-alike controls its target sits among, or, for a control
+ * that stands alone, a generous area around it (a hint still points the way; it just doesn't pinpoint).
+ */
 function hintArea(action: TeachingAction, elements: UiElement[], frame?: Rect): Rect | undefined {
   const target = action.target;
   if (action.assistanceLevel !== "hint" || !target) return undefined;
   const element = elements.find((e) => e.id === target.elementId);
-  return element ? regionAround(element, elements, frame) : undefined;
+  return (element && regionAround(element, elements, frame)) ?? areaAround(target.bounds, frame);
 }
 
 /**

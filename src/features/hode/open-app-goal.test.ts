@@ -55,10 +55,13 @@ describe("a goal about opening an app", () => {
     expect(said(taught)).toEqual([spoken("hi").howToOpen("Excel")]);
   });
 
-  it("leaves other goals about an app as they were: those still wait for the app", () => {
+  it("keeps going after the app opens for other goals about an app (they wait for it, saying how to open it)", () => {
     for (const goal of ["make a chart in excel", "how do I start a new workbook in excel", "how do I open a file in excel"]) {
       const taught = play(ask(goal).state, { type: "OBSERVED", observation: BROWSER });
-      expect(said(taught)).toEqual([EN.switchToApp("Excel")]);
+      expect(said(taught)).toEqual([EN.howToOpen("Excel")]);
+      expect(taught.state.openingApp).toBe(false);
+      const opened = play(taught.state, { type: "LOOK_AGAIN" }, { type: "OBSERVED", observation: EXCEL });
+      expect(opened.state.phase).toBe("reasoning");
     }
   });
 
