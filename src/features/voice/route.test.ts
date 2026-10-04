@@ -13,6 +13,34 @@ const guiding: HodeState = { ...initialState, phase: "guiding", pack: PACK };
 const route = (s: HodeState, text: string, openAllowed = false) => routeUtterance(s, text, TASK_PACKS, openAllowed);
 const types = (events: { type: string }[]) => events.map((e) => e.type);
 
+describe("asking Hodey to look it up", () => {
+  const asked: HodeState = { ...guiding, dialogue: [{ who: "learner", text: "how do I freeze the top row" }, { who: "hodey", text: "I'm not sure from here." }] };
+
+  it("takes the question to the web when the learner says so", () => {
+    expect(route(guiding, "search the web for how to pin a chat in WhatsApp")).toEqual([{ type: "VOICE_QUESTION", question: "how to pin a chat in whatsapp", lookUp: true }]);
+    expect(route(initialState, "google how to make a pivot table")).toEqual([{ type: "VOICE_QUESTION", question: "how to make a pivot table", lookUp: true }]);
+    expect(route(guiding, "look up how to sort by date")).toEqual([{ type: "VOICE_QUESTION", question: "how to sort by date", lookUp: true }]);
+  });
+
+  it("looks up the question just asked when told to look it up", () => {
+    expect(route(asked, "look it up")).toEqual([{ type: "VOICE_QUESTION", question: "how do I freeze the top row", lookUp: true }]);
+    expect(route(asked, "can you google it please")).toEqual([{ type: "VOICE_QUESTION", question: "how do I freeze the top row", lookUp: true }]);
+    expect(route({ ...asked, spokenQuestion: "where is the filter button" }, "search online")).toEqual([{ type: "VOICE_QUESTION", question: "where is the filter button", lookUp: true }]);
+  });
+
+  it("understands it in Hinglish and Hindi", () => {
+    expect(route(guiding, "pivot table kaise banate hain google karo")).toEqual([{ type: "VOICE_QUESTION", question: "pivot table kaise banate hain", lookUp: true }]);
+    expect(route(asked, "google karo")).toEqual([{ type: "VOICE_QUESTION", question: "how do I freeze the top row", lookUp: true }]);
+    expect(route(asked, "गूगल करो")).toEqual([{ type: "VOICE_QUESTION", question: "how do I freeze the top row", lookUp: true }]);
+  });
+
+  it("leaves searching inside an app, and app names, alone", () => {
+    expect(route(guiding, "search for a file named budget")).toEqual([{ type: "VOICE_QUESTION", question: "search for a file named budget" }]);
+    expect(route(guiding, "look it up")).toEqual([{ type: "VOICE_QUESTION", question: "look it up" }]);
+    expect(types(routeApps(initialState, "open google chrome", true))).not.toContain("VOICE_QUESTION");
+  });
+});
+
 describe("routeUtterance", () => {
   it("starts a Hode from a spoken goal when idle", () => {
     const events = route(initialState, "Hey Hodey, teach me how to make a pivot table in Excel");

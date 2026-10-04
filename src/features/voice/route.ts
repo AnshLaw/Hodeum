@@ -123,6 +123,51 @@ function asCommand(text: string): HodeEvent | undefined {
 
 const question = (text: string): HodeEvent => ({ type: "VOICE_QUESTION", question: text });
 
+/** Words that only make a request polite, before it. */
+const LOOK_UP_POLITE = /^(?:(?:can|could|would|will) you |please |just )+/;
+/**
+ * The learner asks Hodey to take a question to the web. Group 1, when there is one, is the question itself;
+ * otherwise it's the question just asked. "Search for a file" stays a task in the app: only the web,
+ * online, the internet or Google make it a look-up.
+ */
+const LOOK_UP_PATTERNS: RegExp[] = [
+  /^(?:look|check) (?:it|that|this) up(?: online| on the web| on the internet| on google)?(?: for me)?$/,
+  /^look up ((?:how|what|where|why|when|which|who)\b.+)$/,
+  /^(?:search|check|look) (?:the web|on the web|online|the internet|on the internet|on google|google)(?: (?:for|about) (.+))?$/,
+  /^google (?:it|that|this)(?: for me)?$/,
+  /^google (?:for )?((?:how|what|where|why|when|which|who)\b.+)$/,
+  /^(?:(?:isko|ise|ye|yeh|isse) )?(?:google|search|online|internet pe|internet par) (?:karo|kar do|kijiye|dekho|check karo)$/,
+  /^(.+?) (?:google|search) (?:karo|kar do|kijiye)$/,
+  /^(?:(?:इसे|ये|यह) )?(?:गूगल|सर्च|ऑनलाइन|इंटरनेट पर) (?:करो|कर दो|कीजिए|देखो)$/,
+  /^(.+?) (?:गूगल|सर्च) (?:करो|कर दो|कीजिए)$/,
+];
+
+const lookUpText = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}' ]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(LOOK_UP_POLITE, "")
+    .replace(/ please$/, "");
+
+/** The question just asked: the one being answered, else the learner's last words in the conversation. */
+function lastQuestion(s: HodeState): string | undefined {
+  return s.spokenQuestion ?? [...(s.dialogue ?? [])].reverse().find((turn) => turn.who === "learner")?.text;
+}
+
+/** "Look it up", "search the web for …", "google karo": a question Hodey may take to the web. */
+function lookUpRequest(s: HodeState, text: string): HodeEvent | undefined {
+  const bare = lookUpText(text);
+  for (const pattern of LOOK_UP_PATTERNS) {
+    const match = bare.match(pattern);
+    if (!match) continue;
+    const asked = match[1]?.trim() || lastQuestion(s);
+    return asked ? { type: "VOICE_QUESTION", question: asked, lookUp: true } : undefined;
+  }
+  return undefined;
+}
+
 const wordsIn = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}' ]/gu, " ").split(/\s+/).filter(Boolean);
 
 /** Too little to be a question or a goal. */
@@ -172,5 +217,7 @@ export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], ope
   // The closing question is open: anything said is an answer to it, even one word ("Insert").
   const answering = s.phase === "success" && s.review !== undefined && s.review.picked === undefined;
   if (answering && !isAcknowledgement(text)) return [asCommand(text) ?? { type: "REVIEW_ANSWERED", said: text }];
+  const lookUp = lookUpRequest(s, text);
+  if (lookUp) return [lookUp];
   return s.phase === "idle" ? routeIdle(text, packs, openAllowed, apps) : routeInHode(s, text, apps);
 }
