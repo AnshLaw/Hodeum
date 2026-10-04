@@ -172,7 +172,9 @@ const WAKE_MS = 500;
  * on whatever opened in its place (Start a Hode, End Hode): the opened notch's controls ignore it meanwhile.
  */
 export function useWaking(revealed: boolean): boolean {
-  return revealed && !useSettled(revealed, WAKE_MS);
+  // Called on every render: a hook behind `revealed &&` would change the hook order when the notch tucks.
+  const settled = useSettled(revealed, WAKE_MS);
+  return revealed && !settled;
 }
 
 /** True for `ms` after the latest `trigger()`, then false again. */
