@@ -1,6 +1,7 @@
 //! Hodey's local voice: NVIDIA Nemotron speech recognition with Silero voice activity detection, and
 //! Supertonic speech, all on the CPU through sherpa-onnx. Nothing is recorded or leaves the PC.
 
+pub mod cache;
 pub mod listen;
 pub mod models;
 pub mod segment;
@@ -135,6 +136,12 @@ pub fn voice_start(voice: State<'_, Voice>) -> Result<(), String> {
     send_listen(&voice, ListenCommand::Start { mode: ListenMode::Tap })
 }
 
+/// Which language the learner speaks (Settings > Voice > Your speech).
+#[tauri::command]
+pub fn set_speech_language(language: String) -> Result<(), String> {
+    listen::set_language(&language)
+}
+
 /// In a conversation, after Hodey speaks: listen briefly for the learner's reply.
 #[tauri::command]
 pub fn voice_follow_up(voice: State<'_, Voice>) -> Result<(), String> {
@@ -150,8 +157,20 @@ pub fn voice_stop(voice: State<'_, Voice>) -> Result<(), String> {
 #[tauri::command]
 pub fn tts_speak(id: String, text: String, voice_id: String, speed: f32, voice: State<'_, Voice>) -> Result<(), String> {
     let generation = voice.stop.generation.load(std::sync::atomic::Ordering::SeqCst);
-    let job = SpeakJob { id, text, voice: voice_id, speed, generation };
+    let job = SpeakJob { id, text, voice: voice_id, speed, generation, play: true };
     voice.speak.lock().map_err(|e| e.to_string())?.send(job).map_err(|_| "Hodey's voice has stopped; restart Hodeum.".to_string())
+}
+
+/// Synthesizes likely lines (acknowledgements) ahead of time, silently, so they start instantly.
+#[tauri::command]
+pub fn tts_prepare(texts: Vec<String>, voice_id: String, speed: f32, voice: State<'_, Voice>) -> Result<(), String> {
+    let generation = voice.stop.generation.load(std::sync::atomic::Ordering::SeqCst);
+    let sender = voice.speak.lock().map_err(|e| e.to_string())?;
+    for text in texts {
+        let job = SpeakJob { id: String::new(), text, voice: voice_id.clone(), speed, generation, play: false };
+        sender.send(job).map_err(|_| "Hodey's voice has stopped; restart Hodeum.".to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -215,5 +234,31 @@ mod tests {
         let heard = transcribe(&mut engines, &audio).join(" ").to_lowercase();
         println!("asr: {heard:?}");
         assert!(heard.contains("pivot table"), "heard {heard:?}");
+    }
+
+    /// Latency report (needs the real models): how soon Hodey can start speaking a typical line, and
+    /// how long recognition takes to finish after the learner stops talking.
+    #[test]
+    #[ignore]
+    fn voice_latency_report() {
+        let root = voice_root();
+        let tts = load_kokoro(&kokoro_files(&root).unwrap()).unwrap();
+        let config = GenerationConfig { sid: 3, ..GenerationConfig::default() };
+        let quiet = None::<fn(&[f32], f32) -> bool>;
+        tts.generate_with_config("Hi there.", &config, quiet).unwrap();
+        for line in ["Which tab would you use to add something new?", "Let me look.", "Click the Insert tab at the top. I've highlighted it."] {
+            let started = std::time::Instant::now();
+            let audio = tts.generate_with_config(line, &config, quiet).unwrap();
+            let secs = audio.samples().len() as f32 / audio.sample_rate() as f32;
+            println!("tts {:>5.0} ms for {secs:.2}s of audio ({:.1}x real time): {line}", started.elapsed().as_millis(), secs / started.elapsed().as_secs_f32());
+        }
+        let spoken = tts.generate_with_config("Hey Hodey, give me a hint please.", &config, quiet).unwrap();
+        let mut audio = vec![0.0; ASR_RATE as usize / 2];
+        audio.extend(LinearResampler::create(spoken.sample_rate(), ASR_RATE).unwrap().resample(spoken.samples(), true));
+        let mut engines = load_engines(&asr_files(&root).unwrap()).unwrap();
+        let started = std::time::Instant::now();
+        let heard = transcribe(&mut engines, &audio);
+        let total = started.elapsed();
+        println!("asr: {heard:?} — whole utterance ({:.2}s audio + 1s silence) processed in {total:?}", audio.len() as f32 / ASR_RATE as f32);
     }
 }

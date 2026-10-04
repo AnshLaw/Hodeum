@@ -2,6 +2,7 @@
 //! Audio and transcripts live only in memory: nothing is recorded or saved.
 
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use rodio::cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -28,8 +29,23 @@ const MAX_SPEECH_SECS: f32 = 20.0;
 const VAD_BUFFER_SECS: f32 = 30.0;
 /// CPU threads: leave the rest for the app and the vision model's host work.
 const ASR_THREADS: i32 = 2;
-/// Nemotron 3.5 is multilingual; English for now ("auto" once Hindi/Hinglish lands).
-const ASR_LANGUAGE: &str = "en";
+/// Nemotron 3.5's per-stream language prompts that Hodey offers (from the model's own table):
+/// US English, British English, Hindi, and auto-detect for Hindi + English.
+pub const ASR_LANGUAGES: [&str; 4] = ["en", "en-GB", "hi", "auto"];
+const DEFAULT_LANGUAGE: &str = "en";
+
+static ASR_LANGUAGE: Mutex<&'static str> = Mutex::new(DEFAULT_LANGUAGE);
+
+/// Settings > Voice > Your speech. Unknown values are refused rather than silently auto-detected.
+pub fn set_language(language: &str) -> Result<(), String> {
+    let known = ASR_LANGUAGES.iter().find(|l| **l == language).ok_or_else(|| format!("unsupported speech language: {language}"))?;
+    *ASR_LANGUAGE.lock().map_err(|e| e.to_string())? = known;
+    Ok(())
+}
+
+fn language() -> &'static str {
+    ASR_LANGUAGE.lock().map(|l| *l).unwrap_or(DEFAULT_LANGUAGE)
+}
 const AUDIO_POLL: Duration = Duration::from_millis(50);
 /// A microphone that delivers pure digital silence this long is muted or misconfigured.
 const SILENT_MIC_AFTER: Duration = Duration::from_secs(4);
@@ -46,6 +62,20 @@ const MIC_SILENT: &str = "Your microphone is sending silence. Check it isn't mut
 pub const SPEECH_START_EVENT: &str = "voice:speech-start";
 pub const TRANSCRIPT_EVENT: &str = "voice:transcript";
 pub const ERROR_EVENT: &str = "voice:error";
+
+#[cfg(test)]
+mod language_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_only_the_languages_nemotron_knows() {
+        assert!(set_language("en-GB").is_ok());
+        assert_eq!(language(), "en-GB");
+        assert!(set_language("en-IN").is_err(), "not in the model's table");
+        assert_eq!(language(), "en-GB");
+        set_language("en").unwrap();
+    }
+}
 
 #[derive(Clone, Serialize)]
 struct Transcript {
@@ -91,7 +121,7 @@ impl Nemotron {
 impl Recognizer for Nemotron {
     fn start(&mut self) {
         let stream = self.recognizer.create_stream();
-        stream.set_option("language", ASR_LANGUAGE);
+        stream.set_option("language", language());
         self.stream = Some(stream);
     }
 

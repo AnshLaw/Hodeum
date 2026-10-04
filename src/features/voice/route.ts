@@ -4,7 +4,7 @@ import type { HodeEvent, HodeState } from "../hode/model";
 
 /** Said before a command or question; dropped before matching. Includes how speech recognition
  *  tends to mishear "Hodey" ("body", "howdy", "hodie"). */
-const WAKE = /^(?:(?:hey|hi|hello|ok|okay)[ ,]+)?(?:hode?y|hodie|hoadie|howdy|body)\b[,!.]?\s*/i;
+const WAKE = /^(?:(?:hey|hi|hello|ok|okay)[ ,]+)?(?:hode?y|hod[iy]e?|hoadie|howdy|body)\b[,!.]?\s*/i;
 const POLITE = /\b(?:please|thanks|thank you|can you|could you)\b/gi;
 /** Utterances shorter than this (after cleanup) are noise: "um", "uh". */
 const MIN_CHARS = 3;
@@ -27,8 +27,16 @@ const COMMANDS: [RegExp, HodeEvent][] = [
   [/^(?:show (?:me )?(?:all )?(?:the )?steps|show (?:me )?all (?:of )?the steps|show (?:me )?the whole (?:flow|thing)|what are the steps)$/, { type: "SHOW_ALL_STEPS" }],
 ];
 
-function clean(text: string): string {
-  return text.trim().replace(WAKE, "").trim();
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Drops a leading wake word: Hodey's own (and its common mishearings) or one the learner added. */
+function clean(text: string, wakeWords: string[]): string {
+  let rest = text.trim().replace(WAKE, "").trim();
+  for (const word of wakeWords) {
+    const custom = new RegExp(`^${escapeRegExp(word.trim()).replace(/\s+/g, "[\\s,]+")}\\b[,!.]?\\s*`, "i");
+    rest = rest.replace(custom, "").trim();
+  }
+  return rest;
 }
 
 function asCommand(text: string): HodeEvent | undefined {
@@ -42,8 +50,8 @@ const question = (text: string): HodeEvent => ({ type: "VOICE_QUESTION", questio
  * What the learner said, as Hode events. Idle: a goal starts a Hode, a what/where question asks about
  * the screen. Goal entry: it's the goal. During a Hode: a control word, or else a question.
  */
-export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], openAllowed: boolean): HodeEvent[] {
-  const text = clean(raw);
+export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], openAllowed: boolean, wakeWords: string[] = []): HodeEvent[] {
+  const text = clean(raw, wakeWords);
   if (text.length < MIN_CHARS) return [];
   if (s.phase === "goal_entry") return [goalEvent(text, packs, openAllowed)];
   if (s.phase === "annotating") return [];

@@ -160,6 +160,11 @@ export class NativeTTSProvider implements TTSProvider {
     return this.bridge.invoke<void>("tts_stop");
   }
 
+  /** Synthesizes likely lines ahead of time (silently) so they start instantly when needed. */
+  prepare(texts: string[]): Promise<void> {
+    return this.bridge.invoke<void>("tts_prepare", { texts, voiceId: this.voiceId, speed: this.rate });
+  }
+
   async healthCheck(): Promise<boolean> {
     return this.voice?.current()?.tts === "ready";
   }

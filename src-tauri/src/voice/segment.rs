@@ -183,9 +183,37 @@ pub fn sentences(text: &str) -> Vec<String> {
     out
 }
 
+/// The first chunk is what the learner waits for; past this length, split it at a comma.
+const FIRST_CHUNK_MAX: usize = 45;
+/// A clause shorter than this sounds clipped on its own.
+const MIN_CLAUSE: usize = 12;
+
+/// Sentences to speak, with a long first sentence split at a comma so Hodey starts talking sooner.
+/// Later chunks are synthesized while the first one plays.
+pub fn speech_chunks(text: &str) -> Vec<String> {
+    let mut chunks = sentences(text);
+    let Some(first) = chunks.first().cloned() else { return chunks };
+    if first.chars().count() <= FIRST_CHUNK_MAX {
+        return chunks;
+    }
+    let split = first.match_indices(", ").map(|(i, _)| i).find(|&i| i >= MIN_CLAUSE && first.len() - i > MIN_CLAUSE);
+    if let Some(i) = split {
+        chunks.splice(0..1, [first[..=i].to_string(), first[i + 2..].to_string()]);
+    }
+    chunks
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn splits_a_long_first_sentence_at_a_comma_so_speech_starts_sooner() {
+        let text = "Nice work so far, now choose PivotTable from the ribbon on the Insert tab. Then press OK.";
+        assert_eq!(speech_chunks(text), vec!["Nice work so far,", "now choose PivotTable from the ribbon on the Insert tab.", "Then press OK."]);
+        assert_eq!(speech_chunks("Let me look."), vec!["Let me look."]);
+        assert_eq!(speech_chunks("Open the Insert tab at the very top of the window please."), vec!["Open the Insert tab at the very top of the window please."]);
+    }
 
     /// Pretends each fed sample is one recognised character.
     #[derive(Default)]

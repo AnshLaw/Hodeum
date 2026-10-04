@@ -63,8 +63,10 @@ pub fn run() {
             voice::voice_start,
             voice::voice_stop,
             voice::voice_follow_up,
+            voice::set_speech_language,
             voice::tts_speak,
             voice::tts_stop,
+            voice::tts_prepare,
             hodey_key::set_hodey_key
         ])
         .setup(|app| setup(app.handle()))

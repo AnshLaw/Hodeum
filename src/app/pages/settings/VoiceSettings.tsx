@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
-import { SETTINGS_LIMITS, type Settings } from "../../../data/settings";
+import { SETTINGS_LIMITS, type Settings, type SpeechLanguage } from "../../../data/settings";
 import { localVoices } from "../../../lib/appearance";
 import { WebSpeechTTSProvider } from "../../../providers/web-speech-tts";
 import { NATURAL_PREFIX, type NaturalVoice } from "../../../providers/speech/native-voice";
 import type { VoicePreview } from "../../services";
-import { Row } from "./controls";
+import { Row, Segmented } from "./controls";
 import { VoiceGallery } from "./VoiceGallery";
+import { WakeWords } from "./WakeWords";
 
+const LANGUAGE_OPTIONS: [SpeechLanguage, string][] = [
+  ["en", "English (US)"],
+  ["en-GB", "English (UK)"],
+  ["hi", "Hindi"],
+  ["auto", "Hindi + English"],
+];
 const PREVIEW_TEXT = "Hi, I'm Hodey. Click the Insert tab, and I'll show you what comes next.";
 const RATE_STEP = 0.05;
 
@@ -65,6 +72,13 @@ export function VoiceSettings({ voice, natural, onChange }: { voice: Settings["v
       <Row label="Talk back and forth" detail="After Hodey answers, it listens a few seconds for your reply, so you can keep talking without pressing anything. Say “that's all” or stay quiet to stop.">
         <input type="checkbox" className="hswitch" checked={voice.conversation} onChange={(e) => onChange({ ...voice, conversation: e.target.checked })} aria-label="Talk back and forth" />
       </Row>
+      <Row label="Your speech" detail="What you speak to Hodey. There's no Indian-English option in the speech model; if English (US) mishears you, try English (UK). Hindi + English handles switching between the two.">
+        <Segmented label="Your speech" options={LANGUAGE_OPTIONS} value={voice.language} onSelect={(language) => onChange({ ...voice, language })} />
+      </Row>
+      <Row label="Wake words" detail="Start what you say with any of these and Hodey knows you mean it. Add your own names for Hodey.">
+        <span />
+      </Row>
+      <WakeWords words={voice.wakeWords} onChange={(wakeWords) => onChange({ ...voice, wakeWords })} />
       <Row label="Voice" detail={error ? `Couldn't play the preview: ${error}` : "Every voice runs on this PC. Press ▶ to hear one, click it to choose."}>
         <span />
       </Row>

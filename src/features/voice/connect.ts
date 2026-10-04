@@ -22,6 +22,8 @@ export interface VoiceDeps {
   onHodeyDoneSpeaking: (listener: () => void) => () => void;
   /** Settings: keep talking back and forth after Hodey answers. */
   conversation: () => boolean;
+  /** Settings: extra names the learner calls Hodey. */
+  wakeWords?: () => string[];
 }
 
 /** Ways to close the conversation; they end it without being treated as a command or question. */
@@ -75,7 +77,7 @@ export function connectVoice(deps: VoiceDeps): () => void {
         return;
       }
       conversing = deps.conversation();
-      routeUtterance(deps.getState(), text, deps.packs, deps.openAllowed()).forEach(deps.dispatch);
+      routeUtterance(deps.getState(), text, deps.packs, deps.openAllowed(), deps.wakeWords?.() ?? []).forEach(deps.dispatch);
     }),
     deps.onHodeyDoneSpeaking(() => {
       // While Hodey is still looking or thinking, its "one sec" isn't the learner's turn yet.

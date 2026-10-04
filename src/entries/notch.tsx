@@ -59,6 +59,7 @@ async function boot(): Promise<void> {
   const local = new LocalReasoningProvider(new TaskPackReasoningProvider(), qwen, () => vision.current().state === "ready");
   /** Talk back and forth (Settings > Voice); updated when settings load or change. */
   let conversation = true;
+  let wakeWords: string[] = [];
   const voice = createLocalVoice({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
   showMicDot(voice.speech, activity);
   const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts: voice.tts });
@@ -73,6 +74,8 @@ async function boot(): Promise<void> {
     applyVoice: (settings) => {
       voice.apply(settings);
       conversation = settings.conversation;
+      wakeWords = settings.wakeWords;
+      invoke<void>("set_speech_language", { language: settings.language }).catch((error) => console.error("Couldn't set the speech language", error));
     },
     applyHodeyKey: (key) => {
       hodeyKeySetting.set(key);
@@ -87,6 +90,7 @@ async function boot(): Promise<void> {
     hodeySaying: () => runtime.hodeySaying(),
     onHodeyDoneSpeaking: (listener) => runtime.onSpeechFinished(listener),
     conversation: () => conversation,
+    wakeWords: () => wakeWords,
     packs: TASK_PACKS,
     openAllowed: () => vision.current().state === "ready",
   });

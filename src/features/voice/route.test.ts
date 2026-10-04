@@ -55,6 +55,13 @@ describe("routeUtterance", () => {
     expect(route(guiding, "Hodie, stop")).toEqual([{ type: "END_HODE" }]);
   });
 
+  it("drops the learner's own wake words too", () => {
+    const routeWith = (text: string) => routeUtterance(guiding, text, TASK_PACKS, false, ["Hey Hodes", "Jarvis"]);
+    expect(routeWith("hey hodes, give me a hint")).toEqual([{ type: "HINT_REQUESTED" }]);
+    expect(routeWith("Jarvis repeat that")).toEqual([{ type: "REPEAT" }]);
+    expect(routeWith("Hey Hodi stop")).toEqual([{ type: "END_HODE" }]);
+  });
+
   it("ignores silence and noise", () => {
     expect(route(guiding, "  ")).toEqual([]);
     expect(route(guiding, "um")).toEqual([]);

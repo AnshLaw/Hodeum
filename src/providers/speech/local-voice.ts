@@ -1,4 +1,5 @@
 import type { Settings } from "../../data/settings";
+import { COPY } from "../../lib/copy";
 import type { ActivityTracker } from "../../lib/activity";
 import type { SpeechInput } from "./speech-input";
 import type { VoicePreview } from "../../app/services";
@@ -33,6 +34,8 @@ export function createLocalVoice(bridge: VoiceBridge): LocalVoice {
       windows.voiceName = choice.engine === "windows" ? choice.uri : "";
       natural.rate = voice.rate;
       windows.rate = voice.rate;
+      // The quick acknowledgements are said often and must start instantly: prepare them in this voice.
+      if (preferNatural) natural.prepare([...COPY.acks]).catch((error) => console.error("Couldn't prepare Hodey's phrases", error));
     },
   };
 }

@@ -19,7 +19,8 @@ use tauri::{AppHandle, Emitter};
 
 use super::models::{kokoro_files, tts_files, voice_root, KokoroFiles, TtsFiles};
 use super::voices::{catalog, pick, Engine};
-use super::segment::sentences;
+use super::cache::{key, PhraseCache};
+use super::segment::speech_chunks;
 use super::set_tts_voices;
 
 /// Kokoro runs about 3x faster than real time with 4 threads on a 12th-gen i7 (2 threads: ~0.7x).
@@ -33,6 +34,8 @@ const KOKORO_LANG: &str = "en-us";
 const KOKORO_LENGTH_SCALE: f32 = 1.0;
 const WARM_UP_TEXT: &str = "Hi there.";
 const PLAYBACK_POLL: Duration = Duration::from_millis(20);
+/// Phrases kept as audio: the acknowledgements plus a lesson's worth of lines.
+const PHRASE_CACHE_SIZE: usize = 64;
 pub const DONE_EVENT: &str = "tts:done";
 
 pub struct SpeakJob {
@@ -43,6 +46,8 @@ pub struct SpeakJob {
     pub speed: f32,
     /// The stop generation when this was queued; a later stop cancels it.
     pub generation: u64,
+    /// False: only synthesize into the phrase cache (preparing likely lines), don't play or report.
+    pub play: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -177,19 +182,39 @@ fn cancelled(stop: &StopSwitch, job: &SpeakJob) -> bool {
 }
 
 /// Speaks one job; returns whether it was interrupted.
-fn speak(engines: &Engines, player: &Player, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<bool, String> {
+/// One chunk's audio: from the cache, or synthesized now (and cached). None if a stop arrived.
+fn chunk_audio(engines: &Engines, cache: &mut PhraseCache, chunk: &str, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<Option<(Vec<f32>, u32)>, String> {
     let voice = engines.engine_for(&job.voice).ok_or("No natural voice is installed.")?;
+    let cache_key = key(voice.1, voice.2, job.speed, chunk);
+    if let Some((samples, rate)) = cache.get(&cache_key) {
+        return Ok(Some((samples.as_ref().clone(), rate)));
+    }
+    let Some((samples, rate)) = synthesize(voice, chunk, job, stop) else {
+        return if cancelled(stop, job) { Ok(None) } else { Err("The voice couldn't say that.".into()) };
+    };
+    cache.put(cache_key, (Arc::new(samples.clone()), rate));
+    Ok(Some((samples, rate)))
+}
+
+/// Synthesizes likely lines ahead of time so they start instantly when needed.
+fn prepare(engines: &Engines, cache: &mut PhraseCache, job: &SpeakJob, stop: &Arc<StopSwitch>) {
+    for chunk in speech_chunks(&job.text) {
+        if let Err(reason) = chunk_audio(engines, cache, &chunk, job, stop) {
+            return eprintln!("couldn't prepare a phrase: {reason}");
+        }
+    }
+}
+
+fn speak(engines: &Engines, cache: &mut PhraseCache, player: &Player, job: &SpeakJob, stop: &Arc<StopSwitch>) -> Result<bool, String> {
     // Anything left from an interrupted utterance must never play before this one.
     player.clear();
     player.play();
-    for sentence in sentences(&job.text) {
+    for chunk in speech_chunks(&job.text) {
         if cancelled(stop, job) {
             return Ok(true);
         }
-        let Some((samples, rate)) = synthesize(voice, &sentence, job, stop) else {
-            return if cancelled(stop, job) { Ok(true) } else { Err("The voice couldn't say that.".into()) };
-        };
-        // Synthesis only checks for a stop between steps; a sentence finished after the stop is dropped.
+        let Some((samples, rate)) = chunk_audio(engines, cache, &chunk, job, stop)? else { return Ok(true) };
+        // Synthesis only checks for a stop between steps; a chunk finished after the stop is dropped.
         if cancelled(stop, job) {
             return Ok(true);
         }
@@ -240,8 +265,13 @@ pub fn worker(app: AppHandle, jobs: Receiver<SpeakJob>, stop: Arc<StopSwitch>) {
         Err(e) => eprintln!("couldn't share the speech player for interruptions: {e}"),
     }
     set_tts_voices(&app, Ok(engines.voices()));
+    let mut cache = PhraseCache::new(PHRASE_CACHE_SIZE);
     for job in jobs {
-        let result = if cancelled(&stop, &job) { Ok(true) } else { speak(&engines, &player, &job, &stop) };
+        if !job.play {
+            prepare(&engines, &mut cache, &job, &stop);
+            continue;
+        }
+        let result = if cancelled(&stop, &job) { Ok(true) } else { speak(&engines, &mut cache, &player, &job, &stop) };
         match result {
             Ok(interrupted) => report(&app, job.id, interrupted, None),
             Err(reason) => report(&app, job.id, false, Some(reason)),

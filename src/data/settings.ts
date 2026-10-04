@@ -15,6 +15,11 @@ export const HODEY_COLORS = ["amber", "mint", "sky", "coral", "violet", "snow"] 
 export type HodeyColor = (typeof HODEY_COLORS)[number];
 export const HODEY_ACCESSORIES = ["none", "glasses", "headphones", "beanie"] as const;
 export type HodeyAccessory = (typeof HODEY_ACCESSORIES)[number];
+/** Must match ASR_LANGUAGES in src-tauri/src/voice/listen.rs. */
+export const SPEECH_LANGUAGES = ["en", "en-GB", "hi", "auto"] as const;
+export type SpeechLanguage = (typeof SPEECH_LANGUAGES)[number];
+export const MAX_WAKE_WORDS = 8;
+export const MAX_WAKE_WORD = 30;
 /** Longest voice id kept; Windows voice URIs are well under this. */
 const MAX_VOICE_NAME = 200;
 
@@ -37,6 +42,10 @@ export const settingsSchema = z.object({
     name: z.string().max(MAX_VOICE_NAME).default(""),
     /** Talk back and forth: after Hodey answers, the mic reopens briefly for the learner's reply. */
     conversation: z.boolean().default(true),
+    /** What the learner speaks: Nemotron's language prompt (no en-IN exists; en-GB can suit Indian English). */
+    language: z.enum(SPEECH_LANGUAGES).catch("en").default("en"),
+    /** Extra names for Hodey ("Hey Hodes"), recognised like "Hey Hodey". */
+    wakeWords: z.array(z.string().trim().min(1).max(MAX_WAKE_WORD)).max(MAX_WAKE_WORDS).default([]),
   }),
   /** How new Hodes run by default; each Hode can still pick its own. */
   mode: z.enum(HODE_MODES).catch("teach").default("teach"),
@@ -53,7 +62,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type Appearance = Settings["appearance"];
 
 export const DEFAULT_SETTINGS: Settings = {
-  voice: { enabled: true, rate: 1.05, name: "", conversation: true },
+  voice: { enabled: true, rate: 1.05, name: "", conversation: true, language: "en", wakeWords: [] },
   mode: "teach",
   stuckSeconds: 12,
   appearance: { ...DEFAULT_APPEARANCE },
