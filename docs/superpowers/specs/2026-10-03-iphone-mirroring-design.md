@@ -114,3 +114,14 @@ The browser practice stage gets a mock iPhone scene (`src/stage/scenes/iphone.ts
 - Bundling UxPlay or iPhoneMirror; audio mirroring.
 - iPhone packs beyond Dark Mode; generalized mobile gestures.
 - OmniParser on phone frames.
+
+## Amendments (planning and implementation)
+
+- **No receiver-path setting.** UxPlay runs only from `runtime/uxplay/uxplay.exe`. Learners link that folder to their MSYS2 `ucrt64\bin` themselves. Shared folders such as `C:\msys64` are never searched, because other users can write there.
+- **AirPlay sender check.** Video is accepted only from a loopback socket whose address and port belong to the spawned UxPlay process (OS UDP owner table), and that is re-checked every second. Unfinished access units are capped at 4 MiB.
+- **Source and camera choice live in the notch's phone panel** and are stored per machine in the notch webview's `localStorage`, not in synced settings. Camera labels are only readable where the camera permission is held.
+- **One `Surface = "windows" | "phone"`** covers packs and `overlay:render`. `overlay:clear` clears both.
+- **Phone-only flow tweaks:**
+  - A screen change that is neither success nor a known mistake re-locates the target without counting as a wrong action, and an identical instruction isn't spoken twice. Hesitation is still caught by the stuck timer.
+  - A missing target uses phone copy ("Scroll a little…").
+- **Corrections without a visible target** (the learner left the page) are spoken as corrections, never downgraded to "clarify". This applies to both surfaces.
