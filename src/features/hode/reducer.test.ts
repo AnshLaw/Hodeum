@@ -104,6 +104,46 @@ describe("open-ended Hodes that name an app", () => {
   });
 });
 
+describe("spoken questions", () => {
+  const answer = { kind: "answer" as const, speech: "That's the Insert tab.", skill: "general.vision", assistanceLevel: "demonstrate" as const };
+
+  it("interrupts Hodey, drops stale reasoning, and looks at the screen", () => {
+    const busy = reasoning();
+    const t = step(busy, { type: "VOICE_QUESTION", question: "where is insert?" });
+    expect(t.state).toMatchObject({ phase: "observing", spokenQuestion: "where is insert?", resumePhase: "observing" });
+    expect(t.state.requestId).toBeGreaterThan(busy.requestId);
+    expect(types(t)).toEqual(["stopSpeech", "cancelStuckTimer", "observe"]);
+  });
+
+  it("answers about the whole screen, even from another app, then resumes the Hode", () => {
+    const asked = step(guiding(), { type: "VOICE_QUESTION", question: "what is this?" }).state;
+    const observed = step(asked, { type: "OBSERVED", observation: { ...HOME_SELECTED, app: "VS Code" } });
+    expect(observed.effects[0]).toMatchObject({ type: "reason", context: { utterance: "what is this?" } });
+    const answered = step(observed.state, { type: "ACTION_READY", requestId: observed.state.requestId, action: answer, failures: [] });
+    expect(answered.state.phase).toBe("answering");
+    const resumed = step(answered.state, { type: "DISMISS" });
+    expect(resumed.state).toMatchObject({ phase: "observing", spokenQuestion: undefined });
+  });
+
+  it("works with no Hode running, and returns to idle", () => {
+    const asked = step(initialState, { type: "VOICE_QUESTION", question: "what is this?" }).state;
+    expect(asked).toMatchObject({ phase: "observing", resumePhase: "idle" });
+    const observed = step(asked, { type: "OBSERVED", observation: HOME_SELECTED });
+    const answered = step(observed.state, { type: "ACTION_READY", requestId: observed.state.requestId, action: answer, failures: [] });
+    expect(step(answered.state, { type: "DISMISS" }).state.phase).toBe("idle");
+  });
+
+  it("returns to an open-ended Hode afterwards, not to idle", () => {
+    const open: HodeState = { ...initialState, phase: "guiding", open: true, goal: "add a table of contents" };
+    expect(step(open, { type: "VOICE_QUESTION", question: "what is this?" }).state.resumePhase).toBe("observing");
+  });
+
+  it("is ignored while the learner types a goal or marks the screen", () => {
+    const entry = step(initialState, { type: "START_HODE" }).state;
+    expect(step(entry, { type: "VOICE_QUESTION", question: "hi" }).state).toBe(entry);
+  });
+});
+
 describe("showing guidance", () => {
   it("renders the overlay, speaks, and starts the stuck timer", () => {
     const t = step(reasoning(), { type: "ACTION_READY", requestId: 1, action: guideAction(), failures: [] });

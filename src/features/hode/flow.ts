@@ -77,8 +77,10 @@ export function onSkillLoaded(s: HodeState, e: EventOf<"SKILL_LOADED">): Transit
 
 export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {
   if (s.phase !== "observing") return noop(s);
-  if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
-  return requestReason({ ...s, observation: e.observation, waitingForApp: undefined });
+  // A question is answered wherever the learner is looking; only guidance waits for the right app.
+  const asking = s.spokenQuestion !== undefined || s.question !== undefined;
+  if (!asking && inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
+  return requestReason({ ...s, observation: e.observation, waitingForApp: asking ? s.waitingForApp : undefined });
 }
 
 function contextFor(s: HodeState, observation: ScreenObservation): TeachingContext {
@@ -88,7 +90,7 @@ function contextFor(s: HodeState, observation: ScreenObservation): TeachingConte
     step: currentStep(s),
     observation,
     assistanceLevel: s.level,
-    utterance: s.question?.question,
+    utterance: s.question?.question ?? s.spokenQuestion,
     focusRegion: s.question ?? s.focusRegion,
     correction: s.correction,
     recentMistakes: s.mistakes,

@@ -19,6 +19,17 @@ const ctx = (overrides: Partial<TeachingContext> = {}): TeachingContext => ({
 });
 
 describe("TaskPackReasoningProvider", () => {
+  it("answers a spoken where-question by pointing at the control it names", async () => {
+    const action = await reasoner.reason(ctx({ utterance: "Where is the Insert tab?" }));
+    expect(action).toMatchObject({ kind: "answer", target: { label: "Insert", bounds: INSERT_BOUNDS } });
+  });
+
+  it("hands other spoken questions to the vision model with an honest fallback", async () => {
+    const action = await reasoner.reason(ctx({ utterance: "Why are some cells green?" }));
+    expect(action).toMatchObject({ kind: "answer", speech: COPY.needVisionToAnswer });
+    expect(action.target).toBeUndefined();
+  });
+
   it("guides to the step target with speech for the current level", async () => {
     const action = await reasoner.reason(ctx({ assistanceLevel: "guide" }));
     expect(action).toMatchObject({ kind: "guide", speech: "Open Insert.", target: { label: "Insert", confidence: 0.95, bounds: INSERT_BOUNDS } });

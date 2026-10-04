@@ -13,6 +13,7 @@ export class TaskPackReasoningProvider implements ReasoningProvider {
 
   async reason(context: TeachingContext): Promise<TeachingAction> {
     if (context.focusRegion?.intent === "ask") return answerAbout(context, context.focusRegion);
+    if (context.utterance) return answerSpoken(context, context.utterance);
     if (!context.step) throw new Error("No task step to teach — start a Hode with a known goal first.");
     return guideStep(context, context.step);
   }
@@ -46,6 +47,25 @@ function guideStep(context: TeachingContext, step: TaskStep): TeachingAction {
     skill: step.skill,
     assistanceLevel: level,
   };
+}
+
+/** Names shorter than this are too generic to match against speech ("OK", "A1"). */
+const MIN_SPOKEN_NAME = 4;
+
+/**
+ * Offline answer to a spoken question: point at a control the learner named ("where is Insert?").
+ * Anything else needs the vision model; the fallback says so honestly.
+ */
+function answerSpoken(context: TeachingContext, utterance: string): TeachingAction {
+  const said = utterance.toLowerCase();
+  const named = context.observation.elements
+    .filter((e) => e.name.length >= MIN_SPOKEN_NAME && said.includes(e.name.toLowerCase()))
+    .sort((a, b) => b.name.length - a.name.length)[0];
+  const skill = context.step?.skill ?? GENERAL_SKILL;
+  const level = context.assistanceLevel;
+  if (!named) return { kind: "answer", speech: COPY.needVisionToAnswer, skill, assistanceLevel: level };
+  const target = { elementId: named.id, bounds: named.bounds, confidence: named.confidence, label: named.name };
+  return { kind: "answer", speech: COPY.itsHere(named.name), target, skill, assistanceLevel: level };
 }
 
 /** Prefer the smallest element whose centre is inside the mark — a button over the pane that contains it. */

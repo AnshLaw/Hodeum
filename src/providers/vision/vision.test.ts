@@ -39,6 +39,12 @@ describe("vision prompt", () => {
     expect(fromImageBox([100, 100, 300, 300], FRAME.rect)).toEqual(rect);
   });
 
+  it("asks about the whole screen for a spoken question", () => {
+    const [, user] = buildMessages(ctx({ utterance: "what do these numbers mean?" }), [], FRAME) as [unknown, { content: { type: string; text?: string }[] }];
+    expect(user.content[1].text).toContain("The learner asks: <learner>what do these numbers mean?</learner>");
+    expect(user.content[1].text).toContain('kind "answer"');
+  });
+
   it("sends the screenshot and a numbered control list", () => {
     const [, user] = buildMessages(ctx(), selectCandidates(ctx()), FRAME) as [unknown, { content: { type: string; text?: string }[] }];
     expect(user.content[0].type).toBe("image_url");

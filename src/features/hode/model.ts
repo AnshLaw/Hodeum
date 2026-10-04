@@ -42,6 +42,8 @@ export interface HodeState {
   observation?: ScreenObservation;
   /** Persistent "Focus here" region for the rest of the Hode. */
   focusRegion?: LearnerAnnotation;
+  /** A spoken question being answered right now (about the whole screen). */
+  spokenQuestion?: string;
   /** The Point & Ask question being answered right now. */
   question?: LearnerAnnotation;
   correction?: string;
@@ -88,6 +90,8 @@ export type HodeEvent =
   | { type: "EXPLAIN_REQUESTED" }
   /** Speak the current instruction or answer again. */
   | { type: "REPEAT" }
+  /** A spoken question about the screen (no marked area). */
+  | { type: "VOICE_QUESTION"; question: string }
   /** The learner asks Hodey to re-read the screen now (PRD §11 "look again"). */
   | { type: "LOOK_AGAIN" }
   | { type: "LET_ME_TRY" }

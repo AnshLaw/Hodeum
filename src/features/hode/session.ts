@@ -17,16 +17,34 @@ const PAUSABLE: HodePhase[] = IN_HODE;
 const STOP_EVERYTHING: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "stopSpeech" }];
 
 function resumeTarget(s: HodeState): HodePhase {
-  if (s.pack && IN_HODE.includes(s.phase)) return "observing";
+  if ((s.pack || s.open) && IN_HODE.includes(s.phase)) return "observing";
   return s.phase === "goal_entry" ? "goal_entry" : "idle";
 }
 
 /** Return to where the learner was; an active Hode re-observes so guidance reflects the current screen. */
 function resume(s: HodeState): Transition {
   const phase = s.resumePhase ?? "idle";
-  const state: HodeState = { ...s, phase, resumePhase: undefined, question: undefined };
+  const state: HodeState = { ...s, phase, resumePhase: undefined, question: undefined, spokenQuestion: undefined };
   if (phase === "observing") return { state, effects: [{ type: "observe" }] };
   return { state, effects: [pinOverlay(state.focusRegion?.shape.bounds)] };
+}
+
+/** Phases a spoken question can't interrupt: the learner is typing a goal or marking the screen. */
+const NOT_LISTENING: HodePhase[] = ["goal_entry", "annotating"];
+
+/**
+ * A spoken question wins over whatever Hodey was doing: speech stops, in-flight reasoning is dropped
+ * (requestId moves on), and Hodey looks at the whole screen before answering.
+ */
+export function onVoiceQuestion(s: HodeState, e: EventOf<"VOICE_QUESTION">): Transition {
+  const question = e.question.trim();
+  if (question === "" || NOT_LISTENING.includes(s.phase)) return noop(s);
+  const answeringAlready = s.phase === "observing" && s.spokenQuestion !== undefined;
+  const resumePhase = answeringAlready || s.phase === "answering" ? (s.resumePhase ?? resumeTarget(s)) : resumeTarget(s);
+  return {
+    state: { ...s, phase: "observing", spokenQuestion: question, question: undefined, resumePhase, requestId: s.requestId + 1 },
+    effects: [{ type: "stopSpeech" }, { type: "cancelStuckTimer" }, { type: "observe" }],
+  };
 }
 
 export function onAnnotateStart(s: HodeState): Transition {

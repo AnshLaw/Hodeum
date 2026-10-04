@@ -37,6 +37,8 @@ export const COPY = {
   openHode: (goal: string) => `Hode · ${goal}`,
   clarify: "I'm not confident which control you need. Move your pointer near the area you're working in.",
   switchToApp: (app: string) => `Open ${app}, or switch to it, and I'll pick up there.`,
+  needVisionToAnswer: "I can only answer that with the local vision model, which isn't ready. Try pointing at the spot with Point & Ask.",
+  itsHere: (name: string) => `That's ${name}. I've highlighted it.`,
   noPack: "I don't have a Hode for that yet. Try “make a pivot table” or “zip these files”.",
   hodeCompleteSpeech: "Hode complete. Nice work.",
   rememberedOnYourOwn: "Got it — you remembered that on your own.",
