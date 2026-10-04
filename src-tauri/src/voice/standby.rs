@@ -76,7 +76,7 @@ pub(crate) fn may_be_wake(partial: &str, custom: &[String]) -> bool {
 /// Listens until a command arrives or hands-free is switched off. Err: the microphone failed.
 pub fn standby(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>) -> Result<Outcome, String> {
     let (tx, audio) = mpsc::channel::<Vec<f32>>();
-    let mic = open_mic(tx)?;
+    let mic = open_mic(tx, true)?;
     let resampler = LinearResampler::create(mic.rate as i32, SAMPLE_RATE).ok_or("Couldn't set up audio resampling.")?;
     set_standby(app, true);
     let outcome = wait(app, engines, commands, &audio, &resampler);

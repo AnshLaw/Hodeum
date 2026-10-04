@@ -2,6 +2,7 @@
 //! Supertonic speech, all on the CPU through sherpa-onnx. Nothing is recorded or leaves the PC.
 
 pub mod cache;
+pub mod echo_mic;
 pub mod listen;
 pub mod models;
 pub mod segment;
@@ -270,6 +271,28 @@ mod tests {
         println!("overheard {heard:?} in {:?} ({:.1}s of audio)", started.elapsed(), audio.len() as f32 / ASR_RATE as f32);
         assert_eq!(heard.len(), 1, "heard {heard:?}");
         assert!(heard[0].to_lowercase().starts_with("hey"), "heard {heard:?}");
+    }
+
+    /// Needs a microphone: whether Windows cancels echo on it, and how fast it opens. Reads one second
+    /// of audio into memory; nothing is saved. `cargo test --lib -- --ignored echo_cancelled_mic --nocapture`.
+    #[test]
+    #[ignore]
+    fn echo_cancelled_mic_report() {
+        for attempt in 1..=2 {
+            let started = std::time::Instant::now();
+            let opened = super::echo_mic::open(std::sync::mpsc::channel().0).is_ok();
+            println!("open #{attempt}: {opened} in {:?}", started.elapsed());
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let started = std::time::Instant::now();
+        let mic = super::echo_mic::open(tx);
+        println!("echo-cancelled mic: {:?} after {:?}", mic.as_ref().map(|_| "on"), started.elapsed());
+        let Ok(_mic) = mic else { return };
+        let mut samples = 0;
+        while samples < ASR_RATE as usize {
+            samples += rx.recv_timeout(std::time::Duration::from_secs(2)).expect("audio arrives").len();
+        }
+        println!("first second of 16 kHz audio after {:?}", started.elapsed());
     }
 
     /// Latency report (needs the real models): how soon Hodey can start speaking a typical line, and

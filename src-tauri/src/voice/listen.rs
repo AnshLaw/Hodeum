@@ -2,6 +2,7 @@
 //! Audio and transcripts live only in memory: nothing is recorded or saved.
 
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -14,6 +15,7 @@ use sherpa_onnx::{
 };
 use tauri::{AppHandle, Emitter};
 
+use super::echo_mic::{self, EchoCancelledMic};
 use super::models::{asr_files, voice_root, AsrFiles};
 use super::segment::{downmix, Recognizer, Segmenter, Session, SpeechEvent};
 use super::standby::{self, Outcome};
@@ -178,11 +180,34 @@ pub(crate) fn load_engines(files: &AsrFiles) -> Result<Engines, String> {
 
 /// The default microphone, delivering mono f32 chunks at the device's own rate.
 pub(crate) struct Mic {
-    _stream: cpal::Stream,
+    _source: MicSource,
     pub(crate) rate: u32,
 }
 
-pub(crate) fn open_mic(tx: Sender<Vec<f32>>) -> Result<Mic, String> {
+enum MicSource {
+    // Held only to keep the microphone running; dropping either stops it.
+    EchoCancelled { _mic: EchoCancelledMic },
+    Plain { _stream: cpal::Stream },
+}
+
+static PLAIN_MIC_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// The microphone. With `cancel_echo`, Windows' echo cancellation when this PC has it (Hodey's voice from
+/// the speakers is removed), for long sessions where Hodey talks while the mic is open: it takes ~0.6 s
+/// to open, too slow for hold-to-talk, which stops Hodey anyway. Otherwise the plain default microphone.
+pub(crate) fn open_mic(tx: Sender<Vec<f32>>, cancel_echo: bool) -> Result<Mic, String> {
+    if !cancel_echo {
+        return open_plain_mic(tx);
+    }
+    match echo_mic::open(tx.clone()) {
+        Ok(mic) => return Ok(Mic { _source: MicSource::EchoCancelled { _mic: mic }, rate: SAMPLE_RATE as u32 }),
+        Err(reason) if !PLAIN_MIC_LOGGED.swap(true, Ordering::SeqCst) => eprintln!("using the plain microphone: {reason}"),
+        Err(_) => {}
+    }
+    open_plain_mic(tx)
+}
+
+fn open_plain_mic(tx: Sender<Vec<f32>>) -> Result<Mic, String> {
     let device = cpal::default_host().default_input_device().ok_or("No microphone found. Plug one in or enable it in Windows sound settings.")?;
     let supported = device.default_input_config().map_err(|e| format!("Couldn't read the microphone's settings: {e}"))?;
     let channels = usize::from(supported.channels());
@@ -201,7 +226,7 @@ pub(crate) fn open_mic(tx: Sender<Vec<f32>>) -> Result<Mic, String> {
     }
     .map_err(|e| format!("Couldn't open the microphone: {e}"))?;
     stream.play().map_err(|e| format!("Couldn't start the microphone: {e}"))?;
-    Ok(Mic { _stream: stream, rate })
+    Ok(Mic { _source: MicSource::Plain { _stream: stream }, rate })
 }
 
 fn emit_events(app: &AppHandle, events: Vec<SpeechEvent>) {
@@ -263,7 +288,7 @@ fn process(engines: &mut Engines, resampler: &LinearResampler, pending: &mut Vec
 fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>, mode: ListenMode) -> Result<(), String> {
     let hold = mode == ListenMode::Hold;
     let (tx, audio) = mpsc::channel::<Vec<f32>>();
-    let mic = open_mic(tx)?;
+    let mic = open_mic(tx, mode == ListenMode::Conversation)?;
     let resampler = LinearResampler::create(mic.rate as i32, SAMPLE_RATE).ok_or("Couldn't set up audio resampling.")?;
     set_listening(app, true);
     let started = Instant::now();
