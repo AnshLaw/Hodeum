@@ -102,10 +102,12 @@ Turn every cloud provider off in Settings → Cloud, so the run proves the local
 **Automated:** the Rust tests in `src-tauri/src/topmost/` check the z-order against real (invisible, off-screen) windows, and which monitor the overlay picks.
 
 **Live:**
-1. Open Task Manager, choose **Options → Always on top**, drag it over the notch and click into it.
+1. In Edge or Chrome, pop a video out with **Picture in picture** (an always-on-top window), drag it over the notch and click it.
 2. Watch a video full screen in the browser, then start a PowerPoint slide show.
 3. With a Hode showing a highlight, drag the app to the second monitor (if there is one).
-4. **Pass:** the notch comes back above Task Manager, the video and the slide show within about 1.5 s (at once when they take focus), typing still goes to the app, and a notch hidden with the Hodey key + H stays hidden. On the second monitor the highlight is drawn there, lined up with its control (if that monitor has another scale, the app resizes, so the highlight comes back on Hodey's next look). `hodeum.log` shows `keeping the notch and overlay above other windows` once at startup and no `SetWindowPos couldn't put` warnings. Exclusive-fullscreen games are out of scope.
+4. **Pass:** the notch comes back above the picture-in-picture video, the full-screen video and the slide show within about 1.5 s (at once when they take focus), typing still goes to the app, and a notch hidden with the Hodey key + H stays hidden. On the second monitor the highlight is drawn there, lined up with its control (if that monitor has another scale, the app resizes, so the highlight comes back on Hodey's next look). `hodeum.log` shows `keeping the notch and overlay above other windows` once at startup and no `SetWindowPos couldn't put` warnings.
+
+Don't test with Task Manager's **Always on top**: Windows can place it in a z-band above every app, like Start, Search, the touch keyboard and Magnifier, so it may stay over the notch. Exclusive-fullscreen games are out of scope.
 
 ## Results
 
