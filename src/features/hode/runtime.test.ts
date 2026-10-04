@@ -145,7 +145,9 @@ describe("HodeRuntime end to end", () => {
     await h.start("teach");
     await h.act("tab:Home", "tab:Home", "tab:Home");
     expect(h.state()).toMatchObject({ phase: "guiding", stuck: { kind: "repeated_click", control: "Home" } });
-    expect(h.spoken.at(-1)).toBe(spokenCopy("en").repeatedClick("Home"));
+    // Teach mode corrects with the why.
+    const why = matchGoal(GOAL, TASK_PACKS)?.steps[0].explain;
+    expect(h.spoken.at(-1)).toBe(`${spokenCopy("en").repeatedClick("Home")} ${why}`);
     expect(h.overlays.at(-1)).toContain("highlight");
   });
 

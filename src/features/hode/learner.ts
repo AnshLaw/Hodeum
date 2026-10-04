@@ -110,7 +110,8 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
       effects: [...done, { type: "say", text: spoken(s.language).hodeCompleteSpeech }],
     };
   }
-  const unaided = !s.escalated && (s.level === "observe" || s.level === "independent");
+  // Only Teach praises a remembered step: Help watches quietly, and its steps always start unaided.
+  const unaided = s.mode === "teach" && !s.escalated && (s.level === "observe" || s.level === "independent");
   const praise: HodeEffect[] = unaided ? [{ type: "say", text: spoken(s.language).rememberedOnYourOwn }] : [];
   return withLeadingEffects(beginStep(finished, nextIndex), [...done, ...praise]);
 }

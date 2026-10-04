@@ -92,9 +92,10 @@ function guidanceView(s: HodeState): NotchView {
     detail: s.explanation ?? s.notice ?? prerequisites,
     progress: { current: s.stepIndex, total },
     busy: false,
-    controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "repeat", "look_again", ...(s.mode === "help" ? [] : (["all_steps"] as const)), "point", "pause", "end"],
+    controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "repeat", "look_again", ...(s.mode === "teach" ? (["all_steps"] as const) : []), "point", "pause", "end"],
     hintLabel: QUIET_LEVELS.has(s.level) ? COPY.needHint : COPY.hint,
-    steps: s.showAllSteps ? stepItems(s) : undefined,
+    // Agent shows the whole flow; Teach only once the learner asks for All steps.
+    steps: s.mode === "agent" || s.showAllSteps ? stepItems(s) : undefined,
   };
 }
 

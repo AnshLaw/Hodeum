@@ -143,7 +143,19 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   return showGuidance(withNotice, shown);
 }
 
-function showGuidance(s: HodeState, action: TeachingAction): Transition {
+/**
+ * Teach mode teaches the why: a full demonstration or a correction ends with the step's explanation
+ * (unless it already includes it). Help and Agent keep corrections and demonstrations short.
+ */
+export function withWhy(s: HodeState, action: TeachingAction): TeachingAction {
+  const why = currentStep(s)?.explain;
+  const teaches = action.kind === "correct" || (action.kind === "guide" && action.assistanceLevel === "demonstrate");
+  if (s.mode !== "teach" || !why || !teaches || action.speech === "" || action.speech.includes(why)) return action;
+  return { ...action, speech: `${action.speech} ${why}` };
+}
+
+function showGuidance(s: HodeState, shown: TeachingAction): Transition {
+  const action = withWhy(s, shown);
   const primitives = overlayFor(action, pinFor(s));
   const effects: HodeEffect[] = [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }];
   // On the phone every scroll re-locates the target; saying the same sentence again would nag.
