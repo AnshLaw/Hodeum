@@ -1,6 +1,7 @@
 pub mod airplay;
 pub mod ocr;
 pub mod rtp;
+mod sender;
 
 use base64::prelude::{Engine, BASE64_STANDARD};
 

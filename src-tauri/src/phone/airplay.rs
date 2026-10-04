@@ -4,21 +4,22 @@
 
 use std::fs::File;
 use std::io::ErrorKind;
-use std::net::{SocketAddr, UdpSocket};
+use std::net::UdpSocket;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Manager, State};
 
 use super::rtp::Depacketizer;
+use super::sender::{owned_by, udp_rows, SenderGate};
 use crate::child_job::ChildJob;
-use crate::vlm::{local_ai_root, port_from_row};
+use crate::vlm::local_ai_root;
 
 pub const RECEIVER_NAME: &str = "Hodeum";
 /// One fixed place, like llama-server: no setting or variable can redirect which receiver binary runs,
@@ -102,38 +103,6 @@ fn exit_detail(root: &Path) -> String {
     last_line(&log).map_or_else(|| "The AirPlay receiver stopped.".to_string(), |l| format!("The AirPlay receiver stopped: {l}"))
 }
 
-/// Which process owns a local UDP port (IPv4), straight from the OS UDP table.
-fn udp_owner_pid(port: u16) -> Option<u32> {
-    use windows::Win32::NetworkManagement::IpHelper::{GetExtendedUdpTable, MIB_UDPTABLE_OWNER_PID, UDP_TABLE_OWNER_PID};
-    use windows::Win32::Networking::WinSock::AF_INET;
-    let family = u32::from(AF_INET.0);
-    let mut size = 0u32;
-    // SAFETY: the first call only reports the required size; the second fills a buffer of that size.
-    unsafe {
-        GetExtendedUdpTable(None, &mut size, false, family, UDP_TABLE_OWNER_PID, 0);
-        let mut buffer = vec![0u8; size as usize];
-        if GetExtendedUdpTable(Some(buffer.as_mut_ptr().cast()), &mut size, false, family, UDP_TABLE_OWNER_PID, 0) != 0 {
-            return None;
-        }
-        let table = &*(buffer.as_ptr() as *const MIB_UDPTABLE_OWNER_PID);
-        let rows = std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize);
-        rows.iter().find(|row| port_from_row(row.dwLocalPort) == port).map(|row| row.dwOwningPid)
-    }
-}
-
-/// Video is only accepted from a port owned by the UxPlay process we started, so another local
-/// program can neither inject frames nor lock the receiver out by sending first.
-fn accept_from(peer: &mut Option<SocketAddr>, from: SocketAddr, receiver_pid: u32, owner: impl Fn(u16) -> Option<u32>) -> bool {
-    if let Some(known) = peer {
-        return *known == from;
-    }
-    let ours = from.ip().is_loopback() && owner(from.port()) == Some(receiver_pid);
-    if ours {
-        *peer = Some(from);
-    }
-    ours
-}
-
 /// One packet in; an access unit out to the notch when a frame completes. False when the notch is gone.
 fn forward(depacketizer: &mut Depacketizer, packet: &[u8], channel: &Channel<InvokeResponseBody>) -> bool {
     let Some(unit) = depacketizer.push(packet) else { return true };
@@ -148,10 +117,12 @@ fn pump(socket: UdpSocket, channel: Channel<InvokeResponseBody>, stop: Arc<Atomi
     let mut depacketizer = Depacketizer::new();
     let mut buffer = vec![0u8; MAX_PACKET];
     let mut streaming = false;
-    let mut sender = None;
+    let mut gate = SenderGate::new();
+    let started = Instant::now();
+    let owned = |from| udp_rows().is_some_and(|rows| owned_by(&rows, from, receiver_pid));
     while !stop.load(Ordering::SeqCst) {
         match socket.recv_from(&mut buffer) {
-            Ok((_, from)) if !accept_from(&mut sender, from, receiver_pid, udp_owner_pid) => continue,
+            Ok((_, from)) if !gate.admits(from, started.elapsed().as_millis() as u64, &owned) => continue,
             Ok((n, _)) => {
                 if !streaming {
                     streaming = status(&channel, "streaming", None);
@@ -220,26 +191,6 @@ mod tests {
         std::fs::write(&exe, b"").unwrap();
         assert_eq!(receiver_path(&root).as_deref(), Some(exe.as_path()));
         std::fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[test]
-    fn finds_the_process_that_owns_a_udp_port() {
-        let socket = UdpSocket::bind(("127.0.0.1", 0)).unwrap();
-        let port = socket.local_addr().unwrap().port();
-        assert_eq!(udp_owner_pid(port), Some(std::process::id()));
-    }
-
-    #[test]
-    fn only_the_receiver_process_may_feed_video_even_if_another_sends_first() {
-        const RECEIVER_PID: u32 = 42;
-        let uxplay: SocketAddr = "127.0.0.1:50000".parse().unwrap();
-        let intruder: SocketAddr = "127.0.0.1:50001".parse().unwrap();
-        let owner = |port: u16| Some(if port == 50000 { RECEIVER_PID } else { 7 });
-        let mut peer = None;
-        assert!(!accept_from(&mut peer, intruder, RECEIVER_PID, owner));
-        assert!(accept_from(&mut peer, uxplay, RECEIVER_PID, owner));
-        assert!(!accept_from(&mut peer, intruder, RECEIVER_PID, owner));
-        assert!(accept_from(&mut peer, uxplay, RECEIVER_PID, owner));
     }
 
     #[test]
