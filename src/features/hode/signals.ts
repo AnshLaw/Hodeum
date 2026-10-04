@@ -31,7 +31,7 @@ export function evaluateSignal(signal: StateSignal, observation: ScreenObservati
     case "window_title_contains":
       return normalize(observation.windowTitle).includes(normalize(signal.text));
     case "screen_tone":
-      return observation.tone === signal.tone;
+      return observation.tone === signal.tone && (!signal.names || findByNames(observation.elements, signal.names).length > 0);
   }
 }
 

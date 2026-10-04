@@ -63,7 +63,8 @@ export type StateSignal =
   | { kind: "element_absent"; names: string[] }
   | { kind: "element_selected"; names: string[] }
   | { kind: "window_title_contains"; text: string }
-  | { kind: "screen_tone"; tone: ScreenTone };
+  /** `names` must be visible too, so a dark lock screen or a black frame never counts. */
+  | { kind: "screen_tone"; tone: ScreenTone; names?: string[] };
 
 export interface TaskStep {
   id: string;

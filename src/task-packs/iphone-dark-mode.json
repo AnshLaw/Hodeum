@@ -53,7 +53,7 @@
         "independent": ""
       },
       "explain": "Dark Mode uses light text on dark backgrounds, which is easier on your eyes in low light.",
-      "success": { "kind": "screen_tone", "tone": "dark" },
+      "success": { "kind": "screen_tone", "tone": "dark", "names": ["Appearance"] },
       "mistakes": [
         { "signal": { "kind": "element_visible", "names": ["*Dynamic Type*"] }, "correction": "That opened Text Size. Go back; Dark is under Appearance at the top." }
       ]

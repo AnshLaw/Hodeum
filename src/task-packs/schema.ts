@@ -10,7 +10,7 @@ const signalSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("element_absent"), names }).strict(),
   z.object({ kind: z.literal("element_selected"), names }).strict(),
   z.object({ kind: z.literal("window_title_contains"), text: z.string().min(1) }).strict(),
-  z.object({ kind: z.literal("screen_tone"), tone: z.enum(["dark", "light"]) }).strict(),
+  z.object({ kind: z.literal("screen_tone"), tone: z.enum(["dark", "light"]), names: names.optional() }).strict(),
 ]);
 
 const speechSchema = z
