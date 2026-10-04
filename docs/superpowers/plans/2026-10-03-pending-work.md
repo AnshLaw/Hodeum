@@ -156,7 +156,6 @@ Done in `src-tauri/src/voice/asr.rs`. Deviation from PRD §13: the PRD names fas
 
 - Skill graph in the expanded notch: a compact list of skills by mastery with the next skill, reusing `LearningPage` stats.
 - Progressive hint reduction check across Hodes, using memory from W3. Verify Gate 8 end to end.
-- iOS app: HodeEngine, ChangeDetector and ToneMeter per `docs/superpowers/specs/2026-10-03-ios-app-design.md`. Verified on GitHub Actions only.
 - OmniParser detector on demand: measure the VRAM headroom beside Qwen3-VL first, per CLAUDE.md "measure before optimizing".
 
 ## Wave 3: P2

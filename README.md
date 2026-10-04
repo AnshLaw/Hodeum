@@ -97,7 +97,7 @@ Hodey swallows these letter presses, so the app underneath never sees them, and 
 
 **Local by default**: no cloud keys needed. SQLite (`hodeum.db` in the app config folder) stores skills, Hode history, chats and settings, never screenshots or audio. The local model server runs inside a Windows job object, so it stops with Hodeum even after a crash.
 
-**iPhone (Dark Mode Hode):** mirror the iPhone into the notch (⋯ → Show iPhone) through iPhone Mirroring, a capture card, or AirPlay via UxPlay. Hodey reads the mirror with Windows OCR and highlights on it. Setup is in [docs/iphone-mirroring.md](docs/iphone-mirroring.md). The on-device iPhone test app is in `ios/`, built by GitHub Actions; see [docs/ios-sideload.md](docs/ios-sideload.md).
+**iPhone (Dark Mode Hode):** mirror the iPhone into the notch (⋯ → Show iPhone) through iPhone Mirroring, a capture card, or AirPlay via UxPlay. Hodey reads the mirror with Windows OCR and highlights on it. Setup is in [docs/iphone-mirroring.md](docs/iphone-mirroring.md).
 
 **Accounts (optional):** Google sign-in syncs skills, Hode history, settings and chat text to Supabase, and the web dashboard can start Hodes on your PC. Screenshots, audio and transcripts never sync. Signed-out use is fully local.
 
