@@ -14,7 +14,7 @@ import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
-import { NOTCH_IDLE_HOVER_WIDTH, NOTCH_WIDTHS, islandSize, notchView, stepItems, type NotchSize, type NotchView } from "./notch-view";
+import { NOTCH_WIDTHS, islandSize, notchView, stepItems, type NotchSize, type NotchView } from "./notch-view";
 import { HodeyFace } from "../hodey/HodeyFace";
 import { hodeyMood, type HodeyMood } from "../hodey/mood";
 import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
@@ -145,7 +145,7 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
   const listening = props.micStatus === "listening";
   const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening });
   const view = peek ? { ...props.view, controls: [] } : props.view;
-  const style = { "--notch-width": `${NOTCH_WIDTHS[size]}px`, "--notch-hover-width": `${NOTCH_IDLE_HOVER_WIDTH}px` } as CSSProperties;
+  const style = { "--notch-width": `${NOTCH_WIDTHS[size]}px` } as CSSProperties;
   const classes = ["notch", `notch--${size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
   return (
     <div className="notch-stage">

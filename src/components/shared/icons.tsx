@@ -96,9 +96,9 @@ export const ExpandIcon = () => (
   </svg>
 );
 
-export function IconButton({ label, onClick, children, pressed }: { label: string; onClick: () => void; children: ReactNode; pressed?: boolean }) {
+export function IconButton({ label, onClick, children, pressed, danger }: { label: string; onClick: () => void; children: ReactNode; pressed?: boolean; danger?: boolean }) {
   return (
-    <button type="button" className="icon-btn" aria-label={label} title={label} aria-pressed={pressed} onClick={onClick}>
+    <button type="button" className={danger ? "icon-btn icon-btn--danger" : "icon-btn"} aria-label={label} title={label} aria-pressed={pressed} onClick={onClick}>
       {children}
     </button>
   );

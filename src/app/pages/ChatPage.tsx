@@ -158,7 +158,7 @@ export function ChatPage({ services }: { services: AppServices }) {
   return (
     <div className="hchat">
       <aside className="hchat__list" aria-label="Conversations">
-        <button type="button" className="btn" onClick={() => setActive(undefined)}>
+        <button type="button" className="btn btn--neutral" onClick={() => setActive(undefined)}>
           New chat
         </button>
         {chats.state === "ready" &&

@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { SETTINGS_LIMITS, type Settings } from "../../../data/settings";
 import { localVoices } from "../../../lib/appearance";
 import { WebSpeechTTSProvider } from "../../../providers/web-speech-tts";
-import { NATURAL_PREFIX } from "../../../providers/speech/native-voice";
+import { NATURAL_PREFIX, type NaturalVoice } from "../../../providers/speech/native-voice";
 import type { VoicePreview } from "../../services";
 import { Row } from "./controls";
+import { VoiceGallery } from "./VoiceGallery";
 
 const PREVIEW_TEXT = "Hi, I'm Hodey. Click the Insert tab, and I'll show you what comes next.";
 const RATE_STEP = 0.05;
@@ -42,7 +43,7 @@ function preview(voice: Settings["voice"], natural: VoicePreview | undefined, on
 }
 
 /** Hodey's natural voices (empty until the voice has loaded). */
-function useNaturalVoices(natural?: VoicePreview): { id: string; label: string }[] {
+function useNaturalVoices(natural?: VoicePreview): NaturalVoice[] {
   const [voices, setVoices] = useState(natural?.naturalVoices() ?? []);
   useEffect(() => {
     if (!natural) return;
@@ -61,28 +62,25 @@ export function VoiceSettings({ voice, natural, onChange }: { voice: Settings["v
       <Row label="Speak instructions" detail="Hodey reads each step aloud. You can also mute from the notch.">
         <input type="checkbox" className="hswitch" checked={voice.enabled} onChange={(e) => onChange({ ...voice, enabled: e.target.checked })} aria-label="Speak instructions" />
       </Row>
-      <Row label="Voice" detail={error ? `Couldn't play the preview: ${error}` : "All voices run on this PC. Online voices aren't offered: they'd send Hodey's words to the cloud."}>
+      <Row label="Voice" detail={error ? `Couldn't play the preview: ${error}` : "Every voice runs on this PC. Press ▶ to hear one, click it to choose."}>
+        <span />
+      </Row>
+      {naturalVoices.length > 0 ? (
+        <VoiceGallery voices={naturalVoices} selected={voice.name} onSelect={(name) => onChange({ ...voice, name })} onPreview={(name) => preview({ ...voice, name }, natural, setError)} />
+      ) : (
+        <p className="hmuted hvoices__missing">{natural ? "Hodey's natural voices are loading, or aren't installed yet (scripts/setup-local-ai.ps1)." : "Natural voices run in the Hodeum desktop app."}</p>
+      )}
+      <Row label="Windows voices" detail="Robotic, but always available. Online voices aren't offered: they'd send Hodey's words to the cloud.">
         <span className="hvoice">
-          <select className="hselect" value={voice.name} onChange={(e) => onChange({ ...voice, name: e.target.value })} aria-label="Voice">
-            <option value="">{naturalVoices.length > 0 ? `Hodey's voice (${naturalVoices[0].label.split(" · ")[0]})` : "System default"}</option>
-            {naturalVoices.length > 0 && (
-              <optgroup label="Natural voices">
-                {naturalVoices.map((v) => (
-                  <option key={v.id} value={`${NATURAL_PREFIX}${v.id}`}>
-                    {v.label}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            <optgroup label="Windows voices">
-              {voices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name.replace(/^Microsoft /, "")} · {v.lang}
-                </option>
-              ))}
-            </optgroup>
+          <select className="hselect" value={voice.name.startsWith(NATURAL_PREFIX) || voice.name === "" ? "" : voice.name} onChange={(e) => onChange({ ...voice, name: e.target.value })} aria-label="Windows voice">
+            <option value="">{naturalVoices.length > 0 ? "Not used (natural voice chosen)" : "System default"}</option>
+            {voices.map((v) => (
+              <option key={v.voiceURI} value={v.voiceURI}>
+                {v.name.replace(/^Microsoft /, "")} · {v.lang}
+              </option>
+            ))}
           </select>
-          <button type="button" className="btn" onClick={() => preview(voice, natural, setError)}>
+          <button type="button" className="btn" onClick={() => preview(voice, natural, setError)} disabled={voice.name.startsWith(NATURAL_PREFIX) || (voice.name === "" && naturalVoices.length > 0)}>
             Preview
           </button>
         </span>

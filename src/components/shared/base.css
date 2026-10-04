@@ -14,6 +14,11 @@
   --hd-accent-ink: #1f1300;
   --hd-outline: #141414;
   --hd-ok: #3dd68c;
+  --hd-danger: #ff6369;
+  /* Tonal: the accent, softened, for helping actions. Mixed with the text colour so it reads in both themes. */
+  --hd-tonal: color-mix(in srgb, var(--hd-accent) 16%, transparent);
+  --hd-tonal-hover: color-mix(in srgb, var(--hd-accent) 26%, transparent);
+  --hd-tonal-text: color-mix(in srgb, var(--hd-accent) 72%, var(--hd-text));
   --hd-font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --hd-font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --hd-ease: cubic-bezier(0.32, 0.72, 0, 1);
@@ -38,22 +43,39 @@ body.transparent-window #root {
   background: transparent;
 }
 
+/*
+ * Buttons, one palette built on the learner's accent:
+ *   .btn--primary  filled accent   - the one main action (Start a Hode, Begin, Resume)
+ *   .btn           tonal accent    - helping actions (Hint, Explain, Let me try)
+ *   .btn--neutral  quiet grey      - housekeeping (New chat, Cancel)
+ *   .icon-btn      quiet icons     - light up in the accent on hover; --danger turns red (End)
+ * Meaning colours stay out of the palette except red (end) and orange (live mic, as its privacy dot).
+ */
 .btn {
   height: 28px;
-  padding: 0 11px;
+  padding: 0 12px;
   border: 0;
   border-radius: 8px;
   font: inherit;
   font-size: 12px;
   font-weight: 600;
-  color: var(--hd-text);
-  background: rgb(var(--hd-fg-rgb) / 0.08);
+  color: var(--hd-tonal-text);
+  background: var(--hd-tonal);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 120ms ease, transform 120ms ease;
+  transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
 
 .btn:hover {
+  background: var(--hd-tonal-hover);
+}
+
+.btn--neutral {
+  color: var(--hd-text);
+  background: rgb(var(--hd-fg-rgb) / 0.08);
+}
+
+.btn--neutral:hover {
   background: rgb(var(--hd-fg-rgb) / 0.14);
 }
 
@@ -97,8 +119,13 @@ body.transparent-window #root {
 }
 
 .icon-btn:hover {
-  color: var(--hd-text);
-  background: rgb(var(--hd-fg-rgb) / 0.1);
+  color: var(--hd-tonal-text);
+  background: var(--hd-tonal);
+}
+
+.icon-btn--danger:hover {
+  color: var(--hd-danger);
+  background: color-mix(in srgb, var(--hd-danger) 16%, transparent);
 }
 
 .chip {

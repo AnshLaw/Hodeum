@@ -4,6 +4,7 @@ import type { ChatMessage, ChatStore, LearningStore } from "../data/types";
 import type { Settings, SettingsStore } from "../data/settings";
 import type { CapturedFrame, VisionStatusSource } from "../providers/vision/types";
 import type { WebSearch, WebSearchSource } from "../providers/web/types";
+import type { NaturalVoice } from "../providers/speech/native-voice";
 
 /** An open app window the learner can attach to a chat as context. */
 export interface WindowInfo {
@@ -29,7 +30,7 @@ export interface ChatProvider {
 /** Hodey's natural (Supertonic) voices on this PC, for choosing and previewing in Settings. */
 export interface VoicePreview {
   /** Hodey's natural voices; empty when not installed or still loading. */
-  naturalVoices(): { id: string; label: string }[];
+  naturalVoices(): NaturalVoice[];
   subscribe(listener: () => void): () => void;
   preview(voice: Settings["voice"], text: string): Promise<void>;
 }

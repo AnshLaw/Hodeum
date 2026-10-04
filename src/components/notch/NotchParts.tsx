@@ -24,7 +24,8 @@ const LABELS: Record<NotchControl, string> = {
   all_steps: COPY.allSteps,
 };
 /** Hodey's face in the notch bar, in CSS px. */
-const HODEY_BAR_SIZE = 38;
+/** Fits the bar with room for Hodey's z's and sound waves, so nothing is clipped. */
+const HODEY_BAR_SIZE = 34;
 const PRIMARY = new Set<NotchControl>(["start", "resume", "retry", "dismiss"]);
 
 function iconFor(control: NotchControl): ReactNode {
@@ -58,7 +59,7 @@ export function ControlButtons({ controls, hintLabel, onControl, spread = false 
       ))}
       {spread && iconControls.length > 0 && <span className="notch__spacer" />}
       {iconControls.map((c) => (
-        <IconButton key={c} label={LABELS[c]} onClick={() => onControl(c)}>
+        <IconButton key={c} label={LABELS[c]} danger={c === "end"} onClick={() => onControl(c)}>
           {iconFor(c)}
         </IconButton>
       ))}

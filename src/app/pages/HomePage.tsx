@@ -47,7 +47,7 @@ function LiveHode({ live, services }: { live: HodeSummary; services: AppServices
         <h2>{live.goal}</h2>
         {live.title && <p className="hmuted">{live.title}</p>}
       </div>
-      <button type="button" className="btn" onClick={() => services.bus.emit("hode:end", {})}>
+      <button type="button" className="btn btn--neutral" onClick={() => services.bus.emit("hode:end", {})}>
         End Hode
       </button>
     </section>

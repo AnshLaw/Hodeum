@@ -37,7 +37,6 @@ export interface NotchView {
 
 /** Pill widths in CSS px, per PRD §8.2. Height follows content. */
 export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, orb: 44, compact: 380, guidance: 496, lesson: 500, success: 340 };
-export const NOTCH_IDLE_HOVER_WIDTH = 352;
 
 const EXPANDED: NotchSize[] = ["guidance", "lesson", "success"];
 const QUIET_LEVELS = new Set(["hint", "observe", "independent"]);

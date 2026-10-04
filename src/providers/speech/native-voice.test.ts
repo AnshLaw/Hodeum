@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { TTSProvider } from "../interfaces";
 import { NativeSpeechInput, NativeTTSProvider, RoutedTTS, voiceChoice, type VoiceBridge, type VoiceStatus } from "./native-voice";
 
-const READY: VoiceStatus = { asr: "ready", tts: "ready", listening: false, detail: null, tts_detail: null, voices: [{ id: "kokoro:3", label: "Heart · American" }] };
+const READY: VoiceStatus = { asr: "ready", tts: "ready", listening: false, detail: null, tts_detail: null, voices: [{ id: "kokoro:3", label: "Heart", description: "American · female" }] };
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 20; i++) await Promise.resolve();

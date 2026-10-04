@@ -92,7 +92,7 @@ export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide }
       )}
       <Segmented label={COPY.whenIdle} options={IDLE_OPTIONS} value={idle} onSelect={(visibility) => onChange({ visibility })} />
       <div className="dock-menu__footer">
-        <button type="button" className="btn" onClick={onHide}>
+        <button type="button" className="btn btn--neutral" onClick={onHide}>
           {COPY.hideHodey}
         </button>
         <span className="dock-menu__hint">

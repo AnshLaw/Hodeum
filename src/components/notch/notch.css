@@ -117,18 +117,33 @@
   border-radius: 0 0 16px 16px;
 }
 
-.notch--idle.notch--hovered,
-.notch--idle:focus-within {
-  width: var(--notch-hover-width);
+/* Idle: exactly as wide as its contents, so nothing is cut off and there are no stray gaps.
+   At rest it shows Hodey and the Local dot; hovering reveals the buttons. */
+.notch--idle {
+  width: max-content;
 }
 
+.notch--idle .notch__spacer {
+  display: none;
+}
+
+.notch--idle:not(.notch--hovered):not(:focus-within) .notch__bar > .icon-btn {
+  display: none;
+}
+
+.notch--idle:not(.notch--hovered):not(:focus-within) .notch__bar {
+  gap: 8px;
+  padding-right: 12px;
+}
+
+/* One gap between every item and the same inset at both ends, so spacing reads as even. */
 .notch__bar {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 8px 0 13px;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
 }
 
 .notch--compact .notch__bar {
@@ -270,7 +285,7 @@
   flex: none;
   align-items: center;
   gap: 5px;
-  padding-right: 6px;
+  padding: 0 2px 0 4px;
   font-size: 11px;
   color: var(--hd-text-2);
 }
@@ -892,9 +907,11 @@
   min-width: 34px;
 }
 
+/* The face's drawing area keeps room on its right for z's and sound waves; pull the next item in
+   so the visible gap after the head matches every other gap. */
 .notch__grip .hodey {
   flex: none;
-  margin-right: 2px;
+  margin-right: -6px;
 }
 
 /* Hovering the idle pill shows its buttons; the face alone says it's Hodey. */
@@ -929,4 +946,15 @@
 .notch__grip .notch__eyebrow {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Hovered idle pill: no label after the face, so close the face's spare drawing room entirely. */
+.notch--idle.notch--hovered .notch__bar > .notch__grip,
+.notch--idle:focus-within .notch__bar > .notch__grip {
+  min-width: 0;
+}
+
+.notch--idle.notch--hovered .notch__grip .hodey,
+.notch--idle:focus-within .notch__grip .hodey {
+  margin-right: -10px;
 }

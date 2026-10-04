@@ -14,22 +14,24 @@ pub enum Engine {
 pub struct VoiceOption {
     pub id: String,
     pub label: String,
+    /// Accent and voice, e.g. "American · female".
+    pub description: String,
 }
 
 /// Kokoro v1.0 speaker ids (k2-fsa sherpa-onnx `kokoro-multi-lang-v1_0`), a curated English set.
-const KOKORO_VOICES: [(i32, &str); 12] = [
-    (3, "Heart · American"),
-    (2, "Bella · American"),
-    (6, "Nicole · American"),
-    (9, "Sarah · American"),
-    (7, "Nova · American"),
-    (16, "Michael · American"),
-    (14, "Fenrir · American"),
-    (18, "Puck · American"),
-    (21, "Emma · British"),
-    (23, "Lily · British"),
-    (26, "George · British"),
-    (25, "Fable · British"),
+const KOKORO_VOICES: [(i32, &str, &str); 12] = [
+    (3, "Heart", "American · female · default"),
+    (2, "Bella", "American · female"),
+    (6, "Nicole", "American · female, soft"),
+    (9, "Sarah", "American · female"),
+    (7, "Nova", "American · female"),
+    (16, "Michael", "American · male"),
+    (14, "Fenrir", "American · male, deep"),
+    (18, "Puck", "American · male, lively"),
+    (21, "Emma", "British · female"),
+    (23, "Lily", "British · female"),
+    (26, "George", "British · male"),
+    (25, "Fable", "British · male"),
 ];
 /// Kokoro's warmest voice; Hodey's default.
 const KOKORO_DEFAULT: i32 = 3;
@@ -39,10 +41,10 @@ const SUPERTONIC_DEFAULT: i32 = 0;
 pub fn catalog(kokoro: bool, supertonic_speakers: Option<i32>) -> Vec<VoiceOption> {
     let mut voices: Vec<VoiceOption> = Vec::new();
     if kokoro {
-        voices.extend(KOKORO_VOICES.iter().map(|(sid, label)| VoiceOption { id: format!("kokoro:{sid}"), label: (*label).into() }));
+        voices.extend(KOKORO_VOICES.iter().map(|(sid, label, description)| VoiceOption { id: format!("kokoro:{sid}"), label: (*label).into(), description: (*description).into() }));
     }
     if let Some(count) = supertonic_speakers {
-        voices.extend((0..count).map(|sid| VoiceOption { id: format!("supertonic:{sid}"), label: format!("Supertonic {}", sid + 1) }));
+        voices.extend((0..count).map(|sid| VoiceOption { id: format!("supertonic:{sid}"), label: format!("Supertonic {}", sid + 1), description: "Supertonic voice".into() }));
     }
     voices
 }
@@ -90,7 +92,8 @@ mod tests {
     #[test]
     fn lists_kokoro_voices_first() {
         let voices = catalog(true, Some(2));
-        assert_eq!(voices[0], VoiceOption { id: "kokoro:3".into(), label: "Heart · American".into() });
+        assert_eq!(voices[0].id, "kokoro:3");
+        assert_eq!(voices[0].label, "Heart");
         assert_eq!(voices.last().map(|v| v.id.as_str()), Some("supertonic:1"));
         assert!(catalog(false, None).is_empty());
     }

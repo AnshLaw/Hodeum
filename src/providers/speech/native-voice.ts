@@ -16,6 +16,8 @@ export interface VoiceStatus {
 export interface NaturalVoice {
   id: string;
   label: string;
+  /** Accent and voice, e.g. "American · female". */
+  description: string;
 }
 
 /** Must match the event names in src-tauri/src/voice. */

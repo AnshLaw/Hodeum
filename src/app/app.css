@@ -32,6 +32,10 @@
   --hd-text-2: #5b5b64;
   --hd-text-3: #8c8c95;
   --hd-line: rgb(0 0 0 / 0.1);
+  /* Tonal colours are computed where declared, so restate them against the light text colour. */
+  --hd-tonal: color-mix(in srgb, var(--hd-accent) 18%, transparent);
+  --hd-tonal-hover: color-mix(in srgb, var(--hd-accent) 28%, transparent);
+  --hd-tonal-text: color-mix(in srgb, var(--hd-accent) 55%, var(--hd-text));
   color-scheme: light;
 }
 
@@ -1127,4 +1131,112 @@
 .hmode-note {
   margin-top: 10px;
   font-size: 12px;
+}
+
+/* ---- Voice gallery ---- */
+.hvoices {
+  display: grid;
+  gap: 14px;
+  margin: 2px 0 14px;
+}
+
+.hvoices__title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hd-text-3);
+}
+
+.hvoices__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.hvoice-card {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--happ-line);
+  border-radius: 12px;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.hvoice-card:hover {
+  background: rgb(var(--hd-fg-rgb) / 0.03);
+}
+
+.hvoice-card[data-selected] {
+  border-color: var(--hd-accent);
+  background: var(--hd-tonal);
+}
+
+.hvoice-card__pick {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  padding: 10px 4px 10px 12px;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.hvoice-card__pick .hmuted {
+  overflow: hidden;
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hvoice-card__play {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  margin-right: 8px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: var(--hd-tonal-text);
+  background: var(--hd-tonal);
+  cursor: pointer;
+  transition: background 140ms ease, transform 120ms ease;
+}
+
+.hvoice-card__play:hover {
+  background: var(--hd-tonal-hover);
+}
+
+.hvoice-card__play:active {
+  transform: scale(0.94);
+}
+
+.hvoice-card__pick:focus-visible,
+.hvoice-card__play:focus-visible {
+  outline: 2px solid var(--hd-accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+.hvoices__missing {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+}
+
+.hvoices__group > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.hvoices__group > summary::before {
+  content: "▸ ";
+}
+
+.hvoices__group[open] > summary::before {
+  content: "▾ ";
 }
