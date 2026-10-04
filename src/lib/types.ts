@@ -177,6 +177,8 @@ export interface TeachingAction {
   target?: ActionTarget;
   skill: string;
   assistanceLevel: AssistanceLevel;
+  /** The answer is complete as it stands (a located control, the lesson's own explanation): no slower reasoner needs to improve it. */
+  final?: boolean;
 }
 
 export type AnnotationShape =

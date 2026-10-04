@@ -62,9 +62,9 @@ export class GroundedPlannerProvider implements ReasoningProvider {
   }
 }
 
-/** The planner couldn't ground the step, or the learner asked about something on screen. */
+/** The planner couldn't ground the step, or the learner asked something its answer doesn't fully cover. */
 function needsVision(action: TeachingAction): boolean {
-  return action.kind === "clarify" || action.kind === "answer";
+  return action.kind === "clarify" || (action.kind === "answer" && action.final !== true);
 }
 
 function orThrow(planned: TeachingAction | undefined, error: unknown): TeachingAction {
