@@ -13,7 +13,7 @@ import {
   type HodeState,
   type Transition,
 } from "./model";
-import { confidenceBand, overlayFor, startLevel } from "./policy";
+import { confidenceBand, nudgeStartLevel, overlayFor } from "./policy";
 
 /** Open-ended Hodes have no saved skill: the vision model phrases each step at the mode's level. */
 const OPEN_START: Record<HodeMode, AssistanceLevel> = { teach: "hint", help: "observe", agent: "guide" };
@@ -82,7 +82,9 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
 
 export function onSkillLoaded(s: HodeState, e: EventOf<"SKILL_LOADED">): Transition {
   if (s.phase !== "observing" || currentStep(s)?.skill !== e.skillId) return noop(s);
-  return { state: { ...s, level: startLevel(s.mode, e.record) }, effects: [{ type: "observe" }] };
+  // Memory nudges a skill's first step in a Hode only; later steps follow this Hode's own record.
+  const remembered = s.learnedSkills.includes(e.skillId) ? undefined : e.remembered;
+  return { state: { ...s, level: nudgeStartLevel(s.mode, e.record, remembered) }, effects: [{ type: "observe" }] };
 }
 
 export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {

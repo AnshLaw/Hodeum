@@ -53,6 +53,18 @@ export function startLevel(mode: HodeMode, record: SkillRecord | null): Assistan
   return clampToMode(mode, record.last_assistance_level);
 }
 
+/**
+ * `startLevel`, moved at most one ladder step toward the level learning memory remembers, and kept
+ * in the mode's range. A mastered skill record always wins: memory never adds help to it.
+ */
+export function nudgeStartLevel(mode: HodeMode, record: SkillRecord | null, remembered?: AssistanceLevel): AssistanceLevel {
+  const base = startLevel(mode, record);
+  const mastered = record?.status === "mastered" || record?.last_assistance_level === "independent";
+  if (!remembered || mastered || remembered === base) return base;
+  const nudged = indexOf(remembered) < indexOf(base) ? escalate(base) : relax(base);
+  return clampToMode(mode, nudged);
+}
+
 /** Escalations already raised `outcome.level` during the step; an unaided completion earns one step less help. */
 export function nextStoredLevel(outcome: StepOutcome): AssistanceLevel {
   return outcome.completed && !outcome.escalated ? relax(outcome.level) : outcome.level;

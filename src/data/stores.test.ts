@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { SkillStore } from "../providers/interfaces";
 import { MemoryChatStore, MemoryLearningStore } from "./memory-stores";
 import { DEFAULT_SETTINGS, MemorySettingsStore, type SettingsStore } from "./settings";
-import { SqliteChatStore, SqliteLearningStore, SqliteSettingsStore } from "./sqlite-stores";
+import { MemoryKeyValueStore, type KeyValueStore } from "./kv";
+import { SqliteChatStore, SqliteKeyValueStore, SqliteLearningStore, SqliteSettingsStore } from "./sqlite-stores";
 import { testDatabase } from "./test-sql";
 import type { ChatStore, LearningStore } from "./types";
 
@@ -88,5 +89,20 @@ describe.each(settingsStores)("%s settings store", (_, make) => {
     const next = { ...DEFAULT_SETTINGS, mode: "help" as const, stuckSeconds: 20 };
     await store.save(next);
     expect(await store.load()).toEqual(next);
+  });
+});
+
+const keyValueStores: [string, () => KeyValueStore][] = [
+  ["memory", () => new MemoryKeyValueStore()],
+  ["sqlite", () => new SqliteKeyValueStore(testDatabase())],
+];
+
+describe.each(keyValueStores)("%s key-value store", (_, make) => {
+  it("keeps values apart from the settings", async () => {
+    const store = make();
+    expect(await store.get("backboard.assistant_id")).toBeUndefined();
+    await store.set("backboard.assistant_id", "asst-1");
+    await store.set("backboard.assistant_id", "asst-2");
+    expect(await store.get("backboard.assistant_id")).toBe("asst-2");
   });
 });

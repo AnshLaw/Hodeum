@@ -91,7 +91,8 @@ export type HodeEvent =
   | { type: "START_HODE" }
   /** `openAllowed`: no pack matched, but the local vision model is ready to plan step by step. */
   | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean; /** Named in an open goal. */ app?: string; mode?: HodeMode }
-  | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null }
+  /** `remembered`: where learning memory says to start this skill (nudges the start by one step at most). */
+  | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null; remembered?: AssistanceLevel }
   /** Switch teach / help / agent, mid-Hode too. */
   | { type: "SET_MODE"; mode: HodeMode }
   /** Settings changed what Hodey replies in. */

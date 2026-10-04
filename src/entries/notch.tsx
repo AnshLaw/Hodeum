@@ -23,7 +23,12 @@ import { HodeRuntime } from "../features/hode/runtime";
 import { MemoryLearningStore } from "../data/memory-stores";
 import { MemorySettingsStore, type SettingsStore } from "../data/settings";
 import { openDatabase } from "../data/sql";
-import { SqliteLearningStore, SqliteSettingsStore } from "../data/sqlite-stores";
+import { SqliteKeyValueStore, SqliteLearningStore, SqliteSettingsStore } from "../data/sqlite-stores";
+import { MemoryKeyValueStore, type KeyValueStore } from "../data/kv";
+import type { MemoryProvider } from "../providers/interfaces";
+import { BackboardMemoryProvider } from "../providers/memory/backboard-memory";
+import { RoutedMemory } from "../providers/memory/routed-memory";
+import { LocalMemoryProvider, SqliteMemoryProvider } from "../providers/memory/sqlite-memory";
 import { NativePerception } from "../providers/native-perception";
 import { SurfacePerception } from "../providers/surface-perception";
 import { AirPlayPhoneSource } from "../features/phone/airplay-source";
@@ -46,16 +51,19 @@ const WATCHING_PHASES: HodePhase[] = ["guiding", "reasoning"];
 interface Stores {
   learning: SqliteLearningStore | MemoryLearningStore;
   settings: SettingsStore;
+  /** Local learning memory (end-of-Hode summaries) and small local values such as the Backboard assistant id. */
+  memory: MemoryProvider;
+  kv: KeyValueStore;
   notice?: string;
 }
 
 async function openStores(): Promise<Stores> {
   try {
     const db = await openDatabase();
-    return { learning: new SqliteLearningStore(db), settings: new SqliteSettingsStore(db) };
+    return { learning: new SqliteLearningStore(db), settings: new SqliteSettingsStore(db), memory: new SqliteMemoryProvider(db), kv: new SqliteKeyValueStore(db) };
   } catch (error) {
     console.error("Opening the Hodeum database failed; progress is kept in memory for this session", error);
-    return { learning: new MemoryLearningStore(), settings: new MemorySettingsStore(), notice: COPY.progressNotSaved };
+    return { learning: new MemoryLearningStore(), settings: new MemorySettingsStore(), memory: new LocalMemoryProvider(), kv: new MemoryKeyValueStore(), notice: COPY.progressNotSaved };
   }
 }
 
@@ -76,7 +84,7 @@ function createPerception(activity: ActivityTracker) {
 
 async function boot(): Promise<void> {
   const bus = new TauriBus();
-  const { learning, settings, notice } = await openStores();
+  const { learning, settings, memory: localMemory, kv, notice } = await openStores();
   const activity = new ActivityTracker();
   mirrorRemoteActivity(bus, activity);
   connectAppearance(settings, bus, document.documentElement);
@@ -97,7 +105,9 @@ async function boot(): Promise<void> {
   // ElevenLabs first when Settings > Cloud allows it right now; the local voice says anything it skips or fails.
   const elevenlabs = new ElevenLabsTTSProvider(invoke);
   const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity, shareable: (): boolean => lessonSpeech(runtime.getState()) });
-  const runtime = new HodeRuntime({ perception, reasoners: [gemini, local], skills: learning, bus, tts });
+  // SQLite always; Backboard only while the cloud policy allows it (and writes only in "auto").
+  const memory = new RoutedMemory(localMemory, new BackboardMemoryProvider({ invoke, policy: cloud.policy, kv }));
+  const runtime = new HodeRuntime({ perception, reasoners: [gemini, local], skills: learning, bus, tts, memory });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   runtime.subscribe(() => {
     const state = runtime.getState();
@@ -110,6 +120,7 @@ async function boot(): Promise<void> {
     bus,
     log: learning,
     settings,
+    memory,
     packs: TASK_PACKS,
     openGoalsAllowed: () => vision.current().state === "ready",
     applyVoice: (settings) => {

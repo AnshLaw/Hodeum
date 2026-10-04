@@ -7,6 +7,7 @@ import { HodeRuntime } from "../features/hode/runtime";
 import { MemoryChatStore, MemoryLearningStore } from "../data/memory-stores";
 import { MemorySettingsStore } from "../data/settings";
 import type { AppServices } from "../app/services";
+import { LocalMemoryProvider } from "../providers/memory/sqlite-memory";
 import { MockPerception, type MockApp } from "../providers/mock-perception";
 import { UnavailableSpeechInput, type SpeechInput } from "../providers/speech/speech-input";
 import { TaskPackReasoningProvider } from "../providers/task-pack-reasoner";
@@ -48,8 +49,9 @@ export function createStageEnvironment(): StageEnvironment {
   const chats = new MemoryChatStore();
   const cloudKeys = new PracticeCloudKeys();
   const tts = new WebSpeechTTSProvider();
-  const runtime = new HodeRuntime({ perception: withScreenActivity(perception, activity), reasoners: [new TaskPackReasoningProvider()], skills: learning, bus, tts });
-  connectHodeBridge({ runtime, bus, log: learning, settings, packs: TASK_PACKS, openGoalsAllowed: () => false, applyVoice: (voice) => {
+  const memory = new LocalMemoryProvider();
+  const runtime = new HodeRuntime({ perception: withScreenActivity(perception, activity), reasoners: [new TaskPackReasoningProvider()], skills: learning, bus, tts, memory });
+  connectHodeBridge({ runtime, bus, log: learning, settings, packs: TASK_PACKS, openGoalsAllowed: () => false, memory, applyVoice: (voice) => {
       tts.rate = voice.rate;
       tts.voiceName = voice.name;
     } });

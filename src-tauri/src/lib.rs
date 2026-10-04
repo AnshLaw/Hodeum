@@ -95,7 +95,11 @@ pub fn run() {
             cloud::keys::cloud_key_set,
             cloud::keys::cloud_key_clear,
             cloud::gemini::gemini_reason,
-            cloud::elevenlabs::elevenlabs_speak
+            cloud::elevenlabs::elevenlabs_speak,
+            cloud::backboard::backboard_create_assistant,
+            cloud::backboard::backboard_create_thread,
+            cloud::backboard::backboard_add_message,
+            cloud::backboard::backboard_search_memories
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())

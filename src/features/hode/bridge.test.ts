@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { LocalBus, type HodeSummary } from "../../lib/bus";
 import { MemoryLearningStore } from "../../data/memory-stores";
 import { DEFAULT_SETTINGS, MemorySettingsStore } from "../../data/settings";
+import { LocalMemoryProvider } from "../../providers/memory/sqlite-memory";
+import type { MemoryProvider } from "../../providers/interfaces";
 import { MockPerception } from "../../providers/mock-perception";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
 import { ExcelScene } from "../../stage/scenes/excel";
@@ -15,7 +17,7 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 100; i++) await Promise.resolve();
 }
 
-function setup() {
+function setup(memory?: MemoryProvider) {
   const bus = new LocalBus();
   const store = new MemoryLearningStore();
   const settings = new MemorySettingsStore();
@@ -28,7 +30,7 @@ function setup() {
     tts: { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true },
   });
   const applyVoice = vi.fn();
-  connectHodeBridge({ runtime, bus, log: store, settings, packs: TASK_PACKS, openGoalsAllowed: () => false, applyVoice });
+  connectHodeBridge({ runtime, bus, log: store, settings, packs: TASK_PACKS, openGoalsAllowed: () => false, applyVoice, memory });
   return { bus, store, settings, runtime, applyVoice };
 }
 
@@ -64,5 +66,16 @@ describe("connectHodeBridge", () => {
     bus.emit("settings:changed", {});
     await settle();
     expect(applyVoice).toHaveBeenLastCalledWith({ enabled: false, rate: 1.3, name: "zira", conversation: true, handsFree: false, language: "en", hindiScript: "devanagari", hindiVoice: "kokoro:31", wakeWords: [] });
+  });
+
+  it("stores a learning summary when a Hode ends", async () => {
+    const memory = new LocalMemoryProvider();
+    const { bus } = setup(memory);
+    bus.emit("hode:start", { goal: "make a pivot table" });
+    await settle();
+    bus.emit("hode:end", {});
+    await settle();
+    const recalled = await memory.getRelevantMemory({ goal: "Make a PivotTable", skillIds: [] });
+    expect(recalled).toEqual([expect.objectContaining({ skillId: "excel.navigation.insert_tab" })]);
   });
 });

@@ -24,6 +24,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/0003_chat_web.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "learning_summaries",
+            sql: include_str!("../migrations/0004_learning_memory.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

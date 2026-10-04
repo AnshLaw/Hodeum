@@ -22,13 +22,18 @@ export interface TTSProvider {
 }
 
 export interface MemoryQuery {
+  /** The task pack's title, never the learner's own words (those can go to a cloud memory). */
   goal: string;
   skillIds: string[];
 }
 
 export interface LearningMemory {
+  /** "" when a note (e.g. a Backboard memory) names no skill of the query. */
   skillId: string;
   note: string;
+  /** Where the summary said to start next time; only local summaries carry it. */
+  level?: AssistanceLevel;
+  at?: string;
 }
 
 export interface HodeLearningSummary {
