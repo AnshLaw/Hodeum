@@ -22,9 +22,18 @@ describe("CHITCHAT", () => {
     expect(t.state).toMatchObject({ phase: "goal_entry", notice: spoken("en").notATask });
   });
 
-  it("says the same reply only once", () => {
+  it("answers every time, the same reply again too, as a fresh card", () => {
+    const greeting = spoken("en").greeting;
     const once = step(initialState, { type: "CHITCHAT", kind: "greeting" });
-    expect(step(once.state, { type: "CHITCHAT", kind: "greeting" }).effects).toEqual([]);
+    const again = step(once.state, { type: "CHITCHAT", kind: "greeting" });
+    expect(again.effects).toEqual([{ type: "say", text: greeting }]);
+    expect(again.state.notice).toBe(greeting);
+    expect(again.state).not.toBe(once.state);
+  });
+
+  it("takes the place of an app line on the card", () => {
+    const opening = step(initialState, { type: "OPEN_APP", app: { id: "Microsoft.Office.EXCEL.EXE.15", name: "Excel", kind: "desktop" }, said: "open excel", mode: "help" }).state;
+    expect(step(opening, { type: "CHITCHAT", kind: "unclear" }).state.notice).toBe(spoken("en").notATask);
   });
 
   it("leaves a running Hode alone", () => {

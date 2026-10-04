@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appQuery, classify, type Intent } from "./intent";
+import { appQuery, classify, isSubstantive, opensWithQuestion, type Intent } from "./intent";
 
 /** The 30 cases the idle-loop investigation validated, plus the Hinglish and Hindi ones. */
 const CASES: [string, Intent][] = [
@@ -48,11 +48,28 @@ const CASES: [string, Intent][] = [
   ["um", "noise"],
   ["[music]", "noise"],
   ["42 17", "noise"],
+  ["how many sheets are there", "question"],
+  ["explain this screen", "unclear"],
+  ["क्या आप मुझे डार्क मोड चालू करना सिखा सकते हैं", "task"],
+  ["kya aap mujhe pivot table banana sikha sakte ho", "task"],
+  ["मुझे डार्क मोड चालू करना सीखना है", "task"],
+  ["could you teach me how to make a chart", "task"],
+  ["is this on", "greeting"],
+  ["is it working", "greeting"],
+  ["mic check one two", "greeting"],
 ];
 
 describe("classify", () => {
   it.each(CASES)("%s -> %s", (said, intent) => {
     expect(classify(said)).toBe(intent);
+  });
+
+  it("during a Hode, 'is this on?' asks about the screen, while checks on Hodey's hearing stay greetings", () => {
+    expect(classify("is this on", { inHode: true })).toBe("question");
+    expect(classify("is it working", { inHode: true })).toBe("question");
+    expect(classify("can you hear me", { inHode: true })).toBe("greeting");
+    expect(classify("testing one two three", { inHode: true })).toBe("greeting");
+    expect(classify("is the mic on", { inHode: true })).toBe("greeting");
   });
 
   it("calls a control a control when the router knows it", () => {
@@ -63,6 +80,29 @@ describe("classify", () => {
     const isApp = (name: string) => name === "excel";
     expect(classify("open excel", { isApp })).toBe("open_app");
     expect(classify("open the insert tab", { isApp })).toBe("task");
+  });
+});
+
+describe("isSubstantive", () => {
+  it("is two or more real words, in any language", () => {
+    for (const said of ["explain this screen", "tell me about this page", "new tab", "इस पेज के बारे में बताओ", "is page ke bare mein batao"]) {
+      expect(isSubstantive(said), said).toBe(true);
+    }
+  });
+
+  it("isn't a fragment, a filler phrase, thanks or a count", () => {
+    for (const said of ["the tab", "let me think", "I don't know", "never mind", "the third one", "give me a minute", "sounds good", "yes please", "haan theek hai", "okay thank you", "one two three"]) {
+      expect(isSubstantive(said), said).toBe(false);
+    }
+  });
+});
+
+describe("opensWithQuestion", () => {
+  it("is a question word or helper verb first, not a request with one inside", () => {
+    expect(opensWithQuestion("What is a pivot table?")).toBe(true);
+    expect(opensWithQuestion("how many sheets are there")).toBe(true);
+    expect(opensWithQuestion("how do I make a pivot table")).toBe(false);
+    expect(opensWithQuestion("क्या आप मुझे डार्क मोड चालू करना सिखा सकते हैं")).toBe(false);
   });
 });
 

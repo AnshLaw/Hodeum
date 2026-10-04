@@ -11,7 +11,7 @@ import { ExcelScene } from "../../test-support/scenes/excel";
 import { TASK_PACKS, matchGoal } from "../../task-packs";
 import type { HodeMode } from "../../lib/types";
 import { STUCK_MS, type HodeEvent } from "./model";
-import { HodeRuntime } from "./runtime";
+import { HodeRuntime, NATIVE_SWITCH_GRACE_MS } from "./runtime";
 
 const GOAL = "Teach me how to make a pivot table in Excel";
 const FULL_HODE = ["tab:Insert", "ribbon:PivotTable", "dialog:ok", "field:Region", "field:Sales"];
@@ -480,6 +480,73 @@ describe("opening an installed app", () => {
     h.runtime.dispatch({ type: "OPEN_APP", app: EXCEL, said: "open excel" });
     await settle();
     expect(h.spoken.at(-1)).toBe(spokenCopy("en").openFailed("Excel"));
+  });
+});
+
+describe("an app Hodey opened coming forward", () => {
+  const EXCEL = { id: "Microsoft.Office.EXCEL.EXE.15", name: "Excel", kind: "desktop" as const };
+
+  /** `watcher`: the perception reports window switches itself, as the native one does. */
+  function opening(watcher: boolean) {
+    let switched: ((window: AppSwitch) => void) | undefined;
+    let appear: (appeared: boolean) => void = () => undefined;
+    const scene = new ExcelScene();
+    const perception = Object.assign(new MockPerception(() => scene), {
+      openInstalledApp: vi.fn(() => new Promise<boolean>((resolve) => (appear = resolve))),
+      ...(watcher ? { onAppSwitched: (handler: (window: AppSwitch) => void) => ((switched = handler), () => (switched = undefined)) } : {}),
+    });
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
+    let switches = 0;
+    runtime.onTransition((event) => {
+      if (event.type === "APP_SWITCHED") switches += 1;
+    });
+    runtime.dispatch({ type: "OPEN_APP", app: EXCEL, said: "open excel" });
+    return {
+      appears: async () => {
+        appear(true);
+        await settle();
+      },
+      watcherReports: () => switched?.({ app: "Excel" }),
+      switches: () => switches,
+    };
+  }
+
+  it("is reported once when the window watcher reports it soon after the open", async () => {
+    vi.useFakeTimers();
+    const h = opening(true);
+    await h.appears();
+    expect(h.switches()).toBe(0);
+    await vi.advanceTimersByTimeAsync(NATIVE_SWITCH_GRACE_MS / 2);
+    h.watcherReports();
+    expect(h.switches()).toBe(1);
+    await vi.advanceTimersByTimeAsync(NATIVE_SWITCH_GRACE_MS * 2);
+    expect(h.switches()).toBe(1);
+  });
+
+  it("is reported once when the watcher saw the window come forward while it was still opening", async () => {
+    vi.useFakeTimers();
+    const h = opening(true);
+    h.watcherReports();
+    await h.appears();
+    await vi.advanceTimersByTimeAsync(NATIVE_SWITCH_GRACE_MS * 2);
+    expect(h.switches()).toBe(1);
+  });
+
+  it("is reported by Hodey when the watcher says nothing within the grace period", async () => {
+    vi.useFakeTimers();
+    const h = opening(true);
+    await h.appears();
+    await vi.advanceTimersByTimeAsync(NATIVE_SWITCH_GRACE_MS - 1);
+    expect(h.switches()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.switches()).toBe(1);
+  });
+
+  it("is reported at once where nothing watches window switches", async () => {
+    const h = opening(false);
+    await h.appears();
+    expect(h.switches()).toBe(1);
   });
 });
 
