@@ -116,3 +116,16 @@ describe("overlayFor", () => {
     expect(kinds(action, INSERT_BOUNDS)).toEqual(["pin"]);
   });
 });
+
+describe("screen_tone signal", () => {
+  const observation = (tone?: "dark" | "light") => ({ app: "iPhone", windowTitle: "", elements: [], at: 0, tone });
+
+  it("holds when the screen's tone matches", () => {
+    expect(evaluateSignal({ kind: "screen_tone", tone: "dark" }, observation("dark"))).toBe(true);
+  });
+
+  it("fails for the other tone or an unknown tone", () => {
+    expect(evaluateSignal({ kind: "screen_tone", tone: "dark" }, observation("light"))).toBe(false);
+    expect(evaluateSignal({ kind: "screen_tone", tone: "dark" }, observation())).toBe(false);
+  });
+});

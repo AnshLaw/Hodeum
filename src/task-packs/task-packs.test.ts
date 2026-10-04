@@ -23,6 +23,19 @@ describe("loadTaskPack", () => {
     expect(() => loadTaskPack(raw)).toThrow(/Invalid task pack/);
   });
 
+  it("accepts a phone surface and a screen_tone signal", () => {
+    const raw = JSON.parse(JSON.stringify(excelPivot)) as Record<string, unknown> & { steps: Array<Record<string, unknown>> };
+    raw.surface = "phone";
+    raw.steps[0].success = { kind: "screen_tone", tone: "dark" };
+    expect(loadTaskPack(raw).surface).toBe("phone");
+  });
+
+  it("rejects an unknown surface", () => {
+    const raw = JSON.parse(JSON.stringify(excelPivot)) as Record<string, unknown>;
+    raw.surface = "android";
+    expect(() => loadTaskPack(raw)).toThrow(/Invalid task pack/);
+  });
+
   it("rejects a malformed skill id", () => {
     const raw = clone();
     raw.steps[0].skill = "Excel Insert";
