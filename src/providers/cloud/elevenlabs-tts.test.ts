@@ -98,12 +98,12 @@ describe("ElevenLabsTTSProvider", () => {
 });
 
 describe("CloudFirstTTS", () => {
-  function setup(allowed = true, cloudSpeak?: TTSProvider["speak"]) {
+  function setup(allowed = true, cloudSpeak?: TTSProvider["speak"], shareable = () => true) {
     const { local, said } = fakeLocal();
     const cloud = { multilingual: true, speak: vi.fn(cloudSpeak ?? (async () => undefined)), stop: vi.fn(async () => undefined), healthCheck: vi.fn(async () => true) };
     const policy = fakePolicy(allowed);
     const activity = new ActivityTracker();
-    const tts = new CloudFirstTTS({ cloud, local, policy, activity });
+    const tts = new CloudFirstTTS({ cloud, local, policy, activity, shareable });
     return { tts, cloud, local, said, policy, activity };
   }
 
@@ -121,6 +121,13 @@ describe("CloudFirstTTS", () => {
     expect(cloud.speak).not.toHaveBeenCalled();
     expect(said).toEqual(["Click Insert."]);
     expect(policy.allowed).toHaveBeenCalledWith("elevenlabs");
+  });
+
+  it("keeps lines that may quote the screen (answers, open goals) on the local voice", async () => {
+    const { tts, cloud, said } = setup(true, undefined, () => false);
+    await tts.speak(chunks("That cell says 90,000."), new AbortController().signal);
+    expect(cloud.speak).not.toHaveBeenCalled();
+    expect(said).toEqual(["That cell says 90,000."]);
   });
 
   it("says the same utterance locally when ElevenLabs fails, and starts the cooldown", async () => {

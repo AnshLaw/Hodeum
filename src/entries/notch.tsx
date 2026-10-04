@@ -13,6 +13,7 @@ import { connectAccount } from "../features/account/connect";
 import { CloudContext } from "../components/notch/cloud-context";
 import { connectCloud } from "../providers/cloud/connect";
 import { CloudFirstTTS, ElevenLabsTTSProvider } from "../providers/cloud/elevenlabs-tts";
+import { lessonSpeech } from "../providers/cloud/shareable";
 import { connectHodeBridge } from "../features/hode/bridge";
 import { connectVoice, withoutEcho } from "../features/voice/connect";
 import type { HodePhase } from "../features/hode/model";
@@ -91,7 +92,7 @@ async function boot(): Promise<void> {
   const cloud = connectCloud({ invoke, bus, activeApp: () => runtime.getState().observation });
   // ElevenLabs first when Settings > Cloud allows it right now; the local voice says anything it skips or fails.
   const elevenlabs = new ElevenLabsTTSProvider(invoke);
-  const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity });
+  const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity, shareable: (): boolean => lessonSpeech(runtime.getState()) });
   const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   runtime.subscribe(() => {
