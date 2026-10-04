@@ -16,6 +16,10 @@ export interface SpokenCopy {
   noPack: string;
   hodeCompleteSpeech: string;
   rememberedOnYourOwn: string;
+  /** Said when the learner gets a step right (Teach, or Help once Hodey stepped in); varied so it doesn't sound canned. */
+  stepDone: readonly string[];
+  /** Agent mode's lighter acknowledgement of a step done right. */
+  stepDoneLight: readonly string[];
   nothingMarked: string;
   thatsControl: (name: string, explain: string) => string;
   thatsElement: (name: string, role: string) => string;
@@ -40,6 +44,8 @@ const ENGLISH: SpokenCopy = {
   noPack: COPY.noPack,
   hodeCompleteSpeech: COPY.hodeCompleteSpeech,
   rememberedOnYourOwn: COPY.rememberedOnYourOwn,
+  stepDone: ["Nice, that's it.", "Exactly right.", "Good, that's the one.", "Yes, well done."],
+  stepDoneLight: ["Good.", "Done."],
   nothingMarked: COPY.nothingMarked,
   thatsControl: (name, explain) => `That's ${name}. ${explain}`,
   thatsElement: (name, role) => `That's the "${name}" ${role}.`,
@@ -63,6 +69,8 @@ const HINDI: SpokenCopy = {
   noPack: "इसके लिए अभी मेरे पास कोई होड नहीं है। “पिवट टेबल बनाओ” या “ये फ़ाइलें ज़िप करो” बोलकर देखिए।",
   hodeCompleteSpeech: "होड पूरा हुआ। बहुत बढ़िया।",
   rememberedOnYourOwn: "बढ़िया, ये आपको खुद याद था।",
+  stepDone: ["बढ़िया, यही था।", "बिल्कुल सही।", "हाँ, यही वाला।", "शाबाश, सही किया।"],
+  stepDoneLight: ["ठीक है।", "हो गया।"],
   nothingMarked: "वहाँ अभी कोई कंट्रोल समझ नहीं आ रहा। किसी एक बटन के आसपास छोटा हिस्सा मार्क करके देखिए।",
   thatsControl: (name, explain) => `ये ${name} है। ${explain}`,
   thatsElement: (name, role) => `ये "${name}" ${role} है।`,
@@ -86,6 +94,8 @@ const HINGLISH: SpokenCopy = {
   noPack: "इसके लिए अभी मेरे पास कोई Hode नहीं है। “PivotTable बनाओ” या “ये files zip करो” बोलकर देखिए।",
   hodeCompleteSpeech: "Hode complete. बहुत बढ़िया।",
   rememberedOnYourOwn: "बढ़िया, ये आपको खुद याद था।",
+  stepDone: ["बढ़िया, यही था।", "Perfect, बिल्कुल सही।", "हाँ, यही वाला।", "Great, सही किया।"],
+  stepDoneLight: ["Good।", "Done।"],
   nothingMarked: "वहाँ अभी कोई control समझ नहीं आ रहा। किसी एक button के आसपास छोटा area mark करके देखिए।",
   thatsControl: (name, explain) => `ये ${name} है। ${explain}`,
   thatsElement: (name, role) => `ये "${name}" ${role} है।`,

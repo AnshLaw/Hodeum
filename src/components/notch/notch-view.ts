@@ -79,7 +79,8 @@ function guidanceView(s: HodeState): NotchView {
   const step = currentStep(s);
   const total = s.pack?.steps.length ?? 0;
   const silent = s.level === "observe" || s.level === "independent";
-  const eyebrow = `${COPY.stepOf(s.stepIndex + 1, total)} · ${MODE_COPY[s.mode].title}`;
+  // A step just done right is acknowledged here too, so it's seen when Hodey is muted.
+  const eyebrow = s.ack ?? `${COPY.stepOf(s.stepIndex + 1, total)} · ${MODE_COPY[s.mode].title}`;
   if (s.mode === "help" && silent && !s.correction) return standingByView(s, eyebrow, total);
   const speech = s.action?.speech ?? "";
   const showObjective = speech === "" || (silent && s.action?.kind === "guide");

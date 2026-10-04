@@ -154,15 +154,23 @@ export function withWhy(s: HodeState, action: TeachingAction): TeachingAction {
   return { ...action, speech: `${action.speech} ${why}` };
 }
 
+/** What to say for this guidance: the previous step's acknowledgement first, then the instruction. */
+function lineFor(s: HodeState, action: TeachingAction): string {
+  // On the phone every scroll re-locates the target; saying the same sentence again would nag.
+  const repeat = s.pack?.surface === "phone" && action.speech === s.action?.speech;
+  const instruction = repeat ? "" : action.speech;
+  return [s.pendingAck ?? "", instruction].filter((part) => part !== "").join(" ");
+}
+
 function showGuidance(s: HodeState, shown: TeachingAction): Transition {
   const action = withWhy(s, shown);
   const primitives = overlayFor(action, pinFor(s));
   const effects: HodeEffect[] = [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }];
-  // On the phone every scroll re-locates the target; saying the same sentence again would nag.
-  const repeat = s.pack?.surface === "phone" && action.speech === s.action?.speech;
-  if (action.speech !== "" && !repeat) effects.push({ type: "say", text: action.speech });
+  const line = lineFor(s, action);
+  if (line !== "") effects.push({ type: "say", text: line });
   effects.push({ type: "startStuckTimer", ms: STUCK_MS });
-  return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false }, effects };
+  const ack = s.pendingAck ?? s.ack;
+  return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false, pendingAck: undefined, ack }, effects };
 }
 
 function finishOpenHode(s: HodeState, action: TeachingAction): Transition {

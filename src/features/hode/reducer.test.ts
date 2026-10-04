@@ -3,6 +3,7 @@ import { COPY } from "../../lib/copy";
 import { spoken } from "../../lib/spoken";
 import type { AssistanceLevel, HodeMode, ScreenObservation, SkillRecord } from "../../lib/types";
 import { STUCK_MS, initialState, type HodeEffect, type HodeEvent, type HodeState, type Transition } from "./model";
+import { acknowledgement } from "./learner";
 import { step } from "./reducer";
 import {
   DATA_SELECTED,
@@ -226,9 +227,34 @@ describe("verifying learner actions", () => {
     expect(t.effects.at(-1)).toEqual({ type: "loadSkill", skillId: "excel.pivot.create" });
   });
 
-  it("praises an unaided step", () => {
+  it("praises an unaided step, ahead of the next step's guidance", () => {
     const t = step(guiding("observe"), { type: "LEARNER_ACTED", observation: INSERT_SELECTED });
-    expect(t.effects).toContainEqual({ type: "say", text: COPY.rememberedOnYourOwn });
+    expect(t.state.pendingAck).toBe(COPY.rememberedOnYourOwn);
+    const shown = step({ ...t.state, phase: "reasoning", requestId: 1 }, { type: "ACTION_READY", requestId: 1, action: guideAction({ speech: "Far left.", assistanceLevel: "observe" }), failures: [] });
+    expect(shown.effects).toContainEqual({ type: "say", text: `${COPY.rememberedOnYourOwn} Far left.` });
+    expect(shown.state).toMatchObject({ ack: COPY.rememberedOnYourOwn, pendingAck: undefined });
+  });
+
+  it("acknowledges every step done right in Teach, never with the same phrase twice running", () => {
+    const say = spoken("en");
+    const first = acknowledgement({ ...guiding("hint"), stepIndex: 0 });
+    const second = acknowledgement({ ...guiding("hint"), stepIndex: 1, lastAck: first });
+    expect(say.stepDone).toContain(first);
+    expect(say.stepDone).toContain(second);
+    expect(second).not.toBe(first);
+    expect(acknowledgement({ ...guiding("observe"), lastAck: COPY.rememberedOnYourOwn })).not.toBe(COPY.rememberedOnYourOwn);
+  });
+
+  it("acknowledges in Help only when Hodey stepped in, and lightly in Agent", () => {
+    const say = spoken("en");
+    expect(acknowledgement({ ...guiding("observe"), mode: "help" })).toBeUndefined();
+    expect(say.stepDone).toContain(acknowledgement({ ...guiding("hint"), mode: "help", escalated: true }));
+    expect(say.stepDoneLight).toContain(acknowledgement(guiding("guide")));
+  });
+
+  it("clears the acknowledgement once the learner acts again", () => {
+    const t = step({ ...guiding("hint"), ack: "Exactly right." }, { type: "LEARNER_ACTED", observation: HOME_SELECTED });
+    expect(t.state.ack).toBeUndefined();
   });
 
   it("escalates after repeated unrelated actions", () => {

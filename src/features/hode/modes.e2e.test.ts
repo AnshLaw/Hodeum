@@ -11,6 +11,7 @@ import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
 import { ExcelScene } from "../../stage/scenes/excel";
 import { ExplorerScene } from "../../stage/scenes/explorer";
 import { TASK_PACKS } from "../../task-packs";
+import { spoken as spokenCopy } from "../../lib/spoken";
 import { STUCK_MS } from "./model";
 import { HodeRuntime } from "./runtime";
 
@@ -122,19 +123,40 @@ const START_LEVELS: Record<HodeMode, Record<string, AssistanceLevel[]>> = {
   agent: { PivotTable: ["demonstrate", "demonstrate", "guide", "demonstrate", "guide"], Zip: ["demonstrate", "demonstrate", "guide"] },
 };
 
+const EN = spokenCopy("en");
+const stepEyebrow = (journey: Journey, index: number, mode: string) => `${COPY.stepOf(index + 1, journey.pack.steps.length)} · ${mode}`;
+
+/**
+ * After the first step, the step just done is acknowledged: said ahead of the new guidance (one line, so
+ * the instruction can't cut it off), shown as the notch's eyebrow, and never the same phrase twice running.
+ */
+function expectAck(h: Harness, journey: Journey, index: number, pool: readonly string[], mode: string): string {
+  const ack = h.state().ack;
+  if (index === 0) {
+    expect(ack).toBeUndefined();
+    expect(h.view().eyebrow).toBe(stepEyebrow(journey, index, mode));
+    return "";
+  }
+  expect(pool).toContain(ack);
+  expect(h.view().eyebrow).toBe(ack);
+  return ack ?? "";
+}
+
+const line = (...parts: string[]) => parts.filter((part) => part !== "").join(" ");
+
 /** Teach: a question and no highlight; a skill just practised unaided gets only "Your turn". Never the whole flow. */
 function expectTeachStep(h: Harness, journey: Journey, index: number, said: string[]): void {
   const s = step(journey, index);
   const level = START_LEVELS.teach[journey.name][index];
   expect(h.state()).toMatchObject({ phase: "guiding", stepIndex: index, level, mode: "teach" });
   expect(highlighted(h.overlays.at(-1))).toBe(false);
+  const ack = expectAck(h, journey, index, [...EN.stepDone, EN.rememberedOnYourOwn], "Teach");
   const view = h.view();
-  expect(view.eyebrow).toBe(`${COPY.stepOf(index + 1, journey.pack.steps.length)} · Teach`);
   if (level === "hint") {
-    expect(said.at(-1)).toBe(s.speech.hint);
+    expect(said).toEqual([line(ack, s.speech.hint)]);
     expect(view.title).toBe(s.speech.hint);
   } else {
-    expect(said.filter((line) => line !== COPY.rememberedOnYourOwn)).toEqual([]);
+    expect(said).toEqual([ack]);
     expect(view.title).toBe(`${COPY.yourTurn}: ${s.objective}`);
   }
   expect(view.hintLabel).toBe(COPY.needHint);
@@ -148,9 +170,10 @@ function expectHelpStep(h: Harness, journey: Journey, index: number, said: strin
   const level = START_LEVELS.help[journey.name][index];
   expect(h.state()).toMatchObject({ phase: "guiding", stepIndex: index, level, mode: "help" });
   expect(said).toEqual([]);
+  expect(h.state().ack).toBeUndefined();
   expect(h.overlays.every((o) => !highlighted(o))).toBe(true);
   const view = h.view();
-  expect(view).toMatchObject({ title: COPY.helpStandingBy, hintLabel: COPY.needHint, eyebrow: `${COPY.stepOf(index + 1, journey.pack.steps.length)} · Help` });
+  expect(view).toMatchObject({ title: COPY.helpStandingBy, hintLabel: COPY.needHint, eyebrow: stepEyebrow(journey, index, "Help") });
   expect(view.controls).toEqual(["hint", "point", "pause", "end"]);
   expect(view.steps).toBeUndefined();
   expect(h.list()).toEqual([]);
@@ -161,7 +184,8 @@ function expectAgentStep(h: Harness, journey: Journey, index: number, said: stri
   const level = START_LEVELS.agent[journey.name][index];
   const s = step(journey, index);
   expect(h.state()).toMatchObject({ phase: "guiding", stepIndex: index, level, mode: "agent" });
-  expect(said.at(-1)).toBe(s.speech[level]);
+  const ack = expectAck(h, journey, index, EN.stepDoneLight, "Agent");
+  expect(said).toEqual([line(ack, s.speech[level])]);
   expect(h.overlays.at(-1)).toBe(level === "demonstrate" ? FULL : HIGHLIGHT);
   const view = h.view();
   expect(view.title).toBe(s.speech[level]);
@@ -177,12 +201,15 @@ describe.each([PIVOT, ZIP])("a full $name Hode", (journey) => {
   it.each(["teach", "help", "agent"] as const)("in %s mode: the learner clicks every step and Hodey verifies it", async (mode) => {
     const h = harness(journey);
     await start(h, journey, mode);
+    const acks: (string | undefined)[] = [];
     for (const [index, next] of journey.clicks.entries()) {
       EXPECT_STEP[mode](h, journey, index, h.newSpeech());
+      acks.push(h.state().ack);
       await click(h, next);
     }
+    expect(acks.every((ack, i) => ack === undefined || ack !== acks[i - 1])).toBe(true);
     expect(h.state().phase).toBe("success");
-    expect(h.newSpeech().at(-1)).toBe(COPY.hodeCompleteSpeech);
+    expect(h.newSpeech()).toEqual([COPY.hodeCompleteSpeech]);
     expect(h.view()).toMatchObject({ mode: "success", title: COPY.hodeComplete });
     expect(h.list().every((item) => item.state === "done")).toBe(true);
   });
@@ -194,6 +221,21 @@ describe("Help mode stays quiet", () => {
     await start(h, PIVOT, "help");
     for (const next of PIVOT.clicks.slice(0, -1)) await click(h, next);
     expect(h.said).toEqual([]);
+  });
+
+  it("acknowledges a step done right once Hodey has stepped in on it, then goes quiet again", async () => {
+    const h = harness(PIVOT);
+    await start(h, PIVOT, "help");
+    await dispatchAndSettle(h, "HINT_REQUESTED");
+    h.newSpeech();
+    await click(h, PIVOT.clicks[0]);
+    const ack = h.state().ack;
+    expect(EN.stepDone).toContain(ack);
+    expect(h.newSpeech()).toEqual([ack]);
+    expect(h.view()).toMatchObject({ eyebrow: ack, title: COPY.helpStandingBy });
+    await click(h, PIVOT.clicks[1]);
+    expect(h.newSpeech()).toEqual([]);
+    expect(h.state().ack).toBeUndefined();
   });
 
   it("never shows a highlight unless the learner is stuck, makes a mistake, or asks", async () => {
