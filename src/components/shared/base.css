@@ -16,6 +16,9 @@
   --hd-ok: #3dd68c;
   --hd-danger: #ff6369;
   /* Tonal: the accent, softened, for helping actions. Mixed with the text colour so it reads in both themes. */
+  /* Glass: neutral fills for buttons, so colour comes only from the accent text and states. */
+  --hd-glass: rgb(var(--hd-fg-rgb) / 0.09);
+  --hd-glass-hover: rgb(var(--hd-fg-rgb) / 0.17);
   --hd-tonal: color-mix(in srgb, var(--hd-accent) 16%, transparent);
   --hd-tonal-hover: color-mix(in srgb, var(--hd-accent) 26%, transparent);
   --hd-tonal-text: color-mix(in srgb, var(--hd-accent) 72%, var(--hd-text));
@@ -44,12 +47,12 @@ body.transparent-window #root {
 }
 
 /*
- * Buttons, one palette built on the learner's accent:
- *   .btn--primary  filled accent   - the one main action (Start a Hode, Begin, Resume)
- *   .btn           tonal accent    - helping actions (Hint, Explain, Let me try)
- *   .btn--neutral  quiet grey      - housekeeping (New chat, Cancel)
- *   .icon-btn      quiet icons     - light up in the accent on hover; --danger turns red (End)
- * Meaning colours stay out of the palette except red (end) and orange (live mic, as its privacy dot).
+ * Buttons, one palette built on the learner's accent over neutral glass:
+ *   .btn--primary  filled accent             - the one main action (Start a Hode, Begin, Resume)
+ *   .btn           glass + accent text       - helping actions (Hint, Explain, Let me try)
+ *   .btn--neutral  glass + plain text        - housekeeping (New chat, Hide Hodey)
+ *   .icon-btn      glass circle, bright icon - always visible; hover brightens the glass
+ * The accent also marks "on" states (pressed). Meaning colours: red for End, orange for a live mic.
  */
 .btn {
   height: 28px;
@@ -60,23 +63,18 @@ body.transparent-window #root {
   font-size: 12px;
   font-weight: 600;
   color: var(--hd-tonal-text);
-  background: var(--hd-tonal);
+  background: var(--hd-glass);
   cursor: pointer;
   white-space: nowrap;
   transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
 
 .btn:hover {
-  background: var(--hd-tonal-hover);
+  background: var(--hd-glass-hover);
 }
 
 .btn--neutral {
   color: var(--hd-text);
-  background: rgb(var(--hd-fg-rgb) / 0.08);
-}
-
-.btn--neutral:hover {
-  background: rgb(var(--hd-fg-rgb) / 0.14);
 }
 
 .btn:active {
@@ -111,21 +109,31 @@ body.transparent-window #root {
   flex: none;
   place-items: center;
   border: 0;
-  border-radius: 8px;
-  color: var(--hd-text-2);
-  background: transparent;
+  border-radius: 50%;
+  color: var(--hd-text);
+  background: var(--hd-glass);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
 
 .icon-btn:hover {
-  color: var(--hd-tonal-text);
-  background: var(--hd-tonal);
+  background: var(--hd-glass-hover);
+}
+
+.icon-btn:active,
+.btn:active {
+  transform: scale(0.94);
+}
+
+/* "On" (the open menu, a toggled control): the accent, filled. */
+.icon-btn[aria-pressed="true"] {
+  color: var(--hd-accent-ink);
+  background: var(--hd-accent);
 }
 
 .icon-btn--danger:hover {
-  color: var(--hd-danger);
-  background: color-mix(in srgb, var(--hd-danger) 16%, transparent);
+  color: #fff;
+  background: var(--hd-danger);
 }
 
 .chip {

@@ -419,10 +419,6 @@
 
 /* ---- Settings menu ---- */
 
-.icon-btn[aria-pressed="true"] {
-  color: var(--hd-text);
-  background: rgb(255 255 255 / 0.12);
-}
 
 .dock-menu {
   display: grid;
@@ -779,15 +775,18 @@
   opacity: 0.55;
 }
 
-.mic-btn--live {
+/* Listening: solid orange, the same colour as the mic privacy dot, with a soft pulse around it. */
+.mic-btn--live,
+.mic-btn--live:hover {
   position: relative;
-  color: #ff9f0a;
+  color: #1f1300;
+  background: #ff9f0a;
 }
 
 .mic-btn--live::after {
   content: "";
   position: absolute;
-  inset: 3px;
+  inset: -3px;
   border: 1.5px solid #ff9f0a;
   border-radius: 50%;
   animation: mic-pulse 1.4s var(--hd-ease) infinite;
