@@ -6,8 +6,8 @@
  */
 
 const GIS_SCRIPT = "https://accounts.google.com/gsi/client";
-const CALLBACK_PATH = "/auth/callback";
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
+/** Must match CALLBACK_PORT and CALLBACK_PATH in src-tauri/src/account.rs. No other address ever gets a token. */
+export const DESKTOP_CALLBACK = "http://127.0.0.1:47615/auth/callback";
 const NONCE_BYTES = 32;
 const SIGN_IN_PAGE = "/signin.html";
 
@@ -20,14 +20,8 @@ export async function createNonce(): Promise<{ raw: string; hashed: string }> {
   return { raw, hashed: hex(new Uint8Array(digest)) };
 }
 
-export function isLoopbackCallback(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname) && url.pathname === CALLBACK_PATH;
-  } catch {
-    return false;
-  }
-}
+/** Exactly Hodeum's listener: another port could be some other program on this PC. */
+export const isLoopbackCallback = (value: string): boolean => value === DESKTOP_CALLBACK;
 
 export interface SignInRequest {
   redirect: string;

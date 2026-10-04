@@ -14,9 +14,12 @@ describe("google identity helpers", () => {
     expect(a.hashed).toBe([...new Uint8Array(digest)].map((x) => x.toString(16).padStart(2, "0")).join(""));
   });
 
-  it("only ever hands a token back to this PC's loopback", () => {
+  it("only ever hands a token back to Hodeum's own listener on this PC", () => {
     expect(isLoopbackCallback(LOOPBACK)).toBe(true);
-    expect(isLoopbackCallback("http://localhost:47615/auth/callback")).toBe(true);
+    expect(isLoopbackCallback("http://localhost:47615/auth/callback")).toBe(false);
+    expect(isLoopbackCallback("http://127.0.0.1:8080/auth/callback")).toBe(false);
+    expect(isLoopbackCallback("http://127.0.0.1/auth/callback")).toBe(false);
+    expect(isLoopbackCallback("http://127.0.0.1:47615/auth/callback?x=1")).toBe(false);
     expect(isLoopbackCallback("https://evil.example/auth/callback")).toBe(false);
     expect(isLoopbackCallback("http://127.0.0.1.evil.example/auth/callback")).toBe(false);
     expect(isLoopbackCallback("http://127.0.0.1:47615/steal")).toBe(false);

@@ -22,10 +22,12 @@ describe("SupabaseAuth (desktop)", () => {
   it("sends the browser to Hodeum's sign-in page and signs in with the token it returns", async () => {
     const { client, calls } = fakeClient();
     const auth = new SupabaseAuth(client, SITE);
-    const url = new URL(await auth.authorizeUrl(LOOPBACK));
+    const attempt = await auth.begin();
+    const url = new URL(attempt.url(LOOPBACK));
     expect(url.origin + url.pathname).toBe(`${SITE}/signin.html`);
     expect(url.searchParams.get("redirect")).toBe(LOOPBACK);
-    const state = url.searchParams.get("state") ?? "";
+    expect(url.searchParams.get("state")).toBe(attempt.state);
+    const state = attempt.state;
     await auth.finish({ idToken: "eyJ.a.b", state });
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ provider: "google", token: "eyJ.a.b" });
@@ -36,7 +38,7 @@ describe("SupabaseAuth (desktop)", () => {
   it("refuses a token that comes back with the wrong state", async () => {
     const { client, calls } = fakeClient();
     const auth = new SupabaseAuth(client, SITE);
-    await auth.authorizeUrl(LOOPBACK);
+    await auth.begin();
     await expect(auth.finish({ idToken: "eyJ.a.b", state: "forged" })).rejects.toThrow(/didn't match/);
     expect(calls).toEqual([]);
   });
@@ -44,7 +46,7 @@ describe("SupabaseAuth (desktop)", () => {
   it("uses each sign-in attempt once", async () => {
     const { client } = fakeClient();
     const auth = new SupabaseAuth(client, SITE);
-    const state = new URL(await auth.authorizeUrl(LOOPBACK)).searchParams.get("state") ?? "";
+    const { state } = await auth.begin();
     await auth.finish({ idToken: "eyJ.a.b", state });
     await expect(auth.finish({ idToken: "eyJ.a.b", state })).rejects.toThrow();
   });

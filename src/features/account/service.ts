@@ -1,12 +1,12 @@
 import type { Bus } from "../../lib/bus";
-import type { AccountStatus, AccountUser, GoogleCallback, SyncStatus } from "./types";
+import type { AccountStatus, AccountUser, GoogleCallback, SignInAttempt, SyncStatus } from "./types";
 
 /** Supabase Auth, narrowed to what the desktop needs. */
 export interface AuthBackend {
   user(): Promise<AccountUser | undefined>;
   onUserChange(listener: (user?: AccountUser) => void): () => void;
-  /** Hodeum's sign-in page for this attempt; the nonce and state stay here. */
-  authorizeUrl(redirectTo: string): Promise<string>;
+  /** Starts an attempt: its state (for the listener) and Hodeum's sign-in page for a redirect. The nonce stays here. */
+  begin(): Promise<SignInAttempt>;
   /** Checks the state and signs in to Supabase with Google's ID token. */
   finish(callback: GoogleCallback): Promise<void>;
   signOut(): Promise<void>;
@@ -14,8 +14,8 @@ export interface AuthBackend {
 
 /** The system browser and the one-shot callback server on 127.0.0.1 (Rust). */
 export interface Loopback {
-  /** Starts listening; returns the redirect URL to give Supabase. */
-  listen(): Promise<string>;
+  /** Starts listening for the sign-in with this state (others are ignored); returns the redirect URL. */
+  listen(state: string): Promise<string>;
   /** What the sign-in page sent back, or a rejection with its error. */
   waitForCallback(): Promise<GoogleCallback>;
   openBrowser(url: string): Promise<void>;
@@ -93,9 +93,10 @@ export class AccountService {
     const attempt = ++this.attempt;
     this.update({ phase: "signing-in", error: undefined });
     try {
-      const redirect = await loopback.listen();
+      const signIn = await backend.begin();
+      const redirect = await loopback.listen(signIn.state);
       const callback = loopback.waitForCallback();
-      await loopback.openBrowser(await backend.authorizeUrl(redirect));
+      await loopback.openBrowser(signIn.url(redirect));
       const received = await callback;
       if (attempt === this.attempt) await backend.finish(received);
     } catch (error) {

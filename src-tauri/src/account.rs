@@ -1,9 +1,11 @@
 //! Google sign-in from the desktop: a one-shot callback server on 127.0.0.1 and the system browser.
-//! The browser brings back only a PKCE authorization code; the notch window exchanges it.
+//! Hodeum's sign-in page brings back Google's ID token with the notch's state; only that state ends
+//! the wait, and the notch hands the token to Supabase.
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -14,7 +16,7 @@ use windows::core::{HSTRING, PCWSTR};
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-/// Must be listed in Supabase > Authentication > URL Configuration > Redirect URLs.
+/// Must match DESKTOP_CALLBACK in src/features/account/google-identity.ts, the only address the sign-in page sends tokens to.
 const CALLBACK_PORT: u16 = 47615;
 const CALLBACK_PATH: &str = "/auth/callback";
 const CALLBACK_EVENT: &str = "account:callback";
@@ -27,6 +29,8 @@ const MAX_REQUEST_BYTES: usize = 8 * 1024;
 const SHELL_EXECUTE_OK: isize = 32;
 
 static LISTENING: AtomicBool = AtomicBool::new(false);
+/// The state of the sign-in the notch is waiting for; a retry replaces it.
+static EXPECTED_STATE: Mutex<String> = Mutex::new(String::new());
 
 /// What Hodeum's sign-in page sends back: Google's ID token and the state the notch gave it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -43,6 +47,11 @@ pub struct Callback {
 impl Callback {
     fn failed(error: &str) -> Self {
         Self { id_token: None, state: None, error: Some(error.to_string()) }
+    }
+
+    /// Only the sign-in the notch is waiting for may end the wait; any other page hitting the port is ignored.
+    fn belongs_to(&self, expected: &str) -> bool {
+        self.state.as_deref() == Some(expected)
     }
 }
 
@@ -61,11 +70,12 @@ pub fn parse_callback(request_line: &str) -> Option<Callback> {
         return None;
     }
     let param = |name: &str| url.query_pairs().find(|(key, _)| key == name).map(|(_, value)| value.into_owned()).filter(|value| !value.is_empty());
-    if let (Some(id_token), Some(state)) = (param("id_token"), param("state")) {
-        return Some(Callback { id_token: Some(id_token), state: Some(state), error: None });
+    let state = param("state");
+    if let (Some(id_token), Some(_)) = (param("id_token"), &state) {
+        return Some(Callback { id_token: Some(id_token), state, error: None });
     }
     let error = param("error").unwrap_or_else(|| "The browser came back without a Google sign-in.".into());
-    Some(Callback::failed(&error))
+    Some(Callback { state, ..Callback::failed(&error) })
 }
 
 fn escape_html(text: &str) -> String {
@@ -113,10 +123,11 @@ fn serve(app: AppHandle, listener: TcpListener) {
         }
         match listener.accept() {
             Ok((mut stream, _)) => match read_request_line(&mut stream).map(|line| parse_callback(&line)) {
-                Ok(Some(callback)) => {
+                Ok(Some(callback)) if callback.belongs_to(&expected_state()) => {
                     respond(&mut stream, "200 OK", &page(&callback));
                     break callback;
                 }
+                Ok(Some(_)) => respond(&mut stream, "403 Forbidden", &page(&Callback::failed("This isn't the sign-in Hodeum is waiting for."))),
                 Ok(None) => respond(&mut stream, "404 Not Found", ""),
                 Err(error) => eprintln!("ignoring an unreadable request on the sign-in port: {error}"),
             },
@@ -130,9 +141,17 @@ fn serve(app: AppHandle, listener: TcpListener) {
     }
 }
 
-/// Starts the callback server (or reuses one already waiting) and returns the redirect URL.
+fn expected_state() -> String {
+    EXPECTED_STATE.lock().map(|state| state.clone()).unwrap_or_else(|poisoned| poisoned.into_inner().clone())
+}
+
+/// Starts the callback server (or reuses one already waiting) for the sign-in with this state; returns the redirect URL.
 #[tauri::command]
-pub fn auth_listen(app: AppHandle) -> Result<String, String> {
+pub fn auth_listen(app: AppHandle, state: String) -> Result<String, String> {
+    if state.is_empty() {
+        return Err("Sign-in needs a state to tell its own callback apart.".into());
+    }
+    *EXPECTED_STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = state;
     if LISTENING.swap(true, Ordering::SeqCst) {
         return Ok(redirect_url());
     }
@@ -180,9 +199,19 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_sign_in_pages_error() {
+    fn reads_the_sign_in_pages_error_with_its_state() {
         let callback = parse_callback("GET /auth/callback?error=The+user+closed+Google&state=s-1 HTTP/1.1");
-        assert_eq!(callback, Some(Callback::failed("The user closed Google")));
+        assert_eq!(callback, Some(Callback { id_token: None, state: Some("s-1".into()), error: Some("The user closed Google".into()) }));
+    }
+
+    #[test]
+    fn only_the_awaited_sign_in_ends_the_wait() {
+        let ours = parse_callback("GET /auth/callback?id_token=eyJ.a.b&state=s-1 HTTP/1.1").unwrap();
+        let forged = parse_callback("GET /auth/callback?id_token=eyJ.x.y&state=other HTTP/1.1").unwrap();
+        let stateless = parse_callback("GET /auth/callback?error=boom HTTP/1.1").unwrap();
+        assert!(ours.belongs_to("s-1"));
+        assert!(!forged.belongs_to("s-1"));
+        assert!(!stateless.belongs_to("s-1"));
     }
 
     #[test]

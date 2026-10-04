@@ -4,6 +4,12 @@ export interface GoogleCallback {
   state: string;
 }
 
+/** One desktop sign-in: the state the listener waits for, and the sign-in page to open. */
+export interface SignInAttempt {
+  state: string;
+  url(redirect: string): string;
+}
+
 export interface AccountUser {
   id: string;
   email?: string;

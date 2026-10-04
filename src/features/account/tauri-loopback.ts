@@ -21,7 +21,7 @@ export class TauriLoopback implements Loopback {
 
   constructor(private readonly deps: TauriLoopbackDeps) {}
 
-  async listen(): Promise<string> {
+  async listen(state: string): Promise<string> {
     this.callback = new Promise((resolve, reject) => {
       const off = this.deps.listen<CallbackPayload>(CALLBACK_EVENT, ({ idToken, state, error }) => {
         off();
@@ -29,7 +29,7 @@ export class TauriLoopback implements Loopback {
         else reject(new Error(error ?? "Sign-in was cancelled."));
       });
     });
-    return this.deps.invoke<string>("auth_listen");
+    return this.deps.invoke<string>("auth_listen", { state });
   }
 
   waitForCallback(): Promise<GoogleCallback> {

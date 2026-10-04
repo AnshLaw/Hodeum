@@ -18,8 +18,8 @@ class FakeBackend implements AuthBackend {
     this.listener = listener;
     return () => (this.listener = undefined);
   }
-  async authorizeUrl(redirectTo: string) {
-    return `https://hodeum.vercel.app/signin.html?redirect=${redirectTo}`;
+  async begin() {
+    return { state: "s-1", url: (redirect: string) => `https://hodeum.vercel.app/signin.html?redirect=${redirect}` };
   }
   async finish(callback: GoogleCallback) {
     if (callback.idToken === "bad") throw new Error("invalid token");
@@ -35,8 +35,10 @@ class FakeBackend implements AuthBackend {
 
 class FakeLoopback implements Loopback {
   opened: string[] = [];
+  listenedFor: string[] = [];
   constructor(private readonly outcome: { code?: string; error?: string }) {}
-  async listen() {
+  async listen(state: string) {
+    this.listenedFor.push(state);
     return REDIRECT;
   }
   async waitForCallback(): Promise<GoogleCallback> {
@@ -104,6 +106,7 @@ describe("AccountService", () => {
     bus.emit("account:sign-in", {});
     await settle();
     expect(loopback.opened[0]).toContain(encodeURI(REDIRECT));
+    expect(loopback.listenedFor).toEqual(["s-1"]);
     expect(seen.some((s) => s.phase === "signing-in")).toBe(true);
     expect(seen.at(-1)).toMatchObject({ phase: "signed-in", user: { email: "learner@example.com" }, sync: { state: "idle" } });
     expect(sessions[0].running).toBe(true);

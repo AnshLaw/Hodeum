@@ -1,7 +1,7 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createNonce, desktopSignInUrl } from "./google-identity";
 import type { AuthBackend } from "./service";
-import type { AccountUser, GoogleCallback } from "./types";
+import type { AccountUser, GoogleCallback, SignInAttempt } from "./types";
 
 const STATE_BYTES = 16;
 
@@ -37,10 +37,11 @@ export class SupabaseAuth implements AuthBackend {
     return () => data.subscription.unsubscribe();
   }
 
-  async authorizeUrl(redirectTo: string): Promise<string> {
+  async begin(): Promise<SignInAttempt> {
     const nonce = await createNonce();
-    this.attempt = { state: randomState(), rawNonce: nonce.raw };
-    return desktopSignInUrl(this.siteUrl, { redirect: redirectTo, nonceHash: nonce.hashed, state: this.attempt.state });
+    const state = randomState();
+    this.attempt = { state, rawNonce: nonce.raw };
+    return { state, url: (redirect) => desktopSignInUrl(this.siteUrl, { redirect, nonceHash: nonce.hashed, state }) };
   }
 
   async finish(callback: GoogleCallback): Promise<void> {
