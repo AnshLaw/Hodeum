@@ -20,7 +20,9 @@ pub const MAX_DOCUMENT_ELEMENTS: usize = 250;
 pub const MAX_DOCUMENT_DEPTH: usize = 25;
 /// A read must not hold up the learner's next step: past this, what was read so far is returned.
 pub const WALK_BUDGET: Duration = Duration::from_millis(400);
-const UIA_CONFIDENCE: f64 = 0.95;
+pub(super) const UIA_CONFIDENCE: f64 = 0.95;
+/// `UiElement.source` for everything read through UI Automation.
+pub(super) const UIA_SOURCE: &str = "uia";
 /// Spreadsheet cells can hold tens of thousands of nodes and are never teaching targets at this level.
 const PRUNED: [ControlType; 3] = [ControlType::DataGrid, ControlType::DataItem, ControlType::Table];
 /// Apps whose document body is the learner's own text or cells, not controls (by executable stem).
@@ -48,7 +50,7 @@ const CACHED: [UIProperty; 12] = [
     UIProperty::SelectionItemIsSelected,
 ];
 
-fn err(e: uiautomation::Error) -> String {
+pub(super) fn err(e: uiautomation::Error) -> String {
     e.to_string()
 }
 
@@ -235,6 +237,11 @@ impl UiaReader {
         Ok((walk.out, walk.handles, walk.stats))
     }
 
+    /// The client, for reads outside the learner's window (the taskbar).
+    pub fn automation(&self) -> &UIAutomation {
+        &self.automation
+    }
+
     /// Replaces the elements a press may target with this read's.
     pub fn remember(&self, seen: Seen) {
         self.seen.replace(Some(seen));
@@ -373,7 +380,7 @@ impl<'a> Walk<'a> {
     }
 }
 
-fn rect_dto(rect: &uiautomation::types::Rect) -> RectDto {
+pub(super) fn rect_dto(rect: &uiautomation::types::Rect) -> RectDto {
     RectDto { x: f64::from(rect.get_left()), y: f64::from(rect.get_top()), width: f64::from(rect.get_width()), height: f64::from(rect.get_height()) }
 }
 
@@ -414,7 +421,7 @@ fn describe(element: &UIElement, sequence: usize, container: Option<&str>) -> Op
         role: role_of(element),
         name,
         bounds: rect_dto(&rect),
-        source: "uia",
+        source: UIA_SOURCE,
         confidence: UIA_CONFIDENCE,
         selected,
         checked,

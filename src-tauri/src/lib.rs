@@ -113,6 +113,7 @@ pub fn run() {
             perception::observe,
             perception::perform_click,
             perception::capture_active_window,
+            perception::shell_targets,
             perception::window_watch::learner_window,
             phone::ocr_frame,
             phone::airplay::airplay_start,

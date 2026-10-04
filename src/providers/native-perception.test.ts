@@ -181,6 +181,16 @@ describe("NativePerception.shellTargets", () => {
     expect(invoke).toHaveBeenCalledWith("shell_targets");
   });
 
+  it("takes the native command's report as it comes (measured on the dev PC: two taskbars)", async () => {
+    const measured = JSON.parse(
+      '[{"id":"shell:start","name":"Start","role":"button","bounds":{"x":739.0,"y":1824.0,"width":91.0,"height":97.0},"source":"uia","confidence":0.95,"container":"taskbar"},' +
+        '{"id":"shell:search","name":"Search","role":"button","bounds":{"x":833.0,"y":1840.0,"width":441.0,"height":65.0},"source":"uia","confidence":0.95,"container":"taskbar"},' +
+        '{"id":"shell:start:2","name":"Start","role":"button","bounds":{"x":-2352.0,"y":2582.0,"width":91.0,"height":97.0},"source":"uia","confidence":0.95,"container":"taskbar"}]',
+    ) as unknown;
+    const perception = new NativePerception({ invoke: vi.fn(async () => measured), listen: () => () => undefined } as unknown as NativeBridge);
+    await expect(perception.shellTargets()).resolves.toEqual(measured);
+  });
+
   it("rejects a malformed report rather than pointing at something it can't place", async () => {
     const invoke = vi.fn(async () => [{ name: "Search" }]);
     const perception = new NativePerception({ invoke, listen: () => () => undefined } as unknown as NativeBridge);
