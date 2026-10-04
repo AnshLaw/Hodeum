@@ -118,3 +118,32 @@ describe("grounding later controls (local vision)", () => {
     expect(await reason({ ...INSERT_THEN([]), more_targets: undefined })).not.toHaveProperty("targets");
   });
 });
+
+describe("a step's first control beside later ones (local vision)", () => {
+  const CHECK = el("My table has headers", "check box", { bounds: { x: 100, y: 100, width: 200, height: 24 } });
+  const OK = el("OK", "button", { bounds: { x: 200, y: 200, width: 60, height: 24 } });
+  const CANCEL = el("Cancel", "button", { bounds: { x: 280, y: 200, width: 60, height: 24 } });
+  const dialog = () => ctx({ pack: undefined, step: undefined, observation: obs([CHECK, OK, CANCEL]) });
+  /** Tick the box (0, boxed in the model's 0-1000 grid), then OK (1). */
+  const TICK_THEN = (more: object[], targetLabel = "My table has headers") => ({
+    kind: "guide",
+    speech: "Tick the headers box, then click 'OK'.",
+    target_label: targetLabel,
+    target_index: 0,
+    bbox: [100, 200, 300, 248],
+    confidence: 0.95,
+    more_targets: more,
+  });
+
+  it("keeps the first control when its name is paraphrased and the speech quotes a later one", async () => {
+    const action = await reason(TICK_THEN([{ label: "OK", target_index: 1, mention: "OK" }], "Headers checkbox"), dialog());
+    expect(action.target?.elementId).toBe(CHECK.id);
+    expect(action.targets?.map((t) => t.elementId)).toEqual([OK.id]);
+  });
+
+  it("numbers no later control without a name, whatever its number or box lands on", async () => {
+    const byIndex = { label: "", target_index: 2, mention: "" };
+    const byBox = { label: " ", target_index: -1, mention: "", bbox: [280, 400, 340, 448] };
+    for (const unnamed of [byIndex, byBox]) expect(await reason(TICK_THEN([unnamed]), dialog())).not.toHaveProperty("targets");
+  });
+});

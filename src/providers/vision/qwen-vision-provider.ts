@@ -1,9 +1,9 @@
 import type { ActionTarget, Rect, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
 import type { ReasoningHooks, ReasoningProvider } from "../interfaces";
-import { agreementConfidence, quotedLabels, type Resolution } from "./grounding";
+import { agreementConfidence, type Resolution } from "./grounding";
 import { buildMessages, fromImageBox, insideFrame, selectCandidates } from "./prompt";
 import { parseVisionReply, replySchemaFor, type MoreTarget, type VisionReply } from "./schema";
-import { laterTargets, namesOf, resolveNamed, targetsField, withMention } from "./targets";
+import { firstQuotes, laterTargets, namesOf, resolveNamed, targetsField, withMention } from "./targets";
 import type { CapturedFrame, VisionConnection } from "./types";
 
 /** A slow answer is worse than the deterministic fallback; the notch shows "looking" meanwhile. */
@@ -155,9 +155,9 @@ function boxOf(bbox: number[] | undefined, frame: CapturedFrame): Rect | undefin
   return insideFrame(bounds, frame.rect) && share <= MAX_BOX_SHARE ? bounds : undefined;
 }
 
-/** The names the model gave its target: target_label, then any it quoted in its speech. */
+/** The names the model gave its target: target_label, then any it quoted in its speech for it (not for a later control). */
 function labelsOf(reply: VisionReply): string[] {
-  const labels = [reply.target_label?.trim() ?? "", ...quotedLabels(reply.speech)].filter((label) => label !== "");
+  const labels = [reply.target_label?.trim() ?? "", ...firstQuotes(reply.speech, reply.more_targets)].filter((label) => label !== "");
   return [...new Set(labels)];
 }
 

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HOME_SELECTED, INSERT_BOUNDS, PACK, annotation, el, obs } from "../../features/hode/test-fixtures";
 import type { TeachingContext } from "../../lib/types";
 import { CloudSkipped } from "./gated";
-import { CONTENT_PLACEHOLDER, GeminiReasoningProvider, STUCK_NOTE, MAX_GEMINI_ELEMENTS, buildGeminiRequest } from "./gemini-reasoner";
+import { CONTENT_PLACEHOLDER, GeminiReasoningProvider, STUCK_NOTE, MAX_GEMINI_ELEMENTS, buildGeminiRequest, toGeminiAction } from "./gemini-reasoner";
+import type { VisionReply } from "../vision/schema";
 
 const ctx = (overrides: Partial<TeachingContext> = {}): TeachingContext => ({
   goal: "make a pivot table",
@@ -242,6 +243,21 @@ describe("later controls from Gemini", () => {
     ];
     const action = await reason({ ...INSERT_THEN_DATA, more_targets: more });
     expect(action.targets?.map((t) => t.elementId)).toEqual(["tab item:Data"]);
+  });
+
+  it("drops a later control with no name at all, though its number is on the list", async () => {
+    const action = await reason({ ...INSERT_THEN_DATA, more_targets: [{ label: "", target_index: 2, mention: "" }] });
+    expect(action).not.toHaveProperty("targets");
+  });
+
+  it("keeps the first control when its name is paraphrased and the speech quotes a later one", () => {
+    const check = el("My table has headers", "check box", { bounds: { x: 100, y: 100, width: 200, height: 24 } });
+    const ok = el("OK", "button", { bounds: { x: 200, y: 200, width: 60, height: 24 } });
+    const more = [{ label: "OK", target_index: 1, mention: "OK" }];
+    const reply: VisionReply = { kind: "guide", speech: "Tick the headers box, then click 'OK'.", target_label: "Headers checkbox", target_index: 0, confidence: 0.9, more_targets: more };
+    const action = toGeminiAction(reply, [check, ok], ctx({ observation: obs([check, ok]) }));
+    expect(action.target?.elementId).toBe(check.id);
+    expect(action.targets?.map((t) => t.elementId)).toEqual([ok.id]);
   });
 
   it("drops a later control its own name contradicts", async () => {
