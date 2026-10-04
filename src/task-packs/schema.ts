@@ -47,6 +47,7 @@ const packSchema = z
     launch: z.object({ exe: z.string().min(1), sample: z.string().min(1).optional() }).strict().optional(),
     surface: z.enum(["windows", "phone"]).optional(),
     goalPhrases: names,
+    notFor: names.optional(),
     prerequisites: z.array(z.string().min(1)),
     concept: z.string().min(1).optional(),
     steps: z.array(stepSchema).min(1),

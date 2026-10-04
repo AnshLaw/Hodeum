@@ -1,9 +1,22 @@
 import type { TaskPack } from "../lib/types";
 
-const MATCH_THRESHOLD = 0.6;
+/** A pack must own at least this share of the goal's words (beyond filler and app names). */
+const MIN_COVERAGE = 0.5;
+/** Shorter English words keep a final "s" ("bus", "ms"); longer ones lose a plural one. */
+const MIN_PLURAL_LENGTH = 4;
 
 /** Devanagari's nukta (ज़ vs ज): speech recognition writes it inconsistently, so it's ignored. */
-const NUKTA = /\u093C/g;
+const NUKTA = /़/g;
+
+/** Words that carry no task (requests, filler, pronouns) in English, Roman Hinglish and Hindi. */
+const FILLER = new Set([
+  ..."a an the in on of to for into from with by at my me i you your how do does can could would please teach show help learn want need make create these this that those some it its is are be using use way what so just let lets now then about and or all get new".split(" "),
+  ..."mujhe muje mujhko ye yeh ko ka ki ke kaise banana banao banaye banaiye sikhao sikha sikhaiye karo karna kar karte mein hai ho kya aur ek mera meri mere".split(" "),
+  ..."मुझे मुझको ये यह को का की के कैसे बनाना बनाओ बनाइए सिखाओ सिखाइए करो करना कीजिए में है हैं और एक मेरे मेरी मेरा इन इस".split(" "),
+]);
+
+/** App and device names: they say where a task happens, so they never count against a pack. */
+const APP_WORDS = new Set("excel spreadsheet explorer windows iphone phone powerpoint word outlook notepad chrome edge laptop pc computer app microsoft एक्सेल एक्सप्लोरर आईफोन फोन विंडोज".split(" "));
 
 function tokens(text: string): string[] {
   return text
@@ -15,23 +28,44 @@ function tokens(text: string): string[] {
     .filter(Boolean);
 }
 
-/** Fraction of the phrase's words that appear in the goal. */
-export function goalScore(goal: string, phrase: string): number {
-  const goalTokens = new Set(tokens(goal));
-  const phraseTokens = tokens(phrase);
-  if (phraseTokens.length === 0) return 0;
-  return phraseTokens.filter((t) => goalTokens.has(t)).length / phraseTokens.length;
+/** One form per word: "files" → "file", "फाइलें" → "फाइल". */
+function stem(word: string): string {
+  if (/^[a-z]+$/.test(word)) return word.length >= MIN_PLURAL_LENGTH && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
+  return word.replace(/(?:ें|ों)$/u, "");
 }
 
+/** The words of a goal or phrase that say what the task is. */
+const taskWords = (text: string): string[] => tokens(text).filter((word) => !FILLER.has(word)).map(stem);
+
+interface Fit {
+  pack: TaskPack;
+  coverage: number;
+  /** Words in the longest goal phrase the goal contains in full. */
+  phrase: number;
+}
+
+/**
+ * How well a pack fits a goal: it must contain one of the pack's phrases in full, own at least half of
+ * the goal's other words, not be about another app the goal names, and not be a task the pack rules out.
+ */
+function fit(words: string[], app: string | undefined, pack: TaskPack): Fit | undefined {
+  if (app !== undefined && app !== pack.app) return undefined;
+  if (pack.notFor?.some((word) => words.includes(stem(word.toLowerCase())))) return undefined;
+  const phrases = pack.goalPhrases.map(taskWords).filter((phrase) => phrase.length > 0);
+  const contained = phrases.filter((phrase) => phrase.every((word) => words.includes(word)));
+  if (contained.length === 0) return undefined;
+  const vocabulary = new Set(phrases.flat());
+  const counted = words.filter((word) => vocabulary.has(word) || !APP_WORDS.has(word));
+  const coverage = counted.filter((word) => vocabulary.has(word)).length / counted.length;
+  return coverage >= MIN_COVERAGE ? { pack, coverage, phrase: Math.max(...contained.map((phrase) => phrase.length)) } : undefined;
+}
+
+/** The pack a goal asks for, or undefined: a goal that only shares a word or two with a pack isn't its lesson. */
 export function matchGoal(goal: string, packs: TaskPack[]): TaskPack | undefined {
-  let best: { pack: TaskPack; score: number } | undefined;
-  for (const pack of packs) {
-    for (const phrase of pack.goalPhrases) {
-      const score = goalScore(goal, phrase);
-      if (score >= MATCH_THRESHOLD && (!best || score > best.score)) best = { pack, score };
-    }
-  }
-  return best?.pack;
+  const words = [...new Set(taskWords(goal))];
+  const app = appFromGoal(goal);
+  const fits = packs.map((pack) => fit(words, app, pack)).filter((f): f is Fit => f !== undefined);
+  return fits.sort((a, b) => b.coverage - a.coverage || b.phrase - a.phrase)[0]?.pack;
 }
 
 /**

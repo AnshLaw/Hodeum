@@ -79,6 +79,29 @@ describe("matchGoal", () => {
   it("returns undefined for an unrelated goal", () => {
     expect(matchGoal("write a poem", TASK_PACKS)).toBeUndefined();
   });
+
+  it.each([
+    ["ye files zip karo", "windows-zip"],
+    ["ये फाइलें जिप करो", "windows-zip"],
+    ["make a zip of my photos", "windows-zip"],
+    ["summarize my sales data in excel", "excel-pivot"],
+    ["create a pivot table", "excel-pivot"],
+  ])("still matches %j to %s", (goal, id) => {
+    expect(matchGoal(goal, TASK_PACKS)?.id).toBe(id);
+  });
+
+  // Each of these used to start the wrong lesson; with no pack they go to an open-ended Hode instead.
+  it.each([
+    "make a chart in excel",
+    "make a table of contents in word",
+    "sort data in excel",
+    "filter my data in excel",
+    "compress pictures in powerpoint",
+    "open a zip file",
+    "sort by zip code",
+  ])("starts no lesson for %j, which only shares a word or two with one", (goal) => {
+    expect(matchGoal(goal, TASK_PACKS)).toBeUndefined();
+  });
 });
 
 describe("appFromGoal", () => {

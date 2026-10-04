@@ -125,6 +125,8 @@ export interface TaskPack {
   /** Defaults to "windows". Phone packs are taught on the mirrored iPhone, read by OCR. */
   surface?: Surface;
   goalPhrases: string[];
+  /** Words that make a goal a different task though it shares this pack's words ("open" a zip isn't zipping). */
+  notFor?: string[];
   prerequisites: string[];
   /** Teach mode's opening: what the learner is about to make and why it's worth knowing, in a sentence or two. */
   concept?: string;
