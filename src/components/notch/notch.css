@@ -73,11 +73,12 @@
   }
 }
 
+/* The same light as the highlight's beam: companion hue into the accent, white-hot at the head. */
 .notch__orb-ring {
   position: absolute;
   inset: 3px;
   border-radius: 50%;
-  background: conic-gradient(from 0turn, transparent 0 58%, var(--hd-accent));
+  background: conic-gradient(from 0turn, transparent 0 40%, var(--hd-beam) 72%, var(--hd-accent) 92%, var(--hd-beam-core));
   mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
   animation: orb-sweep 1.1s linear infinite;
 }
@@ -195,7 +196,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 30%;
-  background: var(--hd-accent);
+  background: linear-gradient(90deg, transparent, var(--hd-beam), var(--hd-accent), var(--hd-beam-core));
   animation: notch-scan 1.3s var(--hd-ease) infinite;
 }
 
@@ -209,8 +210,35 @@
 }
 
 .notch__content {
+  position: relative;
   padding: 0 16px 14px;
   animation: notch-content-in 240ms var(--hd-ease) 90ms both;
+}
+
+/* Each new instruction sends one sweep of light along the card's lower edge. */
+.notch__rim {
+  position: absolute;
+  right: 22px;
+  bottom: 0;
+  left: 22px;
+  height: 1.5px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.notch__rim::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--hd-beam) 30%, var(--hd-accent) 62%, var(--hd-beam-core) 88%, transparent);
+  transform: translateX(-100%);
+  animation: notch-rim 1100ms var(--hd-ease) 140ms both;
+}
+
+@keyframes notch-rim {
+  to {
+    transform: translateX(100%);
+  }
 }
 
 @keyframes notch-content-in {
@@ -256,11 +284,42 @@
   animation: hd-fade-in 200ms ease both;
 }
 
+/* Narrow surfaces (the side dock, the iPhone panel) wrap the toolbar onto its own line. */
 .notch__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px 6px;
   margin-top: 12px;
+  animation: notch-swap 320ms var(--hd-ease) 80ms both;
+}
+
+/* Hodey's tools, then pause and end, in one capsule: the row reads as words first, then tools. */
+.notch__tools {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 2px;
+  border-radius: 15px;
+  background: var(--hd-glass);
+}
+
+/* Out-ranks the shared .icon-btn whatever order the stylesheets load in (dev and release builds
+   differ); the background steps aside while hovered or pressed, so those shared states still show. */
+.notch__tools .icon-btn {
+  width: 26px;
+  height: 26px;
+}
+
+.notch__tools .icon-btn:not(:hover, [aria-pressed="true"]) {
+  background: transparent;
+}
+
+.notch__tools-divider {
+  width: 1px;
+  height: 14px;
+  margin: 0 3px;
+  background: var(--hd-line);
 }
 
 .notch__inline-actions {
@@ -315,20 +374,35 @@
   gap: 3px;
 }
 
+/* Progress: the next dash wipes in as a step begins, and a finished one warms to the accent. */
 .step-dots i {
+  position: relative;
   width: 14px;
   height: 3px;
+  overflow: hidden;
   border-radius: 2px;
   background: rgb(255 255 255 / 0.16);
-  transition: background 240ms ease;
 }
 
-.step-dots i[data-state="done"] {
-  background: var(--hd-accent);
-}
-
-.step-dots i[data-state="current"] {
+.step-dots i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   background: rgb(255 255 255 / 0.62);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition:
+    transform 560ms var(--hd-ease) 120ms,
+    background 320ms ease;
+}
+
+.step-dots i:is([data-state="done"], [data-state="current"])::after {
+  transform: scaleX(1);
+}
+
+.step-dots i[data-state="done"]::after {
+  background: var(--hd-accent);
 }
 
 .skill-chips {
@@ -987,15 +1061,11 @@
 .phone-panel__screen { position: relative; height: 500px; aspect-ratio: 9 / 19.5; border-radius: 28px; overflow: hidden; background: var(--hd-black); transition: width 520ms var(--hd-spring), height 520ms var(--hd-spring); }
 .phone-panel__canvas, .phone-panel__canvas canvas { display: block; width: 100%; height: 100%; }
 .phone-panel__marks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.phone-mark { fill: none; stroke: var(--hd-accent); stroke-width: 3; vector-effect: non-scaling-stroke; }
-.phone-mark--broad { stroke-dasharray: 7 5; }
 .phone-panel__card { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; padding: 16px; text-align: center; color: var(--hd-text); }
 .phone-panel__hint { opacity: 0.7; font-size: 12px; }
 .phone-panel__side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .phone-panel__bar { display: flex; align-items: center; gap: 8px; }
 .phone-panel__bar select { min-width: 0; flex: 1; }
-/* The guidance column is narrower than the guidance card; its controls wrap rather than clip. */
-.phone-panel__side .notch__actions { flex-wrap: wrap; }
 .phone-panel--stacked { grid-template-columns: 1fr; justify-items: center; padding: 4px 0 8px; }
 .phone-panel--stacked .phone-panel__screen { height: 420px; }
 .phone-panel--stacked .phone-panel__side { width: 100%; }

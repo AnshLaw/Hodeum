@@ -4,7 +4,7 @@ import type { SpeechInputStatus } from "../../providers/speech/speech-input";
 import { COPY } from "../../lib/copy";
 import { HodeyFace } from "../hodey/HodeyFace";
 import type { HodeyMood } from "../hodey/mood";
-import { CheckIcon, CloseIcon, CrosshairIcon, ExpandIcon, EyeIcon, IconButton, MicIcon, MoreIcon, MutedIcon, PauseIcon, RepeatIcon, VolumeIcon } from "../shared/icons";
+import { CheckIcon, CloseIcon, CrosshairIcon, ExpandIcon, EyeIcon, IconButton, ListIcon, MicIcon, MoreIcon, MutedIcon, PauseIcon, RepeatIcon, VolumeIcon } from "../shared/icons";
 import { providerBadge, type NotchControl, type NotchView, type StepItem } from "./notch-view";
 import { useEnhanced } from "./cloud-context";
 
@@ -44,14 +44,53 @@ function iconFor(control: NotchControl): ReactNode {
       return <RepeatIcon />;
     case "look_again":
       return <EyeIcon />;
+    case "all_steps":
+      return <ListIcon />;
     default:
       return null;
   }
 }
 
+/** Icon controls that run the Hode itself: the card's toolbar sets them apart at its end. */
+const SESSION = new Set<NotchControl>(["pause", "end"]);
+/** Icon controls that switch something on and off, so they show when they're on. */
+const TOGGLES = new Set<NotchControl>(["all_steps"]);
+
 type OnControl = (control: NotchControl) => void;
 
-export function ControlButtons({ controls, hintLabel, onControl, spread = false }: { controls: NotchControl[]; hintLabel?: string; onControl: OnControl; spread?: boolean }) {
+function ToolButton({ control, active, onControl }: { control: NotchControl; active: NotchControl[]; onControl: OnControl }) {
+  return (
+    <IconButton label={LABELS[control]} danger={control === "end"} pressed={TOGGLES.has(control) ? active.includes(control) : undefined} onClick={() => onControl(control)}>
+      {iconFor(control)}
+    </IconButton>
+  );
+}
+
+/** The card's icon controls as one toolbar: Hodey's helping tools, then pause and end. */
+function Toolbar({ controls, active, onControl }: { controls: NotchControl[]; active: NotchControl[]; onControl: OnControl }) {
+  const tools = controls.filter((c) => !SESSION.has(c));
+  const session = controls.filter((c) => SESSION.has(c));
+  const button = (c: NotchControl) => <ToolButton key={c} control={c} active={active} onControl={onControl} />;
+  return (
+    <span className="notch__tools">
+      {tools.map(button)}
+      {tools.length > 0 && session.length > 0 && <span className="notch__tools-divider" aria-hidden="true" />}
+      {session.map(button)}
+    </span>
+  );
+}
+
+interface ControlButtonsProps {
+  controls: NotchControl[];
+  hintLabel?: string;
+  onControl: OnControl;
+  /** The card's full row (words, then a toolbar of icons) rather than the bar's inline buttons. */
+  spread?: boolean;
+  /** Toggles that are on right now, such as the step list while it shows. */
+  active?: NotchControl[];
+}
+
+export function ControlButtons({ controls, hintLabel, onControl, spread = false, active = [] }: ControlButtonsProps) {
   const textControls = controls.filter((c) => iconFor(c) === null);
   const iconControls = controls.filter((c) => iconFor(c) !== null);
   return (
@@ -62,11 +101,8 @@ export function ControlButtons({ controls, hintLabel, onControl, spread = false 
         </button>
       ))}
       {spread && iconControls.length > 0 && <span className="notch__spacer" />}
-      {iconControls.map((c) => (
-        <IconButton key={c} label={LABELS[c]} danger={c === "end"} onClick={() => onControl(c)}>
-          {iconFor(c)}
-        </IconButton>
-      ))}
+      {spread && iconControls.length > 0 && <Toolbar controls={iconControls} active={active} onControl={onControl} />}
+      {!spread && iconControls.map((c) => <ToolButton key={c} control={c} active={active} onControl={onControl} />)}
     </div>
   );
 }
@@ -206,7 +242,8 @@ export function NotchBar(props: BarProps) {
       {view.mode === "idle" && !menuOpen && <IdleActions onControl={onControl} />}
       {showInline && <ControlButtons controls={view.controls} onControl={onControl} />}
       <MicButton status={props.micStatus} onToggle={props.onToggleMic} />
-      {view.mode !== "idle" && (
+      {/* Nothing is spoken while the learner marks a spot, and the bar needs the room for its title. */}
+      {view.mode !== "idle" && view.mode !== "annotate" && (
         <IconButton label={muted ? COPY.unmute : COPY.mute} onClick={onToggleMute}>
           {muted ? <MutedIcon /> : <VolumeIcon />}
         </IconButton>
@@ -225,12 +262,24 @@ export function NotchBar(props: BarProps) {
   );
 }
 
-/** `extra` replaces the plain skill chips, e.g. the success card's skill progress. */
-export function NotchContent({ view, expanded, fallbackDetail, onControl, extra }: { view: NotchView; expanded: boolean; fallbackDetail?: string; onControl: OnControl; extra?: ReactNode }) {
+interface NotchContentProps {
+  view: NotchView;
+  expanded: boolean;
+  fallbackDetail?: string;
+  onControl: OnControl;
+  /** Replaces the plain skill chips, e.g. the success card's skill progress. */
+  extra?: ReactNode;
+  /** Toggles that are on; by default, the step list while the view carries it. */
+  active?: NotchControl[];
+}
+
+export function NotchContent({ view, expanded, fallbackDetail, onControl, extra, active = view.steps ? ["all_steps"] : [] }: NotchContentProps) {
   const detail = view.detail ?? (view.mode === "idle" ? fallbackDetail : undefined);
   if (!expanded) return detail ? <p className="notch__subline">{detail}</p> : null;
   return (
     <div className="notch__content">
+      {/* A sweep of light along the card's edge marks each new instruction, in step with the highlight's beam. */}
+      <span key={`rim:${view.title}`} className="notch__rim" aria-hidden="true" />
       {/* Keyed by text so each new instruction animates in instead of swapping silently. */}
       <p key={view.title} className="notch__title">
         {view.mode === "success" && <CheckIcon />}
@@ -243,7 +292,7 @@ export function NotchContent({ view, expanded, fallbackDetail, onControl, extra 
       )}
       {extra ?? (view.skills && <SkillChips skills={view.skills} />)}
       {view.steps && <StepList steps={view.steps} />}
-      {view.controls.length > 0 && <ControlButtons controls={view.controls} hintLabel={view.hintLabel} onControl={onControl} spread />}
+      {view.controls.length > 0 && <ControlButtons controls={view.controls} hintLabel={view.hintLabel} onControl={onControl} spread active={active} />}
     </div>
   );
 }

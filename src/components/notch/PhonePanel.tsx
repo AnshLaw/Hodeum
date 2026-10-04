@@ -6,6 +6,7 @@ import { listCameras, type CameraInfo } from "../../features/phone/camera-source
 import type { PhoneMirror } from "../../features/phone/phone-mirror";
 import type { PhoneSourceKind, PhoneSourceStatus } from "../../features/phone/phone-source";
 import { loadPhonePrefs, savePhonePrefs } from "../../features/phone/prefs";
+import { BeamRing } from "../overlay/BeamRing";
 import { markRect } from "./phone-layout";
 
 /** Highlight corner radius in CSS px of the drawn screen. */
@@ -37,14 +38,17 @@ function usePhonePrimitives(bus: Bus): OverlayPrimitive[] {
   return primitives;
 }
 
+const keyOf = (r: Rect) => [r.x, r.y, r.width, r.height].map(Math.round).join(",");
+
 /** Hodey's highlights, mapped from frame pixels onto the screen as drawn (it scales with the notch). */
 function Highlights({ primitives, toFrame, frame, display }: { primitives: OverlayPrimitive[]; toFrame: (bounds: Rect) => Rect; frame: Size; display: Size }) {
   return (
     <svg className="phone-panel__marks" viewBox={`0 0 ${display.width} ${display.height}`} preserveAspectRatio="none" aria-hidden="true">
-      {primitives.map((p, i) => {
+      {primitives.map((p) => {
         if (p.kind !== "highlight") return null;
         const box = markRect(toFrame(p.bounds), frame, display);
-        return <rect key={i} className={`phone-mark phone-mark--${p.emphasis}`} x={box.x} y={box.y} width={box.width} height={box.height} rx={MARK_RADIUS} />;
+        // Keyed by position, so the ring glides from one control on the phone to the next.
+        return <BeamRing key={keyOf(box)} ring={box} radius={MARK_RADIUS} emphasis={p.emphasis} channel="phone" />;
       })}
     </svg>
   );

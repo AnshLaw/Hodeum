@@ -1,0 +1,150 @@
+/*
+ * Hodey's highlight: a ring of light with a comet circling it, the accent fading into its companion
+ * hue (--hd-beam) behind a white-hot head. The near-black outline keeps it legible on white apps.
+ * Timing comes from BeamRing.tsx: --beam-arrive (ring in place), --comet-start, --beam-lap (one orbit).
+ */
+.beam-ring rect {
+  fill: none;
+}
+
+.beam-ring__tint-from {
+  stop-color: var(--hd-accent);
+}
+
+.beam-ring__tint-to {
+  stop-color: var(--hd-beam);
+}
+
+/* A soft aura that breathes once the ring is in place. */
+.beam-ring__glow {
+  stroke-width: 8;
+  filter: blur(5px);
+  opacity: 0;
+  animation: beam-breathe 2.8s ease-in-out var(--beam-arrive) infinite alternate;
+}
+
+@keyframes beam-breathe {
+  from {
+    opacity: 0.18;
+  }
+  to {
+    opacity: 0.44;
+  }
+}
+
+/* Wider than the comet's head, so even a white-hot head keeps a dark edge on white apps. */
+.beam-ring__outline {
+  stroke: var(--hd-outline);
+  stroke-width: 6.5;
+  stroke-opacity: 0.75;
+}
+
+.beam-ring__line {
+  stroke-width: 2.5;
+}
+
+/* Lock-on: the ring draws itself clockwise from the top-left corner, where the comet then takes over. */
+.beam-ring--trace :is(.beam-ring__outline, .beam-ring__line) {
+  stroke-dasharray: var(--beam-perimeter);
+  animation: beam-trace var(--beam-arrive) cubic-bezier(0.45, 0, 0.25, 1) both;
+}
+
+@keyframes beam-trace {
+  from {
+    stroke-dashoffset: var(--beam-perimeter);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.beam-ring--fade :is(.beam-ring__outline, .beam-ring__line) {
+  animation: hd-fade-in 320ms ease both;
+}
+
+/* Broad (Hodey is less sure exactly where): dashed, softer, and the comet slower and slimmer. */
+.beam-ring--broad .beam-ring__line {
+  stroke-dasharray: 7 5;
+}
+
+.beam-ring--broad .beam-ring__outline {
+  stroke-opacity: 0.5;
+}
+
+.beam-ring--broad .beam-ring__comet rect {
+  stroke-width: 2.5;
+}
+
+/* One ping outward as the ring locks on; grows by the same distance on every side (pulseScale). */
+.beam-ring__ping {
+  stroke: var(--hd-accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: beam-ping 900ms var(--hd-ease) var(--beam-arrive) both;
+}
+
+@keyframes beam-ping {
+  0% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  10% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(var(--ping-sx, 1), var(--ping-sy, 1));
+  }
+}
+
+/* The comet: three strokes that end at the same point, so it brightens toward its head. */
+.beam-ring__comet {
+  filter: drop-shadow(0 0 4px var(--hd-accent)) drop-shadow(0 0 12px var(--hd-beam));
+  animation: hd-fade-in 360ms ease var(--comet-start) both;
+}
+
+.beam-ring__comet rect {
+  stroke-linecap: round;
+  stroke-dasharray: var(--comet-len) var(--comet-gap);
+  animation: beam-orbit var(--beam-lap) linear var(--comet-start) infinite;
+}
+
+@keyframes beam-orbit {
+  from {
+    stroke-dashoffset: var(--comet-len);
+  }
+  to {
+    stroke-dashoffset: var(--comet-end);
+  }
+}
+
+.beam-ring__tail {
+  stroke: var(--hd-beam);
+  stroke-width: 3;
+  stroke-opacity: 0.85;
+}
+
+.beam-ring__body {
+  stroke: var(--hd-accent);
+  stroke-width: 3.5;
+}
+
+.beam-ring__head {
+  stroke: var(--hd-beam-core);
+  stroke-width: 4.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beam-ring__comet,
+  .beam-ring__ping {
+    display: none;
+  }
+
+  .beam-ring__glow {
+    animation: none;
+    opacity: 0.5;
+  }
+}

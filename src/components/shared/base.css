@@ -12,6 +12,9 @@
   --hd-accent: #ffb224;
   --hd-accent-hover: #ffc457;
   --hd-accent-ink: #1f1300;
+  /* The highlight beam: the accent's companion hue (set per accent in appearance.ts) and a white-hot core. */
+  --hd-beam: #ff5fa2;
+  --hd-beam-core: color-mix(in oklch, var(--hd-accent) 55%, #fff);
   --hd-outline: #141414;
   --hd-ok: #3dd68c;
   --hd-danger: #ff6369;
