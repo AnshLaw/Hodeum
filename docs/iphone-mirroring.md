@@ -36,11 +36,13 @@ Hodey crops the phone out of the card's 16:9 picture automatically. Streaming ap
    pacman -S mingw-w64-ucrt-x86_64-uxplay
    ```
    If that package isn't available, build UxPlay with the Windows instructions in its README, including the GStreamer plugins (base, good, bad, libav).
-2. Link it into Hodeum. From the Hodeum folder in PowerShell:
+2. Point Hodeum at it. From the Hodeum folder in PowerShell:
    ```powershell
    cmd /c mklink /J runtime\uxplay C:\msys64\ucrt64\bin
    ```
-   Hodeum deliberately won't run programs straight from `C:\msys64`, because other users of the PC can write there. The link is your explicit choice to trust that copy.
+   Hodeum only runs a receiver you put in its own `runtime\uxplay` folder; it never searches other folders on its own.
+   The link above makes that folder the MSYS2 folder, so you are trusting `C:\msys64` itself. By default, other accounts on the PC can write there.
+   On a PC only you use, that's fine. On a shared PC, either restrict `C:\msys64` to administrators, or copy `uxplay.exe` with its DLLs and GStreamer plugins into a folder only you can write to, and link that instead.
 3. Windows Firewall: allow `uxplay.exe` on **Private** networks when Windows asks. If you set rules by hand, open:
    - TCP 7000, 7001, 7100
    - UDP 6000, 6001, 7011, 5353
