@@ -51,12 +51,23 @@ export interface UiElement {
   selected?: boolean;
 }
 
+/**
+ * What the learner just did, from the native input hook: where they clicked (physical screen pixels)
+ * and undo/back shortcuts. Only these are reported; nothing typed is ever recorded.
+ */
+export type LearnerInput =
+  | { kind: "click"; at: Point; button: "left" | "right" }
+  | { kind: "undo" }
+  | { kind: "back" };
+
 export interface ScreenObservation {
   app: string;
   windowTitle: string;
   elements: UiElement[];
   at: number;
   tone?: ScreenTone;
+  /** The learner input this read follows, oldest first (learner-action reads only). */
+  inputs?: LearnerInput[];
 }
 
 export type StateSignal =

@@ -146,6 +146,7 @@ describe("Hinglish speech", () => {
     }
     const say = spoken("hinglish");
     lines.push(say.clarify, ...say.acks, say.needVisionToAnswer, say.noPack, say.hodeCompleteSpeech, say.nothingMarked, say.neededForThisStep);
+    lines.push(say.repeatedClick("Data"), say.menuLoop("Insert"), say.undoLoop, say.surpriseDialog("Excel"), say.targetMissing("Insert"));
     expect(lines.flatMap(latinLeft)).toEqual([]);
   });
 });

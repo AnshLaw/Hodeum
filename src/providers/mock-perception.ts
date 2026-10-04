@@ -1,5 +1,5 @@
 import { intersects } from "../lib/coords";
-import type { Rect, ScreenObservation, ScreenTone, UiElement } from "../lib/types";
+import type { LearnerInput, Rect, ScreenObservation, ScreenTone, UiElement } from "../lib/types";
 import type { PerceptionAdapter } from "./interfaces";
 
 export type MouseButton = "left" | "right";
@@ -48,9 +48,10 @@ export class MockPerception implements PerceptionAdapter {
     };
   }
 
-  /** Call after the learner interacts with the mock app. */
-  notifyLearnerAction(): void {
-    const observation = this.snapshot();
+  /** Call after the learner interacts with the mock app, with what they did (as the native hook reports it). */
+  notifyLearnerAction(inputs: LearnerInput[] = []): void {
+    const snapshot = this.snapshot();
+    const observation = inputs.length > 0 ? { ...snapshot, inputs } : snapshot;
     this.handlers.forEach((handler) => handler(observation));
   }
 

@@ -27,6 +27,7 @@ const LOANWORDS: [string, string][] = [
   ["pointer", "पॉइंटर"], ["second", "सेकंड"], ["okay", "ओके"], ["switch", "स्विच"], ["answer", "आंसर"], ["local", "लोकल"],
   ["vision", "विज़न"], ["model", "मॉडल"], ["ready", "रेडी"], ["point", "पॉइंट"], ["Ask", "आस्क"], ["sure", "श्योर"], ["complete", "कम्प्लीट"],
   ["to", "टू"], ["help", "हेल्प"], ["mode", "मोड"], ["stop", "स्टॉप"], ["done", "डन"],
+  ["try", "ट्राई"], ["close", "क्लोज़"],
   ["iPhone", "आईफ़ोन"], ["phone", "फ़ोन"], ["tap", "टैप"], ["Display", "डिस्प्ले"], ["Brightness", "ब्राइटनेस"], ["Appearance", "अपीयरेंस"],
   ["Dark", "डार्क"], ["Light", "लाइट"], ["Wallpaper", "वॉलपेपर"], ["Text", "टेक्स्ट"], ["Size", "साइज़"], ["mirror", "मिरर"],
   ["mirroring", "मिररिंग"], ["Show", "शो"], ["connect", "कनेक्ट"], ["start", "स्टार्ट"], ["on", "ऑन"], ["grey", "ग्रे"], ["gear", "गियर"],

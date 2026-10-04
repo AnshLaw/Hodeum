@@ -45,6 +45,19 @@ describe("routeUtterance", () => {
     expect(route(guiding, "show me all the steps")).toEqual([{ type: "SHOW_ALL_STEPS" }]);
   });
 
+  it("hears 'where is it?' and 'I don't see it' as being stuck, in any language, not as a pause", () => {
+    const stuck = [{ type: "SAID_STUCK" }];
+    for (const said of ["where?", "Where is it?", "I don't see it", "I can't find it", "I can't see it anywhere", "where is that"]) {
+      expect(route(guiding, said), said).toEqual(stuck);
+    }
+    for (const said of ["कहाँ है", "कहां है?", "नहीं दिख रहा", "मुझे दिख नहीं रहा", "नहीं मिल रहा है", "kahan hai", "dikh nahi raha", "mujhe nahi dikh raha", "kidhar hai"]) {
+      expect(route(guiding, said), said).toEqual(stuck);
+    }
+    expect(route(guiding, "wait")).toEqual([{ type: "PAUSE" }]);
+    expect(route(guiding, "hold on")).toEqual([{ type: "PAUSE" }]);
+    expect(route(guiding, "where is the insert tab")).toEqual([{ type: "VOICE_QUESTION", question: "where is the insert tab" }]);
+  });
+
   it("asks anything else as a question, mid-Hode", () => {
     expect(route(guiding, "where is the insert tab")).toEqual([{ type: "VOICE_QUESTION", question: "where is the insert tab" }]);
   });

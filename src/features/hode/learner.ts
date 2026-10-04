@@ -1,5 +1,5 @@
 import { spoken } from "../../lib/spoken";
-import { ASSISTANCE_LEVELS, type StepOutcome, type TaskStep } from "../../lib/types";
+import { ASSISTANCE_LEVELS, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
 import { beginStep, inWrongApp, requestReason, waitForApp } from "./flow";
 import {
   MAX_WRONG_ACTIONS,
@@ -15,8 +15,11 @@ import {
 } from "./model";
 import { escalate } from "./policy";
 import { becameTrue, evaluateSignal } from "./signals";
+import { detectStuck, remember, stillShowing, type StuckSignal } from "./stuck";
 
 const CANCEL_TIMER: HodeEffect = { type: "cancelStuckTimer" };
+/** The top of the ladder: past it, Hodey explains why and restates the step (PRD §7). */
+const MOST_HELP = ASSISTANCE_LEVELS[0];
 
 function escalateState(s: HodeState, options: { correction?: string; countsAsMistake: boolean }): HodeState {
   return {
@@ -27,6 +30,72 @@ function escalateState(s: HodeState, options: { correction?: string; countsAsMis
     correction: options.correction,
     wrongActions: 0,
   };
+}
+
+/** One rung up the PRD ladder; already at the top, a short explanation and a reset of the step. */
+function raiseHelp(s: HodeState, options: { correction?: string; countsAsMistake: boolean; stuck?: StuckSignal }): HodeState {
+  const step = currentStep(s);
+  const atTop = s.level === MOST_HELP && step !== undefined;
+  const reset = atTop ? [options.correction ?? step.explain, options.correction ? step.explain : step.speech.demonstrate].join(" ") : undefined;
+  const raised = escalateState(s, { correction: reset ?? options.correction, countsAsMistake: options.countsAsMistake });
+  return { ...raised, stuck: options.stuck ?? s.stuck };
+}
+
+function stuckLine(s: HodeState, signal: StuckSignal): string | undefined {
+  const words = spoken(s.language);
+  switch (signal.kind) {
+    case "repeated_click":
+      return words.repeatedClick(signal.control);
+    case "menu_loop":
+      return words.menuLoop(signal.menu);
+    case "undo_loop":
+      return words.undoLoop;
+    case "surprise_dialog":
+      return words.surpriseDialog(signal.title);
+    case "target_missing":
+      return words.targetMissing(signal.target);
+    case "said_stuck":
+      return undefined;
+  }
+}
+
+/** An unexpected dialog is in the way: say how to get rid of it instead of pointing at a hidden target. */
+function showRecovery(s: HodeState, step: TaskStep, signal: Extract<StuckSignal, { kind: "surprise_dialog" }>): Transition {
+  const speech = stuckLine(s, signal) ?? "";
+  const action: TeachingAction = { kind: "correct", speech, skill: step.skill, assistanceLevel: s.level };
+  return {
+    state: { ...s, phase: "guiding", action, surprise: signal.title, stuck: signal, stepActions: [] },
+    effects: [CANCEL_TIMER, { type: "clearOverlay" }, { type: "say", text: speech }, { type: "startStuckTimer", ms: STUCK_MS }],
+  };
+}
+
+const WRONG_ACTION_SIGNALS: StuckSignal["kind"][] = ["repeated_click", "menu_loop"];
+
+function onStuckSignal(s: HodeState, step: TaskStep, signal: StuckSignal): Transition {
+  if (signal.kind === "surprise_dialog") return showRecovery(s, step, signal);
+  const countsAsMistake = WRONG_ACTION_SIGNALS.includes(signal.kind);
+  const raised = raiseHelp({ ...s, stepActions: [] }, { correction: stuckLine(s, signal), countsAsMistake, stuck: signal });
+  return withLeadingEffects(requestReason(raised), [CANCEL_TIMER]);
+}
+
+/** Guidance waits while the surprise dialog is open and picks up once it's closed. */
+function afterSurprise(s: HodeState, surprise: string): Transition {
+  if (s.observation && stillShowing(s.observation, surprise)) return { state: s, effects: [] };
+  return withLeadingEffects(requestReason({ ...s, surprise: undefined }), [CANCEL_TIMER]);
+}
+
+/** The action didn't finish the step and wasn't a known mistake: stuck, or just one more try. */
+function onUnfinishedAction(s: HodeState, step: TaskStep, wasReasoning: boolean): Transition {
+  if (s.surprise) return afterSurprise(s, s.surprise);
+  const signal = detectStuck(s.stepActions, step, s.pack);
+  if (signal) return onStuckSignal(s, step, signal);
+  const wrongActions = s.wrongActions + 1;
+  if (wrongActions >= MAX_WRONG_ACTIONS) {
+    return withLeadingEffects(requestReason(escalateState(s, { countsAsMistake: true })), [CANCEL_TIMER]);
+  }
+  // The newest learner action wins: re-reason so the in-flight result is dropped as stale.
+  if (wasReasoning) return requestReason({ ...s, wrongActions });
+  return { state: { ...s, wrongActions }, effects: [] };
 }
 
 function completeStep(s: HodeState, step: TaskStep): Transition {
@@ -59,7 +128,8 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
   if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
   if (s.waitingForApp) return requestReason({ ...s, observation: e.observation, waitingForApp: undefined });
   const previous = s.observation;
-  const next = { ...s, observation: e.observation };
+  const stepActions = remember(s.stepActions, { before: previous, after: e.observation });
+  const next = { ...s, observation: e.observation, stepActions };
   if (evaluateSignal(step.success, e.observation)) return completeStep(next, step);
   const mistake = step.mistakes.find((m) => becameTrue(m.signal, previous, e.observation));
   if (mistake) {
@@ -69,23 +139,24 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
   // On the phone, screen changes are mostly navigation (scrolling, going back), not mistakes; known
   // mistakes are caught above and hesitation by the stuck timer. Re-locate so the highlight follows.
   if (s.pack?.surface === "phone") return withLeadingEffects(requestReason(next), [CANCEL_TIMER]);
-  const wrongActions = s.wrongActions + 1;
-  if (wrongActions >= MAX_WRONG_ACTIONS) {
-    return withLeadingEffects(requestReason(escalateState(next, { countsAsMistake: true })), [CANCEL_TIMER]);
-  }
-  // The newest learner action wins: re-reason so the in-flight result is dropped as stale.
-  if (s.phase === "reasoning") return requestReason({ ...next, wrongActions });
-  return { state: { ...next, wrongActions }, effects: [] };
+  return onUnfinishedAction(next, step, s.phase === "reasoning");
 }
 
 export function onStuckTimeout(s: HodeState): Transition {
   if (s.phase !== "guiding") return noop(s);
-  return requestReason(escalateState(s, { countsAsMistake: false }));
+  return requestReason(raiseHelp(s, { countsAsMistake: false }));
 }
 
 export function onHintRequested(s: HodeState): Transition {
   if (s.phase !== "guiding") return noop(s);
-  return withLeadingEffects(requestReason(escalateState(s, { countsAsMistake: false })), [CANCEL_TIMER]);
+  return withLeadingEffects(requestReason(raiseHelp(s, { countsAsMistake: false })), [CANCEL_TIMER]);
+}
+
+/** "Where?", "I don't see it": the same ladder as the stuck timer, never a pause. */
+export function onSaidStuck(s: HodeState): Transition {
+  if (s.phase !== "guiding") return noop(s);
+  const raised = raiseHelp(s, { countsAsMistake: false, stuck: { kind: "said_stuck" } });
+  return withLeadingEffects(requestReason(raised), [CANCEL_TIMER]);
 }
 
 export function onExplainRequested(s: HodeState): Transition {

@@ -13,6 +13,7 @@ import type {
   TeachingAction,
   TeachingContext,
 } from "../../lib/types";
+import type { StepAction, StuckSignal } from "./stuck";
 
 export const STUCK_MS = 12_000;
 export const MAX_WRONG_ACTIONS = 2;
@@ -68,6 +69,12 @@ export interface HodeState {
   showAllSteps: boolean;
   /** What Hodey replies in (Settings > Voice > Language); kept across Hodes. */
   language: ReplyLanguage;
+  /** The learner's recent actions in this step, for stuck detection (PRD §7). */
+  stepActions: StepAction[];
+  /** The latest reason Hodey decided the learner was stuck in this step. */
+  stuck?: StuckSignal;
+  /** An unexpected dialog Hodey asked the learner to close; guidance resumes once it's gone. */
+  surprise?: string;
 }
 
 export const initialState: HodeState = {
@@ -85,6 +92,7 @@ export const initialState: HodeState = {
   showAllSteps: false,
   open: false,
   language: "en",
+  stepActions: [],
 };
 
 export type HodeEvent =
@@ -102,6 +110,8 @@ export type HodeEvent =
   | { type: "ACTION_READY"; requestId: number; action: TeachingAction; failures: string[] }
   | { type: "LEARNER_ACTED"; observation: ScreenObservation }
   | { type: "STUCK_TIMEOUT" }
+  /** The learner said they can't find it ("where?", "I don't see it", "कहाँ है"). */
+  | { type: "SAID_STUCK" }
   | { type: "HINT_REQUESTED" }
   | { type: "EXPLAIN_REQUESTED" }
   /** Speak the current instruction or answer again. */
