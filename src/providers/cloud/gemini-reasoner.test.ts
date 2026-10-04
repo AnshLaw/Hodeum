@@ -138,7 +138,7 @@ describe("GeminiReasoningProvider", () => {
     expect(action).toEqual({
       kind: "guide",
       speech: "Open the Insert tab.",
-      target: { elementId: "tab item:Insert", bounds: INSERT_BOUNDS, confidence: 0.9, label: "Insert" },
+      target: { elementId: "tab item:Insert", bounds: INSERT_BOUNDS, confidence: 0.9, label: "Insert", mention: "Insert" },
       skill: "excel.navigation.insert_tab",
       assistanceLevel: "guide",
     });
@@ -169,7 +169,7 @@ describe("GeminiReasoningProvider", () => {
 
   it("keeps the index when the name it gave is one we hid", async () => {
     const action = await new GeminiReasoningProvider(bridge({ ...POINT_AT_INSERT, target_label: CONTENT_PLACEHOLDER })).reason(ctx());
-    expect(action.target).toEqual({ elementId: "tab item:Insert", bounds: INSERT_BOUNDS, confidence: 0.9, label: "Insert" });
+    expect(action.target).toEqual({ elementId: "tab item:Insert", bounds: INSERT_BOUNDS, confidence: 0.9, label: "Insert", mention: "Insert" });
   });
 
   it("doesn't trust an index its own name contradicts", async () => {
@@ -220,5 +220,32 @@ describe("GeminiReasoningProvider", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const invoke = vi.fn(async () => Promise.reject(new Error("no bridge"))) as unknown as Invoke;
     expect(await new GeminiReasoningProvider({ invoke }).healthCheck()).toBe(false);
+  });
+});
+
+describe("later controls from Gemini", () => {
+  /** On the Home tab the step's Insert lists first: Insert 0, Home 1, Data 2. */
+  const INSERT_THEN_DATA = { ...POINT_AT_INSERT, speech: "Open 'Insert', then 'Data'.", target_label: "Insert" };
+  const reason = (reply: object) => new GeminiReasoningProvider(bridge(reply)).reason(ctx());
+
+  it("settles each later control by its name, like the target, in flow order", async () => {
+    const action = await reason({ ...INSERT_THEN_DATA, more_targets: [{ label: "Data", target_index: 2, mention: "Data" }] });
+    expect(action.target).toMatchObject({ elementId: "tab item:Insert", mention: "Insert" });
+    expect(action.targets).toEqual([{ elementId: "tab item:Data", bounds: { x: 100, y: 0, width: 40, height: 20 }, confidence: 0.9, label: "Data", mention: "Data" }]);
+  });
+
+  it("keeps the index of a later control whose name we hid, and drops one off the list or repeated", async () => {
+    const more = [
+      { label: CONTENT_PLACEHOLDER, target_index: 2, mention: "" },
+      { label: "", target_index: 9, mention: "" },
+      { label: "Insert", target_index: 0, mention: "Insert" },
+    ];
+    const action = await reason({ ...INSERT_THEN_DATA, more_targets: more });
+    expect(action.targets?.map((t) => t.elementId)).toEqual(["tab item:Data"]);
+  });
+
+  it("drops a later control its own name contradicts", async () => {
+    const action = await reason({ ...INSERT_THEN_DATA, more_targets: [{ label: "Formulas", target_index: 2, mention: "Formulas" }] });
+    expect(action).not.toHaveProperty("targets");
   });
 });
