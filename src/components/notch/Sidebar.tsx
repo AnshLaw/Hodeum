@@ -6,6 +6,8 @@ import { DockMenu } from "./DockMenu";
 import { GoalForm } from "./GoalForm";
 import { Grip, LocalBadge, MicButton, NotchContent, PrivacyDots, StepList } from "./NotchParts";
 import type { SurfaceProps } from "./surface";
+import { PhonePanel } from "./PhonePanel";
+import { sidebarPanelOpen } from "./sidebar-view";
 
 const HODEY_TAB_SIZE = 42;
 const HODEY_BAR_SIZE = 40;
@@ -25,6 +27,16 @@ function IdleStart({ onControl, notice }: Pick<SurfaceProps, "onControl"> & { no
         </button>
       </div>
     </div>
+  );
+}
+
+/** With the iPhone mirror open, the side panel stacks the phone above Hodey's guidance. */
+function SidebarContent(props: SurfaceProps) {
+  if (!props.phoneOpen || !props.phone || props.menuOpen) return <SidebarBody {...props} />;
+  return (
+    <PhonePanel mirror={props.phone} bus={props.bus} stacked>
+      <SidebarBody {...props} />
+    </PhonePanel>
   );
 }
 
@@ -57,9 +69,7 @@ function SidebarBody(props: SurfaceProps) {
 export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceRef: Ref<HTMLElement> }) {
   const { side, view, hovered, menuOpen, revealed, muted, surfaceRef } = props;
   const { sidebar: style, visibility } = props.dock.prefs;
-  // A pinned copilot keeps its panel open: Windows has already given it the space.
-  // Listening opens the panel too, so the learner sees what Hodey hears.
-  const panelOpen = view.mode !== "idle" || props.micStatus === "listening" || (style === "copilot" && visibility === "pinned");
+  const panelOpen = sidebarPanelOpen({ mode: view.mode, listening: props.micStatus === "listening", style, visibility, phoneOpen: props.phoneOpen === true });
   const collapsed = !panelOpen && !hovered && !menuOpen;
   const classes = ["sidebar", `sidebar--${side}`, `sidebar--${style}`, collapsed ? "sidebar--collapsed" : "", panelOpen ? "sidebar--active" : "", revealed ? "" : "sidebar--tucked"];
   return (
@@ -105,7 +115,7 @@ export function Sidebar(props: SurfaceProps & { side: "left" | "right"; surfaceR
               </p>
             )}
             <div className="sidebar__body" aria-live="polite">
-              <SidebarBody {...props} />
+              <SidebarContent {...props} />
             </div>
           </>
         )}

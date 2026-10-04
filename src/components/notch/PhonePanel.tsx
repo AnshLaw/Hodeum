@@ -108,11 +108,11 @@ function SourceBar({ mirror, kind }: { mirror: PhoneMirror; kind?: PhoneSourceKi
 }
 
 /** The enlarged notch with the iPhone: live mirror (and Hodey's highlights) on the left, guidance on the right. */
-export function PhonePanel({ mirror, bus, children }: { mirror: PhoneMirror; bus: Bus; children: ReactNode }) {
+export function PhonePanel({ mirror, bus, stacked = false, children }: { mirror: PhoneMirror; bus: Bus; stacked?: boolean; children: ReactNode }) {
   const { status, kind } = usePhoneMirror(mirror);
   const primitives = usePhonePrimitives(bus);
   return (
-    <div className="phone-panel">
+    <div className={stacked ? "phone-panel phone-panel--stacked" : "phone-panel"}>
       <PhoneScreen mirror={mirror} status={status} kind={kind} primitives={primitives} />
       <div className="phone-panel__side">
         <SourceBar mirror={mirror} kind={kind} />
