@@ -153,7 +153,8 @@
 
 .notch--guidance .notch__bar,
 .notch--lesson .notch__bar,
-.notch--success .notch__bar {
+.notch--success .notch__bar,
+.notch--skills .notch__bar {
   height: 38px;
   padding-left: 16px;
 }
@@ -984,3 +985,77 @@
 .phone-panel--stacked { grid-template-columns: 1fr; justify-items: center; padding: 4px 0 8px; }
 .phone-panel--stacked .phone-panel__screen { height: 420px; }
 .phone-panel--stacked .phone-panel__side { width: 100%; }
+
+/* ---- Skills: the success card's progress and "Your skills" from the menu ---- */
+
+.skills-panel__scroll {
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.skills-panel .notch__actions .dock-menu__hint {
+  min-width: 0;
+}
+
+.success-skills {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.success-skills__changes {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skill-change {
+  --skill-colour: var(--hd-accent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  animation: notch-swap 300ms var(--hd-ease) both;
+}
+
+.skill-change[data-mastery="mastered"] {
+  --skill-colour: var(--hd-ok);
+}
+
+.skill-change__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.skill-change__status {
+  font-size: 11.5px;
+  color: var(--hd-text-2);
+  white-space: nowrap;
+}
+
+.skill-change[data-mastery="mastered"] .skill-change__status {
+  color: var(--hd-ok);
+}
+
+.success-skills__next {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.06);
+}
+
+.success-skills__next-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  font-size: 12px;
+}

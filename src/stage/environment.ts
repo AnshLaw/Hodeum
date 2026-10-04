@@ -32,6 +32,8 @@ export interface StageEnvironment {
   runtime: HodeRuntime;
   activity: ActivityTracker;
   speech: SpeechInput;
+  /** The skill store the runtime saves to; the notch reads its skill graph from it. */
+  learning: MemoryLearningStore;
   /** Services for the in-page Hodeum app; `window.close` is replaced by the stage. */
   appServices: (close: () => void) => AppServices;
   select(id: StageAppId): void;
@@ -64,6 +66,7 @@ export function createStageEnvironment(): StageEnvironment {
     runtime,
     activity,
     speech: new UnavailableSpeechInput(),
+    learning,
     appServices: (close) => ({
       learning,
       chats,

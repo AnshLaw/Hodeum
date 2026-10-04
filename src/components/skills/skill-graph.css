@@ -1,0 +1,117 @@
+/* The Hodian skill graph: shared by the notch (always dark) and the app (dark or light), so colours
+ * come from the theme tokens. Mastered is green, learning is the accent, new is a faint outline. */
+.skill-graph {
+  display: grid;
+  gap: 12px;
+}
+
+.skill-graph__area {
+  display: grid;
+  gap: 7px;
+}
+
+.skill-graph__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skill-graph__title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hd-text-2);
+}
+
+.skill-graph__count {
+  font-size: 11px;
+  color: var(--hd-text-3);
+}
+
+.skill-graph__nodes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skill-node {
+  --skill-colour: var(--hd-text-3);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  padding: 3px 9px 3px 4px;
+  border: 1px solid rgb(var(--hd-fg-rgb) / 0.1);
+  border-radius: 13px;
+  font-size: 11.5px;
+  color: var(--hd-text);
+  background: rgb(var(--hd-fg-rgb) / 0.05);
+}
+
+.skill-node:first-child {
+  margin-left: 0;
+}
+
+/* The edge from a prerequisite: a short line bridging the gap to the chip before. */
+.skill-node[data-linked] {
+  margin-left: 16px;
+}
+
+.skill-node[data-linked]::before {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 16px;
+  height: 1.5px;
+  background: rgb(var(--hd-fg-rgb) / 0.22);
+  content: "";
+}
+
+.skill-node[data-mastery="learning"] {
+  --skill-colour: var(--hd-accent);
+}
+
+.skill-node[data-mastery="mastered"] {
+  --skill-colour: var(--hd-ok);
+  border-color: color-mix(in srgb, var(--hd-ok) 35%, transparent);
+  background: color-mix(in srgb, var(--hd-ok) 12%, transparent);
+}
+
+.skill-node[data-mastery="new"] .skill-node__label {
+  color: var(--hd-text-2);
+}
+
+.skill-node__label {
+  white-space: nowrap;
+}
+
+.mastery-ring {
+  flex: none;
+  transform: rotate(-90deg);
+}
+
+.mastery-ring circle {
+  fill: none;
+}
+
+.mastery-ring__track {
+  stroke: rgb(var(--hd-fg-rgb) / 0.14);
+}
+
+.mastery-ring__fill {
+  stroke: var(--skill-colour, var(--hd-accent));
+  stroke-linecap: round;
+  transition: stroke-dasharray 600ms var(--hd-ease);
+}
+
+.mastery-ring__before {
+  stroke: rgb(var(--hd-fg-rgb) / 0.45);
+  stroke-linecap: round;
+}

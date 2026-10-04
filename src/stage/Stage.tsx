@@ -105,7 +105,7 @@ export function Stage({ env }: { env: StageEnvironment }) {
         </div>
         <StageAppWindow env={env} />
         <div className="stage-layer stage-layer--notch">
-          <Notch runtime={env.runtime} bus={env.bus} shell={env.shell} packs={TASK_PACKS} activity={env.activity} speech={env.speech} />
+          <Notch runtime={env.runtime} bus={env.bus} shell={env.shell} packs={TASK_PACKS} activity={env.activity} speech={env.speech} skills={env.learning} />
         </div>
       </main>
     </div>

@@ -5,6 +5,7 @@ import { MODE_COPY } from "../../lib/modes";
 import { HODE_MODES, type HodeMode } from "../../lib/types";
 import type { Dock, DockPrefs, SidebarStyle, Visibility } from "../../features/dock/dock";
 import type { VisionStatus } from "../../providers/vision/types";
+import type { SurfaceProps } from "./surface";
 
 const DOCK_OPTIONS: [Dock, string][] = [
   ["top", COPY.dockTop],
@@ -69,6 +70,8 @@ interface DockMenuProps {
   phoneOpen?: boolean;
   /** Absent where there is no iPhone mirror (the stage). */
   onTogglePhone?: () => void;
+  /** Opens "Your skills"; absent where no skill store is readable. */
+  onShowSkills?: () => void;
 }
 
 /** Where Hodey lives and how it behaves when idle. Rendered inside the notch so hit-testing stays exact. */
@@ -80,7 +83,7 @@ function useHodeyKeyLabel(): string {
 
 const MODE_OPTIONS: [HodeMode, string][] = HODE_MODES.map((mode) => [mode, MODE_COPY[mode].title]);
 
-export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide, phoneOpen, onTogglePhone }: DockMenuProps) {
+export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide, phoneOpen, onTogglePhone, onShowSkills }: DockMenuProps) {
   const keyLabel = useHodeyKeyLabel();
   const idle = prefs.visibility === "hidden" ? "pinned" : prefs.visibility;
   return (
@@ -94,6 +97,11 @@ export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide, 
         </>
       )}
       <Segmented label={COPY.whenIdle} options={IDLE_OPTIONS} value={idle} onSelect={(visibility) => onChange({ visibility })} />
+      {onShowSkills && (
+        <button type="button" className="btn" onClick={onShowSkills}>
+          {COPY.yourSkills}
+        </button>
+      )}
       {onTogglePhone && (
         <button type="button" className="btn" onClick={onTogglePhone}>
           {phoneOpen ? COPY.hideIphone : COPY.showIphone}
@@ -110,5 +118,29 @@ export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide, 
       <p className="dock-menu__hint">{COPY.dragTip}</p>
       {vision && <VisionLine status={vision} />}
     </div>
+  );
+}
+
+/** The menu as both surfaces show it. "Your skills" closes the menu and opens the skill graph. */
+export function SurfaceMenu(props: SurfaceProps) {
+  const { dock, skills } = props;
+  const showSkills = skills
+    ? () => {
+        props.onToggleMenu();
+        skills.setOpen(true);
+      }
+    : undefined;
+  return (
+    <DockMenu
+      prefs={dock.prefs}
+      vision={props.vision}
+      mode={props.hodeActive ? props.hodeMode : undefined}
+      onModeChange={props.onSetMode}
+      onChange={dock.update}
+      onHide={() => dock.update({ visibility: "hidden" })}
+      phoneOpen={props.phoneOpen}
+      onTogglePhone={props.onTogglePhone}
+      onShowSkills={showSkills}
+    />
   );
 }

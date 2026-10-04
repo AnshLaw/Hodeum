@@ -1,8 +1,9 @@
 import { COPY } from "../../lib/copy";
 import { MODE_COPY } from "../../lib/modes";
 import { currentStep, type HodeState } from "../../features/hode/model";
+import { skillName } from "../../features/skills/graph";
 
-export type NotchSize = "idle" | "orb" | "compact" | "guidance" | "lesson" | "success" | "phone";
+export type NotchSize = "idle" | "orb" | "compact" | "guidance" | "lesson" | "success" | "phone" | "skills";
 export type NotchMode = "idle" | "goal" | "status" | "guidance" | "answer" | "annotate" | "paused" | "error" | "success";
 export type NotchControl =
   | "start"
@@ -36,9 +37,9 @@ export interface NotchView {
 }
 
 /** Pill widths in CSS px, per PRD §8.2. Height follows content. */
-export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, orb: 44, compact: 380, guidance: 496, lesson: 500, success: 340, phone: 580 };
+export const NOTCH_WIDTHS: Record<NotchSize, number> = { idle: 196, orb: 44, compact: 380, guidance: 496, lesson: 500, success: 340, phone: 580, skills: 520 };
 
-const EXPANDED: NotchSize[] = ["guidance", "lesson", "success", "phone"];
+export const EXPANDED_SIZES: NotchSize[] = ["guidance", "lesson", "success", "phone", "skills"];
 const QUIET_LEVELS = new Set(["hint", "observe", "independent"]);
 
 /** Longest learner question shown above an answer before it's shortened. */
@@ -52,19 +53,11 @@ export function inScript(view: NotchView, show: (text: string) => string): Notch
 }
 
 export function isExpanded(view: NotchView): boolean {
-  return EXPANDED.includes(view.size);
+  return EXPANDED_SIZES.includes(view.size);
 }
 
 /** "excel.pivot.create" -> "Pivot · Create" */
-export function skillLabel(skillId: string): string {
-  const [, ...parts] = skillId.split(".");
-  return parts
-    .map((part) => {
-      const words = part.replace(/_/g, " ");
-      return words.charAt(0).toUpperCase() + words.slice(1);
-    })
-    .join(" · ");
-}
+export const skillLabel = skillName;
 
 /** Help mode while Hodey is just watching: the learner drives, the step isn't spelled out. */
 function standingByView(s: HodeState, eyebrow: string, total: number): NotchView {
@@ -154,11 +147,14 @@ export interface IslandContext {
   listening: boolean;
   /** The iPhone mirror is open: the notch grows to hold it beside Hodey's guidance. */
   phone: boolean;
+  /** "Your skills" is open from the menu: the notch widens to hold the skill graph. */
+  skills?: boolean;
 }
 
 /** The shape the top notch takes right now: the view's size, adjusted for hover, menu and peek. */
 export function islandSize(view: NotchView, context: IslandContext): NotchSize {
   if (context.menuOpen) return "lesson";
+  if (context.skills) return "skills";
   if (context.phone) return "phone";
   if (context.listening && (view.size === "idle" || view.size === "orb")) return "compact";
   if (view.size === "orb") return context.settled && !context.hovered ? "orb" : "compact";

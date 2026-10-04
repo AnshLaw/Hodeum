@@ -1,4 +1,4 @@
-import type { AssistanceLevel, SkillRecord, TaskPack } from "../lib/types";
+import type { AssistanceLevel } from "../lib/types";
 import type { HodeEventKind, HodeRecord } from "../data/types";
 import type { HodeSummary } from "../lib/bus";
 
@@ -57,16 +57,7 @@ export const EVENT_LABELS: Record<HodeEventKind, string> = {
   paused: "Paused",
 };
 
-/** Packs worth practising next: never tried first, then the least mastered. */
-export function suggestedPacks(packs: TaskPack[], skills: SkillRecord[]): TaskPack[] {
-  const bySkill = new Map(skills.map((s) => [s.skill_id, s]));
-  const score = (pack: TaskPack) => {
-    const records = pack.steps.map((step) => bySkill.get(step.skill));
-    if (records.every((r) => r === undefined)) return -1;
-    return records.filter((r) => r?.status === "mastered").length / pack.steps.length;
-  };
-  return [...packs].filter((pack) => score(pack) < 1).sort((a, b) => score(a) - score(b));
-}
+export { suggestedPacks } from "../features/skills/graph";
 
 /** "excel.pivot.create" -> "Create" within its group; the group header carries the app. */
 export function skillTitle(skillId: string): string {
@@ -74,7 +65,6 @@ export function skillTitle(skillId: string): string {
   return parts.map((part) => part.replace(/_/g, " ")).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" › ");
 }
 
-export const APP_NAMES: Record<string, string> = { excel: "Excel", windows: "Windows", general: "Anything else" };
 
 export function greeting(now: Date): string {
   const hour = now.getHours();

@@ -4,7 +4,7 @@ import { step } from "../features/hode/reducer";
 import { DATA_SELECTED, FIELDS_VISIBLE, HOME_SELECTED, INSERT_SELECTED, PACK, guideAction, skillRecord } from "../features/hode/test-fixtures";
 import { MemoryLearningStore } from "./memory-stores";
 import { HodeRecorder } from "./recorder";
-import { computeStats, groupSkills, masteryOf, streakDays } from "./stats";
+import { computeStats, masteryOf, streakDays } from "./stats";
 
 function drive(recorder: HodeRecorder, events: HodeEvent[], start: HodeState = initialState): HodeState {
   let state = start;
@@ -70,9 +70,7 @@ describe("learning stats", () => {
     expect(stats).toMatchObject({ hodesCompleted: 1, skillsMastered: 1, skillsLearning: 1, minutesLearning: 20 });
   });
 
-  it("groups skills by app and maps help level to mastery", () => {
-    const groups = groupSkills([skillRecord("hint", "windows.explorer.compress"), skillRecord("guide", "excel.pivot.create"), skillRecord("observe", "excel.navigation.insert_tab")]);
-    expect(groups.map((g) => g.app)).toEqual(["excel", "windows"]);
+  it("maps help level to mastery", () => {
     expect(masteryOf(skillRecord("independent"))).toBe(1);
   });
 });

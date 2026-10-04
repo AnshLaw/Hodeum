@@ -7,16 +7,18 @@ import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
 import type { TaskPack } from "../../lib/types";
 import type { HodeRuntime } from "../../features/hode/runtime";
-import { goalEvent } from "../../features/hode/bridge";
+import { goalEvent, startFromApp } from "../../features/hode/bridge";
 import { useHodeState } from "../../features/hode/use-hode";
-import { DockMenu } from "./DockMenu";
+import { SurfaceMenu } from "./DockMenu";
+import { SkillsPanel, successExtra } from "./SkillsPanel";
+import { useNotchSkills, type SkillSource } from "./use-skills";
 import { GoalForm } from "./GoalForm";
 import { useAutoDismiss, useControlHandler, useCoveringTarget, useHitRect, useNotchHover, useSettled } from "./hooks";
 import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
-import { NOTCH_WIDTHS, inScript, islandSize, notchView, stepItems, type NotchSize, type NotchView } from "./notch-view";
+import { EXPANDED_SIZES, NOTCH_WIDTHS, inScript, islandSize, notchView, stepItems, type NotchSize, type NotchView } from "./notch-view";
 import { HodeyFace } from "../hodey/HodeyFace";
 import { hodeyMood, type HodeyMood } from "../hodey/mood";
 import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
@@ -44,6 +46,8 @@ export interface NotchProps {
   script?: () => HindiScript;
   /** The iPhone mirror (desktop app only). */
   phone?: PhoneMirror;
+  /** The learner's skills, read from the same local store the runtime saves progress to. */
+  skills?: SkillSource;
 }
 
 const TOAST_MS = 4000;
@@ -124,7 +128,6 @@ function useVisionStatus(source?: VisionStatusSource): VisionStatus | undefined 
 /** Hodey has to be busy this long before the notch shrinks to an orb, so quick reads don't flicker. */
 const ORB_DELAY_MS = 180;
 const ORB_FACE_SIZE = 40;
-const EXPANDED_SIZES: NotchSize[] = ["guidance", "lesson", "success", "phone"];
 
 /** Looking or thinking: just Hodey, in its current mood, with a sweeping ring. */
 function Orb({ mood, label, activity }: { mood: HodeyMood; label: string; activity: ActivityState }) {
@@ -138,11 +141,12 @@ function Orb({ mood, label, activity }: { mood: HodeyMood; label: string; activi
 }
 
 function topBody(props: SurfaceProps, view: NotchView, size: NotchSize, peek: boolean) {
-  const { menuOpen, dock, onControl } = props;
-  if (menuOpen) return <DockMenu prefs={dock.prefs} vision={props.vision} mode={props.hodeActive ? props.hodeMode : undefined} onModeChange={props.onSetMode} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} phoneOpen={props.phoneOpen} onTogglePhone={props.onTogglePhone} />;
+  const { menuOpen, skills, onControl } = props;
+  if (menuOpen) return <SurfaceMenu {...props} />;
+  if (skills?.open) return <SkillsPanel skills={skills} />;
   if (view.mode === "goal") return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   if (peek) return null;
-  return <NotchContent view={view} expanded={EXPANDED_SIZES.includes(size)} fallbackDetail={props.bootNotice} onControl={onControl} />;
+  return <NotchContent view={view} expanded={EXPANDED_SIZES.includes(size)} fallbackDetail={props.bootNotice} onControl={onControl} extra={successExtra(props)} />;
 }
 
 /** The dynamic island: one surface that morphs between pill, orb, bar and card as Hodey works. */
@@ -150,10 +154,11 @@ function TopNotch(props: SurfaceProps & { surfaceRef: Ref<HTMLElement>; covering
   const { menuOpen, hovered, revealed } = props;
   const settled = useSettled(props.view.size === "orb", ORB_DELAY_MS);
   // Step aside to a slim bar while the highlighted control sits under the card; hovering brings it back.
-  const peek = props.covering && !hovered && !menuOpen && props.view.mode === "guidance";
+  const skillsOpen = props.skills?.open === true;
+  const peek = props.covering && !hovered && !menuOpen && !skillsOpen && props.view.mode === "guidance";
   const listening = props.micStatus === "listening";
-  const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening, phone: props.phoneOpen === true });
-  const view = peek ? { ...props.view, controls: [] } : props.view;
+  const size = islandSize(props.view, { settled, hovered, menuOpen, peek, listening, phone: props.phoneOpen === true, skills: skillsOpen });
+  const view = skillsOpen ? { ...props.view, eyebrow: COPY.yourSkills, progress: undefined, controls: [] } : peek ? { ...props.view, controls: [] } : props.view;
   const style = { "--notch-width": `${NOTCH_WIDTHS[size]}px` } as CSSProperties;
   const classes = ["notch", `notch--${size}`, `notch--${view.mode}`, hovered ? "notch--hovered" : "", revealed ? "" : "notch--tucked", peek ? "notch--peek" : ""];
   return (
@@ -206,7 +211,7 @@ function useNotchActions(speech: SpeechInput, shell: NativeShell, surfaceRef: Re
 }
 
 /** Hodey's surface: a top-centre notch or a side sidebar, draggable between them, with auto-hide. */
-export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity: tracker, speech, script, phone }: NotchProps) {
+export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity: tracker, speech, script, phone, skills: skillSource }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
   const show = script?.() === "roman" ? romanize : (text: string) => text;
@@ -217,10 +222,13 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
   const dock = useDock(shell, state.phase, bus);
   const layoutKey = dock.prefs.dock;
   const hovered = useNotchHover(surfaceRef, shell, layoutKey);
-  const revealed = useRevealed(dock.prefs, hovered || menuOpen, state.phase);
+  const skills = useNotchSkills(skillSource, bus, state, packs, (next) => startFromApp(runtime, next.pack.title, packs, visionStatus?.state === "ready"));
+  // Hodey stays out while the learner is in its menu or reading their skills.
+  const revealed = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true, state.phase);
   const onControl = useControlHandler(runtime, bus);
   useHitRect(surfaceRef, shell, `${layoutKey}:${revealed}`);
-  useAutoDismiss(view.mode === "success", runtime);
+  // The success card stays while the learner reads it (hovering), then makes way.
+  useAutoDismiss(view.mode === "success" && !hovered, runtime);
   const covering = useCoveringTarget(bus, shell, surfaceRef, dock.prefs.dock === "top");
   const activity = useActivity(tracker);
   const { micStatus, toast, heard, toggleMic, openApp } = useNotchActions(speech, shell, surfaceRef);
@@ -244,7 +252,10 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
       runtime.setMuted(!muted);
       setMuted(!muted);
     },
-    onToggleMenu: () => setMenuOpen((open) => !open),
+    onToggleMenu: () => {
+      setMenuOpen((open) => !open);
+      skills?.setOpen(false);
+    },
     onGrip: () => {
       shell.beginNotchDrag().catch(reportError("Couldn't start dragging Hodey"));
     },
@@ -268,6 +279,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
     phone,
     phoneOpen,
     onTogglePhone,
+    skills,
   };
   if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} covering={covering} />;
   return <Sidebar {...props} side={dock.prefs.dock} surfaceRef={surfaceRef} />;

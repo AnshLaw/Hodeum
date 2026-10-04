@@ -1,8 +1,9 @@
 import { ASSISTANCE_LEVELS, type AssistanceLevel, type SkillRecord } from "../../lib/types";
-import { groupSkills } from "../../data/stats";
+import { buildSkillGraph, masteryLabel, type SkillArea } from "../../features/skills/graph";
+import { SkillAreaGraph, masteredCount } from "../../components/skills/SkillGraph";
 import { useLiveQuery } from "../hooks";
 import type { AppServices } from "../services";
-import { APP_NAMES, LEVEL_LABELS, skillTitle, suggestedPacks } from "../view";
+import { LEVEL_LABELS, skillTitle, suggestedPacks } from "../view";
 
 function Ladder({ level }: { level: AssistanceLevel }) {
   const reached = ASSISTANCE_LEVELS.indexOf(level);
@@ -28,7 +29,7 @@ function SkillRow({ skill, services }: { skill: SkillRecord; services: AppServic
       <span className="hskill__name">
         <strong>{skillTitle(skill.skill_id)}</strong>
         <span className="hmuted">
-          {skill.status === "mastered" ? "Mastered" : "Learning"} · {skill.success_count} done · {skill.failure_count} slips
+          {masteryLabel(skill)} · {skill.success_count} done · {skill.failure_count} slips
         </span>
       </span>
       <Ladder level={skill.last_assistance_level} />
@@ -49,56 +50,70 @@ function SkillRow({ skill, services }: { skill: SkillRecord; services: AppServic
   );
 }
 
+/** One area: the same linked-skill graph the notch shows, then a row per practised skill. */
+function AreaCard({ area, services }: { area: SkillArea; services: AppServices }) {
+  const practised = area.nodes.flatMap((node) => (node.record ? [node.record] : []));
+  return (
+    <section className="hcard">
+      <div className="hcard__head">
+        <h2>{area.title}</h2>
+        <span className="hmuted">{masteredCount(area)}</span>
+      </div>
+      <SkillAreaGraph area={area} heading={false} />
+      {practised.length === 0 ? (
+        <p className="hmuted">Not practised yet. Start a Hode to begin this path.</p>
+      ) : (
+        <ul className="hskills">
+          {practised.map((skill) => (
+            <SkillRow key={skill.skill_id} skill={skill} services={services} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function Suggestions({ services, skills }: { services: AppServices; skills: SkillRecord[] }) {
+  const suggestions = suggestedPacks(services.packs, skills);
+  if (suggestions.length === 0) return null;
+  return (
+    <section className="hpaths" aria-label="Guided Hodes to practise">
+      {suggestions.map((pack) => (
+        <article key={pack.id} className="hcard hpath">
+          <p className="heyebrow">{pack.app}</p>
+          <h2>{pack.title}</h2>
+          <ol className="hpath__steps">
+            {pack.steps.map((step) => (
+              <li key={step.id}>{step.objective}</li>
+            ))}
+          </ol>
+          <button type="button" className="btn btn--primary" onClick={() => services.bus.emit("hode:start", { goal: pack.title })}>
+            Practise this
+          </button>
+        </article>
+      ))}
+    </section>
+  );
+}
+
 export function LearningPage({ services }: { services: AppServices }) {
   const [skills] = useLiveQuery(services.bus, () => services.learning.listSkills(), []);
   if (skills.state !== "ready") return <p className="hmuted">{skills.state === "error" ? `Couldn't load your skills: ${skills.message}` : "Loading…"}</p>;
-  const groups = groupSkills(skills.value);
-  const suggestions = suggestedPacks(services.packs, skills.value);
+  const graph = buildSkillGraph(skills.value, services.packs);
   return (
     <div className="hpage">
       <header className="hpage__head">
         <h1>Learning paths</h1>
-        <p className="hmuted">Hodey gives less help as you master each skill. Change how much help you get for any skill here.</p>
+        <p className="hmuted">Hodey gives less help as you master each skill. Linked skills build on the one before. Change how much help you get for any skill here.</p>
       </header>
-      {suggestions.length > 0 && (
-        <section className="hpaths" aria-label="Guided Hodes to practise">
-          {suggestions.map((pack) => (
-            <article key={pack.id} className="hcard hpath">
-              <p className="heyebrow">{pack.app}</p>
-              <h2>{pack.title}</h2>
-              <ol className="hpath__steps">
-                {pack.steps.map((step) => (
-                  <li key={step.id}>{step.objective}</li>
-                ))}
-              </ol>
-              <button type="button" className="btn btn--primary" onClick={() => services.bus.emit("hode:start", { goal: pack.title })}>
-                Practise this
-              </button>
-            </article>
-          ))}
-        </section>
-      )}
-      {groups.length === 0 ? (
+      <Suggestions services={services} skills={skills.value} />
+      {graph.areas.length === 0 ? (
         <section className="hcard hempty">
           <h2>No skills yet</h2>
           <p className="hmuted">Finish a step in any Hode and your learning path starts here.</p>
         </section>
       ) : (
-        groups.map((group) => (
-          <section key={group.app} className="hcard">
-            <div className="hcard__head">
-              <h2>{APP_NAMES[group.app] ?? group.app}</h2>
-              <span className="hmuted">
-                {group.skills.filter((s) => s.status === "mastered").length} of {group.skills.length} mastered
-              </span>
-            </div>
-            <ul className="hskills">
-              {group.skills.map((skill) => (
-                <SkillRow key={skill.skill_id} skill={skill} services={services} />
-              ))}
-            </ul>
-          </section>
-        ))
+        graph.areas.map((area) => <AreaCard key={area.id} area={area} services={services} />)
       )}
     </div>
   );
