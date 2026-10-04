@@ -271,6 +271,8 @@ export interface TeachingContext {
   doneSteps?: string[];
   /** Open-ended Hodes: the steps planned for the goal (from reference steps when found); data, followed where it fits the screen. */
   plan?: PlanStep[];
+  /** The learner's pointer when the request was made, in physical screen px: it usually rests near what they're working on. */
+  pointer?: Point;
   /** The last few exchanges, oldest first, so a follow-up ("why?") is answered in context. Local reasoners only: the learner's words never leave the PC. */
   history?: DialogueTurn[];
   /** Look up reference steps for this question (offline help, then the web if it's on). Set only when the learner asked to, or the screen couldn't answer. */

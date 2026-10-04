@@ -263,7 +263,7 @@ describe("showing guidance", () => {
     const changed = obs([...HOME_SELECTED.elements, el("PivotTable", "button")]);
     const second = fold(first.state, { type: "OBSERVED", observation: changed }, { type: "ACTION_READY", requestId: 2, action: lowConfidence, failures: [] });
     expect(second.state.action).toMatchObject({ kind: "clarify", speech: COPY.clarify });
-    expect(types(second)).toEqual(["clearOverlay", "say", "startStuckTimer"]);
+    expect(types(second)).toEqual(["clearOverlay", "say", "startStuckTimer", "watchPointer"]);
   });
 
   it("asks for clarification straight away when the second look finds the same screen", () => {
@@ -271,7 +271,7 @@ describe("showing guidance", () => {
     const first = step(reasoning(), { type: "ACTION_READY", requestId: 1, action: lowConfidence, failures: [] });
     const same = step(first.state, { type: "OBSERVED", observation: HOME_SELECTED });
     expect(same.state.action).toMatchObject({ kind: "clarify", speech: COPY.clarify });
-    expect(types(same)).toEqual(["clearOverlay", "say", "startStuckTimer"]);
+    expect(types(same)).toEqual(["clearOverlay", "say", "startStuckTimer", "watchPointer"]);
   });
 
   it("notes when a fallback provider answered", () => {

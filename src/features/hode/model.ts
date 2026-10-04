@@ -274,6 +274,8 @@ export type HodeEvent =
   | { type: "APP_OPEN_FAILED"; app: InstalledApp; reason: string; options?: string[] }
   /** Small talk, not a task: a greeting gets a friendly reply, anything unclear a nudge to name a task. No Hode starts. */
   | { type: "CHITCHAT"; kind: "greeting" | "unclear" }
+  /** After Hodey asked where the learner is working, their pointer moved and came to rest: the answer. */
+  | { type: "POINTER_RESTED" }
   /** The open goal's plan, for the `planId` and `goal` it was asked for. */
   | { type: "PLAN_READY"; planId: number; goal: string; plan: HodePlan };
 
@@ -299,6 +301,8 @@ export type HodeEffect =
   | { type: "launchApp"; app: InstalledApp }
   /** Read the taskbar's Start button and search box; SHELL_OBSERVED always comes back. */
   | { type: "observeShell" }
+  /** While Hodey asks where the learner is working: POINTER_RESTED comes back when their pointer settles somewhere new. */
+  | { type: "watchPointer" }
   /** Plan an open goal in the background (with reference steps when found); PLAN_READY comes back when it works. */
   | { type: "planOpenGoal"; planId: number; goal: string; app?: string; language: ReplyLanguage };
 

@@ -356,8 +356,11 @@ export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
   const primitives = overlayOf(s, action);
   const effects: HodeEffect[] = [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }];
   const { line, instruction } = lineFor(s, action);
-  if (line !== "") effects.push({ type: "say", text: line });
+  // Asked once where the learner is working: asking again would nag. Their pointer answers it instead.
+  const askedAlready = action.kind === "clarify" && s.action?.kind === "clarify" && s.action.speech === action.speech;
+  if (line !== "" && !askedAlready) effects.push({ type: "say", text: line });
   effects.push({ type: "startStuckTimer", ms: STUCK_MS });
+  if (action.kind === "clarify" && s.pack?.surface !== "phone") effects.push({ type: "watchPointer" });
   const why = currentStep(s)?.explain;
   const state: HodeState = {
     ...s,

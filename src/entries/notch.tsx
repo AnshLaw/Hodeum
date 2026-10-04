@@ -4,6 +4,7 @@ import type { HindiScript } from "../data/settings";
 import { asrLanguage } from "../lib/language";
 import { TauriVoiceHardware, applyVoiceHardware, type VoiceSetup } from "../features/voice/hardware";
 import { invoke } from "@tauri-apps/api/core";
+import { cursorPosition } from "@tauri-apps/api/window";
 import { ActivityTracker, mirrorRemoteActivity, screenWatch, withScreenActivity } from "../lib/activity";
 import { connectAppearance } from "../lib/appearance";
 import { hodeyKeySetting } from "../lib/keys";
@@ -164,7 +165,12 @@ async function boot(): Promise<void> {
   const reference = spokenReference(howTo, (stop) => bus.on("web:cancel", stop));
   // An open Teach Hode is planned in the background by the local model; it never waits on the plan.
   const hodePlanner = new LocalPlanner({ connection: () => connectionOf(vision.current()) });
-  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference, planner: hodePlanner });
+  // The pointer goes with each request (physical px, like the screen read): it usually rests near the learner's work.
+  const pointer = async () => {
+    const at = await cursorPosition();
+    return { x: at.x, y: at.y };
+  };
+  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference, planner: hodePlanner, pointer });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   const watchDot = screenWatch(activity);
   let hintedPack: string | undefined;

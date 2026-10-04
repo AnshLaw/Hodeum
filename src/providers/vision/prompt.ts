@@ -1,6 +1,6 @@
 import { center, containsPoint, intersects } from "../../lib/coords";
 import type { ReplyLanguage } from "../../lib/language";
-import type { AssistanceLevel, PlanStep, Rect, TeachingContext, UiElement } from "../../lib/types";
+import type { AssistanceLevel, PlanStep, Point, Rect, TeachingContext, UiElement } from "../../lib/types";
 import { nameMatches } from "../../features/hode/signals";
 import { describeActions } from "../../features/hode/change";
 import { BOX_SCALE } from "./schema";
@@ -71,6 +71,10 @@ export function pointable(element: UiElement, context: TeachingContext): boolean
 
 const POINTABLE_POINTS = 1;
 const FOCUS_REGION_POINTS = 4;
+/** A control by the learner's pointer: likely what they're working on, though less sure than an area they marked. */
+const POINTER_POINTS = 2;
+/** Within this many px of the pointer, a control counts as by it. */
+const POINTER_NEAR_PX = 60;
 const STEP_TARGET_POINTS = 8;
 /** Below every other listed control, yet still listed: the window's own buttons are rarely the step. */
 const CAPTION_POINTS = 0.5;
@@ -92,8 +96,22 @@ function askedTexts(context: TeachingContext): (string | undefined)[] {
   return context.openGoal ? [context.utterance, context.goal, context.lastInstruction] : [context.utterance];
 }
 
+/** The learner's pointer, when it's over the window that was read. */
+function pointerIn(context: TeachingContext): Point | undefined {
+  const { pointer } = context;
+  const window = windowBoundsOf(context);
+  return pointer && (!window || containsPoint(window, pointer)) ? pointer : undefined;
+}
+
+function nearPointer(rect: Rect, pointer: Point): boolean {
+  const dx = Math.max(rect.x - pointer.x, 0, pointer.x - (rect.x + rect.width));
+  const dy = Math.max(rect.y - pointer.y, 0, pointer.y - (rect.y + rect.height));
+  return Math.hypot(dx, dy) <= POINTER_NEAR_PX;
+}
+
 function scorer(context: TeachingContext): (element: UiElement) => number {
   const focus = context.focusRegion?.shape.bounds;
+  const pointer = pointerIn(context);
   const targetNames = context.step?.target.names ?? [];
   const asked = askedTexts(context);
   const aboutWindow = asked.some(asksAboutWindow);
@@ -103,6 +121,7 @@ function scorer(context: TeachingContext): (element: UiElement) => number {
     let points = pointable(element, context) ? POINTABLE_POINTS : 0;
     for (const text of asked) points += utterancePoints(element, text);
     if (focus && intersects(element.bounds, focus)) points += FOCUS_REGION_POINTS;
+    if (pointer && points > 0 && nearPointer(element.bounds, pointer)) points += POINTER_POINTS;
     if (isTarget) points += STEP_TARGET_POINTS;
     const demote = points > 0 && !isTarget && !aboutWindow && isWindowCaption(element, window);
     return demote ? CAPTION_POINTS : points;
@@ -172,6 +191,11 @@ function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
   if (context.goal) lines.push(`The learner's goal: <learner>${untrusted(context.goal)}</learner>.`);
   if (context.step) lines.push(`Current step: ${context.step.objective}. Expected labels: ${context.step.target.names.join(", ")}.`);
   lines.push(HELP_LINES[context.assistanceLevel]);
+  const pointer = pointerIn(context);
+  if (pointer && containsPoint(frame.rect, pointer)) {
+    const [x, y] = toImageBox({ ...pointer, width: 0, height: 0 }, frame.rect);
+    lines.push(`The learner's pointer is at [${x}, ${y}]: it usually rests on or near what they're working on.`);
+  }
   if (context.correction) lines.push(`The learner just made a mistake: ${lessonCorrection(context) ?? ownWords(context.correction)}`);
   const recent = context.recentActions ?? [];
   if (recent.length > 0) {

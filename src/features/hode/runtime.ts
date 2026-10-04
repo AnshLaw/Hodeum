@@ -1,7 +1,7 @@
 import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
-import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Rect, StepOutcome, TeachingContext } from "../../lib/types";
+import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Point, Rect, StepOutcome, TeachingContext } from "../../lib/types";
 import type { LearningMemory, MemoryProvider, PerceptionAdapter, PlannerProvider, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { reasonWithFallback } from "../../providers/router";
 import { observeShellTargets } from "./shell";
@@ -25,6 +25,8 @@ export interface RuntimeDeps {
   reference?: (question: string, app: string | undefined, signal: AbortSignal, options: { web: boolean }) => Promise<string | undefined>;
   /** Plans open Teach Hodes in the background; without one, they're planned a step at a time. */
   planner?: PlannerProvider;
+  /** Where the learner's pointer is, in physical screen px; rejects when it can't be read. */
+  pointer?: () => Promise<Point>;
 }
 
 async function* once(text: string): AsyncIterable<string> {
@@ -46,6 +48,16 @@ export const PRESS_SETTLE_MS = 450;
 const CANT_PRESS = "Hodey can't click in this app, so this step is yours.";
 /** A lookup plus a local-model plan; past this, the Hode carries on a step at a time without one. */
 const PLAN_TIMEOUT_MS = 45_000;
+const POINTER_POLL_MS = 150;
+/** Still this long after moving, the pointer has come to rest on where the learner is working. */
+const POINTER_REST_MS = 600;
+const POINTER_STILL_PX = 12;
+/** It must move this far from where it was when Hodey asked: a pointer that never moved says nothing new. */
+const POINTER_MOVED_PX = 24;
+/** A question nobody answers with the pointer stops being watched after this long. */
+const POINTER_WATCH_MAX_MS = 60_000;
+
+const apart = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 /** Muted, a line counts as said once it's been up this long per word (with a floor), the time to read it. */
 const MUTED_READ_MS_PER_WORD = 300;
 const MUTED_READ_MIN_MS = 2500;
@@ -77,6 +89,9 @@ export class HodeRuntime {
   private readTimer: ReturnType<typeof setTimeout> | undefined;
   private stuckMs: number | undefined;
   private autoLanguage = false;
+  private pointerWatch: ReturnType<typeof setInterval> | undefined;
+  /** A pointer that can't be read is logged once, not on every request. */
+  private pointerFailed = false;
   /** What learning memory recalled for the running Hode; skill loads wait for it. */
   private recalled: Promise<LearningMemory[]> = Promise.resolve([]);
   private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
@@ -178,6 +193,7 @@ export class HodeRuntime {
     this.disposers.forEach((dispose) => dispose());
     this.clearStuckTimer();
     this.clearPressTimer();
+    this.stopPointerWatch();
     this.stopSpeech();
   }
 
@@ -213,7 +229,59 @@ export class HodeRuntime {
         return this.observeShell();
       case "planOpenGoal":
         return this.planOpenGoal(effect);
+      case "watchPointer":
+        return this.watchPointer();
     }
+  }
+
+  /** Hodey is asking where the learner is working (a clarify on screen). */
+  private clarifying(): boolean {
+    return this.state.phase === "guiding" && this.state.action?.kind === "clarify";
+  }
+
+  /** While Hodey asks where the learner is working, a pointer moved somewhere and rested there is the answer. */
+  private watchPointer(): void {
+    if (!this.deps.pointer || this.pointerWatch) return;
+    const started = Date.now();
+    let origin: Point | undefined;
+    let still: { at: Point; since: number } | undefined;
+    const tick = async () => {
+      if (!this.clarifying() || Date.now() - started > POINTER_WATCH_MAX_MS) return this.stopPointerWatch();
+      const at = await this.readPointer();
+      if (!at) return this.stopPointerWatch();
+      origin ??= at;
+      if (!still || apart(at, still.at) > POINTER_STILL_PX) {
+        still = { at, since: Date.now() };
+        return;
+      }
+      if (apart(at, origin) <= POINTER_MOVED_PX || Date.now() - still.since < POINTER_REST_MS) return;
+      this.stopPointerWatch();
+      if (this.clarifying()) this.dispatch({ type: "POINTER_RESTED" });
+    };
+    this.pointerWatch = setInterval(() => void tick(), POINTER_POLL_MS);
+  }
+
+  private stopPointerWatch(): void {
+    clearInterval(this.pointerWatch);
+    this.pointerWatch = undefined;
+  }
+
+  /** The pointer, or undefined when it can't be read (logged once, not on every read). */
+  private async readPointer(): Promise<Point | undefined> {
+    if (!this.deps.pointer) return undefined;
+    try {
+      return await this.deps.pointer();
+    } catch (error) {
+      if (!this.pointerFailed) console.error("Couldn't read the pointer; Hodey works without it", error);
+      this.pointerFailed = true;
+      return undefined;
+    }
+  }
+
+  /** Every request carries the pointer: it usually rests near what the learner is working on. */
+  private async withPointer(context: TeachingContext): Promise<TeachingContext> {
+    const pointer = await this.readPointer();
+    return pointer ? { ...context, pointer } : context;
   }
 
   /**
@@ -321,7 +389,8 @@ export class HodeRuntime {
     this.reasoning = { requestId, controller };
     const hooks = { onThinking: () => this.dispatch({ type: "THINKING", requestId }), signal: controller.signal };
     this.withReference(context, controller.signal)
-      .then((referenced) => reasonWithFallback(this.deps.reasoners, referenced, hooks))
+      .then((referenced) => this.withPointer(referenced))
+      .then((pointed) => reasonWithFallback(this.deps.reasoners, pointed, hooks))
       .finally(() => {
         if (this.reasoning?.controller === controller) this.reasoning = undefined;
       })
