@@ -208,19 +208,24 @@ export class NativeTTSProvider implements TTSProvider {
     }
   }
 
-  /** Settles when line `id` is done (rejecting if it failed), or at once with a stop when `signal` aborts. */
+  /**
+   * Settles when line `id` is done (rejecting if it failed), or at once with a stop when `signal` aborts first.
+   * Aborting after the line is done stops nothing: the next line may be playing by then.
+   */
   private finished(id: string, signal: AbortSignal): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        off();
+        this.stop().then(resolve, reject);
+      };
       const off = this.bridge.listen<{ id: string; error: string | null }>(DONE_EVENT, (done) => {
         if (done.id !== id) return;
         off();
+        signal.removeEventListener("abort", abort);
         if (done.error) reject(new Error(done.error));
         else resolve();
       });
-      signal.addEventListener("abort", () => {
-        off();
-        this.stop().then(resolve, reject);
-      }, { once: true });
+      signal.addEventListener("abort", abort, { once: true });
     });
   }
 

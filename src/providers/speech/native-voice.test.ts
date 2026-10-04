@@ -244,6 +244,24 @@ describe("NativeTTSProvider segments", () => {
     expect(heard).toEqual([{ index: 0, text: "Second line." }]);
   });
 
+  it("keeps following the next line when an earlier line's signal aborts after it finished", async () => {
+    const { tts, fire, invoke, heard } = listening();
+    const earlier = new AbortController();
+    const first = tts.speak(words("First line."), earlier.signal);
+    await settle();
+    fire("tts:done", { id: lastSpeakId(invoke), interrupted: false, error: null });
+    await first;
+    const second = tts.speak(words("Second line."), new AbortController().signal);
+    await settle();
+    earlier.abort();
+    const id = lastSpeakId(invoke);
+    fire("tts:segment", { id, index: 0, text: "Second line." });
+    fire("tts:done", { id, interrupted: false, error: null });
+    await second;
+    expect(heard).toEqual([{ index: 0, text: "Second line." }]);
+    expect(invoke).not.toHaveBeenCalledWith("tts_stop");
+  });
+
   it("drops the segments of a line that failed", async () => {
     const { tts, fire, invoke, heard } = listening();
     const speaking = tts.speak(words("Click Insert."), new AbortController().signal);
