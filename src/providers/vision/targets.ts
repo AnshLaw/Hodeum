@@ -1,5 +1,5 @@
 import type { ActionTarget, Rect, TeachingContext, UiElement } from "../../lib/types";
-import { agreementConfidence, resolveTarget, type Resolution } from "./grounding";
+import { agreementConfidence, labelTier, quotedLabels, resolveTarget, type LabelTier, type Resolution } from "./grounding";
 import { pointable, windowBoundsOf } from "./prompt";
 import type { MoreTarget } from "./schema";
 
@@ -44,6 +44,18 @@ export function namesOf(item: MoreTarget): string[] {
   return [...new Set(names)];
 }
 
+/** A quote names a later control when it has that control's words (any case), not just some of them. */
+const SAME_WORDS: LabelTier = 2;
+
+/**
+ * The labels quoted in `speech` that don't name a later control. A step through several controls quotes
+ * them all ("tick the box, then click 'OK'"), and only the first control's own words may settle it.
+ */
+export function firstQuotes(speech: string, later: MoreTarget[] = []): string[] {
+  const names = later.flatMap(namesOf);
+  return quotedLabels(speech).filter((quote) => !names.some((name) => labelTier(quote, name) >= SAME_WORDS));
+}
+
 export interface LaterInput {
   items: MoreTarget[];
   /** The step's first control; later ones are only lit beside it. */
@@ -65,14 +77,15 @@ function laterTarget(item: MoreTarget, resolution: Resolution, { speech, confide
 
 /**
  * The controls after the first that the step walks through, in flow order, each settled like the first.
- * Left out: the first control or an earlier one named again, one nothing on screen fits, and one
- * grounding isn't sure enough to number. None at all without a first control.
+ * Left out: one with no name (its number or box alone would be numbered as surely as a named one), the
+ * first control or an earlier one named again, one nothing on screen fits, and one grounding isn't sure
+ * enough to number. None at all without a first control.
  */
 export function laterTargets(input: LaterInput): ActionTarget[] {
   if (!input.first) return [];
   const lit = new Set([input.first.elementId]);
   const targets: ActionTarget[] = [];
-  for (const item of input.items) {
+  for (const item of input.items.filter((later) => namesOf(later).length > 0)) {
     const target = laterTarget(item, input.settle(item), input);
     if (!target || lit.has(target.elementId)) continue;
     lit.add(target.elementId);
