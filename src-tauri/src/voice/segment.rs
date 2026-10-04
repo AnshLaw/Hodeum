@@ -60,6 +60,11 @@ impl<R: Recognizer> Segmenter<R> {
         &mut self.recognizer
     }
 
+    /// Whether an utterance is under way.
+    pub fn speaking(&self) -> bool {
+        self.speaking
+    }
+
     /// Ends an utterance in progress right now (the talk key was released) and returns its text.
     pub fn flush(&mut self) -> Option<String> {
         if !self.speaking {
@@ -332,7 +337,9 @@ mod tests {
     fn flushing_ends_the_sentence_in_progress() {
         let mut s = Segmenter::new(Fake::default());
         s.push(&[0.1; 1], true);
+        assert!(s.speaking());
         assert_eq!(s.flush(), Some("hint".into()));
+        assert!(!s.speaking());
         assert_eq!(s.flush(), None);
     }
 

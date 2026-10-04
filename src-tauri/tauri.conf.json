@@ -13,6 +13,7 @@
     "windows": [
       {
         "label": "guidance_overlay",
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
         "url": "overlay.html",
         "title": "Hodey guidance",
         "width": 800,
@@ -29,6 +30,7 @@
       },
       {
         "label": "main_notch",
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
         "url": "notch.html",
         "title": "Hodey",
         "width": 600,
@@ -45,6 +47,7 @@
       },
       {
         "label": "hodeum_app",
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
         "url": "app.html",
         "title": "Hodeum",
         "width": 1120,
@@ -73,6 +76,9 @@
     "category": "Education",
     "shortDescription": "Hodeum: AI that teaches, not takes over",
     "longDescription": "Hodeum is a local-first teaching companion. Hodey guides you through real tasks on your PC while you do the work.",
+    "resources": [
+      "resources/samples/*"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

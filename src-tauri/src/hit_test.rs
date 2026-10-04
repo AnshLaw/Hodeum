@@ -41,15 +41,41 @@ impl NotchHitRect {
     }
 }
 
-fn cursor_inside_pill(app: &AppHandle) -> Result<bool, String> {
+/// Whether a physical screen point is on the notch surface.
+fn inside_pill(app: &AppHandle, x: f64, y: f64) -> Result<bool, String> {
     let notch = app
         .get_webview_window(NOTCH)
         .ok_or_else(|| "notch window is missing".to_string())?;
-    let cursor = app.cursor_position().map_err(|e| e.to_string())?;
     let origin = notch.inner_position().map_err(|e| e.to_string())?;
     let scale = notch.scale_factor().map_err(|e| e.to_string())?;
     let rect = app.state::<NotchHitRect>().get()?;
-    Ok(rect.contains(cursor.x - f64::from(origin.x), cursor.y - f64::from(origin.y), scale))
+    Ok(rect.contains(x - f64::from(origin.x), y - f64::from(origin.y), scale))
+}
+
+fn cursor_inside_pill(app: &AppHandle) -> Result<bool, String> {
+    let cursor = app.cursor_position().map_err(|e| e.to_string())?;
+    inside_pill(app, cursor.x, cursor.y)
+}
+
+/// The notch never gets focus and clicks outside it pass through, so it can't see a click elsewhere
+/// itself: this tells it, so open menus close the way any popover does.
+pub const OUTSIDE_PRESS_EVENT: &str = "notch:outside-press";
+
+/// Reports each mouse press (from the input hook) that lands off the notch surface.
+pub fn watch_presses(app: AppHandle, presses: std::sync::mpsc::Receiver<(i32, i32)>) {
+    thread::spawn(move || {
+        while let Ok((x, y)) = presses.recv() {
+            match inside_pill(&app, f64::from(x), f64::from(y)) {
+                Ok(true) => {}
+                Ok(false) => {
+                    if let Err(error) = app.emit_to(NOTCH, OUTSIDE_PRESS_EVENT, ()) {
+                        eprintln!("couldn't tell the notch about a click elsewhere: {error}");
+                    }
+                }
+                Err(error) => eprintln!("couldn't check where a click landed: {error}"),
+            }
+        }
+    });
 }
 
 fn apply(app: &AppHandle, inside: bool) -> Result<(), String> {

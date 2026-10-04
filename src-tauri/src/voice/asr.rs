@@ -2,10 +2,14 @@
 //! int8, CPU, through sherpa-onnx) is the backup when Nemotron is missing, won't load, or fails while
 //! listening, so the demo never depends on one speech engine. Audio stays in memory.
 
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+
 use sherpa_onnx::{OfflineRecognizer, OfflineRecognizerConfig, OfflineWhisperModelConfig, OnlineRecognizer, OnlineRecognizerConfig, OnlineStream, OnlineTransducerModelConfig};
 
 use super::listen::{language, SAMPLE_RATE};
-use super::models::{AsrFiles, WhisperFiles, WHISPER_SIZE};
+use super::models::{asr_files, vad_file, whisper_files, AsrFiles, WhisperFiles, WHISPER_SIZE};
 use super::segment::Recognizer;
 
 /// CPU threads: leave the rest for the app and the vision model's host work.
@@ -19,11 +23,74 @@ const WHISPER_WINDOW_SECS: usize = 25;
 const WHISPER_WINDOW_SAMPLES: usize = WHISPER_WINDOW_SECS * SAMPLE_RATE as usize;
 const NEMOTRON_NO_RESULT: &str = "Nemotron stopped returning text.";
 const WHISPER_NO_RESULT: &str = "Whisper stopped returning text.";
+/// Silence fed after the last word so the streaming encoder's lookahead covers it: without it the
+/// final word of an utterance is often cut short or dropped.
+const TAIL_PADDING_SECS: f32 = 0.6;
+const NEMOTRON_ID: &str = "nemotron";
+const WHISPER_ID: &str = "whisper";
+const NEMOTRON_LABEL: &str = "Nemotron (fast, streaming)";
+const WHISPER_LABEL: &str = "Whisper base (multilingual)";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum EngineKind {
     Nemotron,
     Whisper,
+}
+
+/// Every engine this build can listen with, in Settings order.
+pub(crate) const ENGINE_KINDS: [EngineKind; 2] = [EngineKind::Nemotron, EngineKind::Whisper];
+
+impl EngineKind {
+    /// The id Settings stores and the status reports.
+    pub(crate) fn id(self) -> &'static str {
+        match self {
+            EngineKind::Nemotron => NEMOTRON_ID,
+            EngineKind::Whisper => WHISPER_ID,
+        }
+    }
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            EngineKind::Nemotron => NEMOTRON_LABEL,
+            EngineKind::Whisper => WHISPER_LABEL,
+        }
+    }
+
+    pub(crate) fn from_id(id: &str) -> Option<Self> {
+        ENGINE_KINDS.into_iter().find(|kind| kind.id() == id)
+    }
+}
+
+/// Whether this engine's model files (and the shared voice activity detector) are on disk.
+pub(crate) fn available(kind: EngineKind, root: &Path) -> bool {
+    match kind {
+        EngineKind::Nemotron => asr_files(root).is_ok(),
+        EngineKind::Whisper => vad_file(root).is_ok() && whisper_files(root).is_ok(),
+    }
+}
+
+/// The engine the learner picked in Settings (Nemotron until told otherwise).
+static PREFERRED: Mutex<EngineKind> = Mutex::new(EngineKind::Nemotron);
+/// The learner picked an engine the listener hasn't switched to yet.
+static SWITCH_PENDING: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn preferred() -> EngineKind {
+    PREFERRED.lock().map(|kind| *kind).unwrap_or_else(|e| {
+        eprintln!("speech engine preference lock poisoned, using Nemotron: {e}");
+        EngineKind::Nemotron
+    })
+}
+
+/// Settings > Voice > Speech model; the listener switches before its next session.
+pub(crate) fn prefer(kind: EngineKind) -> Result<(), String> {
+    *PREFERRED.lock().map_err(|e| e.to_string())? = kind;
+    SWITCH_PENDING.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+/// The engine to switch to, once per pick, so a failover to Whisper isn't undone after every session.
+pub(crate) fn take_switch_request() -> Option<EngineKind> {
+    SWITCH_PENDING.swap(false, Ordering::SeqCst).then(preferred)
 }
 
 /// A speech recognizer Hodey can listen with.
@@ -79,6 +146,23 @@ pub(crate) fn load_with_fallback(primary: impl FnOnce() -> Result<Asr, String>, 
     }
 }
 
+/// The learner's engine when it loads; otherwise the other one. Ok: the engine and the status detail
+/// (None when the preferred engine is listening).
+pub(crate) fn load_preferred(preferred: EngineKind, load: impl Fn(EngineKind) -> Result<Asr, String>) -> Result<(Asr, Option<String>), String> {
+    if preferred == EngineKind::Nemotron {
+        return load_with_fallback(|| load(EngineKind::Nemotron), || load(EngineKind::Whisper));
+    }
+    let problem = match load(EngineKind::Whisper) {
+        Ok(engine) => return Ok((engine, None)),
+        Err(problem) => problem,
+    };
+    eprintln!("Whisper speech recognition unavailable, trying Nemotron: {problem}");
+    match load(EngineKind::Nemotron) {
+        Ok(engine) => Ok((engine, Some(format!("Listening with Nemotron; the Whisper model you picked didn't load: {problem}")))),
+        Err(backup_problem) => Err(format!("{problem} Nemotron: {backup_problem}")),
+    }
+}
+
 /// After a session: a failed Nemotron is replaced by Whisper; a failed Whisper is reported (there's
 /// nothing further to fall back to). Some: the new status detail.
 pub(crate) fn switch_on_failure(engine: &mut Asr, backup: impl FnOnce() -> Result<Asr, String>) -> Option<String> {
@@ -117,6 +201,9 @@ fn decoded(recognizer: &OnlineRecognizer, stream: &OnlineStream) -> Result<Strin
 
 impl Nemotron {
     pub(crate) fn load(files: &AsrFiles) -> Result<Asr, String> {
+        // feature_dim stays at sherpa's default (80) on purpose: for NeMo transducers sherpa-onnx 1.13.8
+        // takes the size from the encoder's `feat_dim` metadata (128 for Nemotron 3.5) and ignores this
+        // setting (checked against the real model: 64, 80 and 128 give the same transcript).
         let mut config = OnlineRecognizerConfig::default();
         config.model_config.transducer = OnlineTransducerModelConfig { encoder: path(&files.encoder), decoder: path(&files.decoder), joiner: path(&files.joiner) };
         config.model_config.tokens = path(&files.tokens);
@@ -151,6 +238,7 @@ impl Recognizer for Nemotron {
 
     fn finish(&mut self) -> String {
         let Some(stream) = self.stream.take() else { return String::new() };
+        stream.accept_waveform(SAMPLE_RATE, &tail_padding());
         stream.input_finished();
         let result = decoded(&self.recognizer, &stream);
         self.record(result)
@@ -169,6 +257,11 @@ impl SpeechEngine for Nemotron {
     fn kind(&self) -> EngineKind {
         EngineKind::Nemotron
     }
+}
+
+/// Silence that lets the last word through the streaming encoder before the utterance closes.
+fn tail_padding() -> Vec<f32> {
+    vec![0.0; (TAIL_PADDING_SECS * SAMPLE_RATE as f32) as usize]
 }
 
 fn whisper_recognizer(files: &WhisperFiles, language: &str) -> Result<OfflineRecognizer, String> {
@@ -371,6 +464,53 @@ mod tests {
         assert_eq!(engine.kind(), EngineKind::Nemotron);
         assert!(detail.contains(NEMOTRON_NO_RESULT) && detail.contains("sherpa-onnx-whisper-base"), "{detail}");
         assert_eq!(engine.failure(), None, "the next session tries again");
+    }
+
+    #[test]
+    fn engines_round_trip_through_their_settings_ids() {
+        for kind in ENGINE_KINDS {
+            assert_eq!(EngineKind::from_id(kind.id()), Some(kind));
+        }
+        assert_eq!(EngineKind::from_id("parakeet"), None);
+        assert_eq!(EngineKind::Nemotron.label(), "Nemotron (fast, streaming)");
+        assert_eq!(EngineKind::Whisper.label(), "Whisper base (multilingual)");
+    }
+
+    fn all_but(missing: EngineKind) -> impl Fn(EngineKind) -> Result<Asr, String> {
+        move |kind| if kind == missing { Err(format!("no {}", kind.id())) } else { Ok(fake(kind, None)) }
+    }
+
+    #[test]
+    fn the_learner_s_engine_loads_first_and_the_other_backs_it_up() {
+        let (engine, detail) = load_preferred(EngineKind::Whisper, all_but(EngineKind::Nemotron)).unwrap();
+        assert_eq!((engine.kind(), detail), (EngineKind::Whisper, None));
+        let (engine, detail) = load_preferred(EngineKind::Whisper, all_but(EngineKind::Whisper)).unwrap();
+        assert_eq!(engine.kind(), EngineKind::Nemotron);
+        assert!(detail.unwrap().contains("no whisper"));
+        let (engine, detail) = load_preferred(EngineKind::Nemotron, all_but(EngineKind::Whisper)).unwrap();
+        assert_eq!((engine.kind(), detail), (EngineKind::Nemotron, None));
+    }
+
+    #[test]
+    fn an_engine_is_available_only_with_its_files_and_the_detector() {
+        let root = std::env::temp_dir().join(format!("hodeum-asr-available-{}", std::process::id()));
+        let pack = root.join("sherpa-onnx-whisper-base");
+        std::fs::create_dir_all(&pack).unwrap();
+        for name in ["base-encoder.int8.onnx", "base-decoder.int8.onnx", "base-tokens.txt"] {
+            std::fs::write(pack.join(name), b"").unwrap();
+        }
+        assert!(!available(EngineKind::Whisper, &root), "no voice activity detector yet");
+        std::fs::write(root.join("silero_vad.onnx"), b"").unwrap();
+        assert!(available(EngineKind::Whisper, &root));
+        assert!(!available(EngineKind::Nemotron, &root));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_last_word_gets_enough_trailing_silence() {
+        let padding = tail_padding();
+        assert_eq!(padding.len(), 9_600, "0.6 s at 16 kHz");
+        assert!(padding.iter().all(|&s| s == 0.0));
     }
 
     #[test]

@@ -4,6 +4,7 @@ pub mod input_hook;
 pub mod model;
 mod press;
 mod uia;
+pub mod window_watch;
 
 use std::sync::atomic::AtomicIsize;
 use std::sync::{mpsc, Arc, Mutex};
@@ -60,6 +61,11 @@ impl Perception {
         self.last_external.store(hwnd, std::sync::atomic::Ordering::SeqCst);
     }
 
+    /// Shared with the window watcher, which keeps it current as the learner switches apps.
+    pub fn last_external(&self) -> Arc<AtomicIsize> {
+        self.last_external.clone()
+    }
+
     /// The learner's app: the foreground window, or the last one before Hodeum took focus.
     pub fn learner_window(&self) -> Result<isize, String> {
         foreground::target_window(&self.last_external).map(|hwnd| hwnd.0 as isize)
@@ -100,7 +106,8 @@ fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<
     });
     let at = now_ms();
     reader.remember(Seen { at, pid: foreground::window_pid(hwnd), elements: handles });
-    let observation = Observation { app: app_name(&stem), window_title: foreground::window_title(hwnd), elements, at };
+    let window = window_watch::window_frame(hwnd);
+    let observation = Observation { app: app_name(&stem), window_title: foreground::window_title(hwnd), elements, at, window };
     Ok((observation, foreground::monitor_rect(hwnd)))
 }
 

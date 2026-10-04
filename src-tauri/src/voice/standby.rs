@@ -3,14 +3,13 @@
 //! as soon as its first word is known, and nothing is recorded or saved.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, TryRecvError};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::Mutex;
 
-use sherpa_onnx::LinearResampler;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use super::listen::{open_mic, vad_step, Engines, ListenCommand, AUDIO_POLL, SAMPLE_RATE, VAD_WINDOW};
+use super::listen::{is_speech, open_input, Engines, Input, ListenCommand, VadMode, AUDIO_POLL, VAD_WINDOW};
 use super::segment::{Recognizer, SpeechEvent};
 use super::set_standby;
 
@@ -77,18 +76,16 @@ pub(crate) fn may_be_wake(partial: &str, custom: &[String]) -> bool {
 
 /// Listens until a command arrives or hands-free is switched off. Err: the microphone failed.
 pub fn standby(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>) -> Result<Outcome, String> {
-    let (tx, audio) = mpsc::channel::<Vec<f32>>();
-    let mic = open_mic(tx, true)?;
-    let resampler = LinearResampler::create(mic.rate as i32, SAMPLE_RATE).ok_or("Couldn't set up audio resampling.")?;
+    let input = open_input(true)?;
     set_standby(app, true);
-    let outcome = wait(app, engines, commands, &audio, &resampler);
+    let outcome = wait(app, engines, commands, &input);
     set_standby(app, false);
-    engines.segmenter.reset();
-    engines.vad.reset();
+    engines.reset();
     outcome
 }
 
-fn wait(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>, audio: &Receiver<Vec<f32>>, resampler: &LinearResampler) -> Result<Outcome, String> {
+/// A command (another microphone picked, too) ends the wait; the listener reopens standby afterwards.
+fn wait(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>, input: &Input) -> Result<Outcome, String> {
     let mut overheard = Overheard::default();
     loop {
         match commands.try_recv() {
@@ -97,8 +94,8 @@ fn wait(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComman
             Ok(command) => return Ok(Outcome::Command(command)),
             Err(TryRecvError::Disconnected) => return Ok(Outcome::Closed),
         }
-        match audio.recv_timeout(AUDIO_POLL) {
-            Ok(chunk) => overheard.push(engines, &resampler.resample(&chunk, false)).into_iter().for_each(|text| emit_candidate(app, text)),
+        match input.audio.recv_timeout(AUDIO_POLL) {
+            Ok(chunk) => overheard.push(engines, &input.resampler.resample(&chunk, false)).into_iter().for_each(|text| emit_candidate(app, text)),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return Err("The microphone stopped.".into()),
         }
@@ -129,7 +126,7 @@ impl Overheard {
         self.pending.extend_from_slice(samples);
         while self.pending.len() >= VAD_WINDOW {
             let window: Vec<f32> = self.pending.drain(..VAD_WINDOW).collect();
-            let speech = vad_step(&engines.vad, &window);
+            let speech = is_speech(engines, &window, VadMode::OpenMic);
             if self.ignoring && speech {
                 continue;
             }

@@ -1,5 +1,5 @@
-//! Natural text-to-speech on the CPU (Kokoro-82M, else Supertonic), played through the default output
-//! device. Speech is synthesized a sentence at a time so it starts quickly, and stops the instant the
+//! Natural text-to-speech on the CPU (Kokoro-82M, else Supertonic), played through the speakers picked
+//! in Settings (else the default output device). Speech is synthesized a sentence at a time so it starts quickly, and stops the instant the
 //! learner talks.
 
 use std::collections::HashMap;
@@ -11,7 +11,7 @@ use std::thread;
 use std::time::Duration;
 
 use rodio::buffer::SamplesBuffer;
-use rodio::stream::DeviceSinkBuilder;
+use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
 use rodio::Player;
 use serde::Serialize;
 use sherpa_onnx::{GenerationConfig, OfflineTts, OfflineTtsConfig, OfflineTtsKokoroModelConfig, OfflineTtsModelConfig, OfflineTtsSupertonicModelConfig};
@@ -20,6 +20,7 @@ use tauri::{AppHandle, Emitter};
 use super::models::{kokoro_files, tts_files, voice_root, KokoroFiles, TtsFiles};
 use super::voices::{catalog, pick, Engine};
 use super::cache::{key, PhraseCache};
+use super::devices::chosen_output_device;
 use super::segment::{script_runs, speech_chunks};
 use super::set_tts_voices;
 
@@ -54,6 +55,13 @@ pub struct SpeakJob {
     pub generation: u64,
     /// False: only synthesize into the phrase cache (preparing likely lines), don't play or report.
     pub play: bool,
+}
+
+/// What the speaker thread is asked to do, in order.
+pub enum SpeakerCommand {
+    Say(SpeakJob),
+    /// Other speakers were picked in Settings: play through them from now on.
+    SwitchOutput,
 }
 
 #[derive(Clone, Serialize)]
@@ -309,42 +317,84 @@ fn report(app: &AppHandle, id: String, interrupted: bool, error: Option<String>)
     }
 }
 
-/// No natural voice: every queued line fails with `reason` (the caller keeps the speaker open meanwhile).
-fn refuse_all(app: &AppHandle, jobs: Receiver<SpeakJob>, reason: String) {
+/// The open output device and the player Hodey (and the cloud voice) speak through.
+struct Output {
+    _sink: MixerDeviceSink,
+    player: Arc<Player>,
+}
+
+/// The chosen speakers while they're plugged in and open, else the default output.
+fn open_sink() -> Result<MixerDeviceSink, String> {
+    if let Some(device) = chosen_output_device() {
+        match DeviceSinkBuilder::from_device(device).and_then(|builder| builder.open_sink_or_fallback()) {
+            Ok(sink) => return Ok(sink),
+            Err(e) => eprintln!("couldn't open the chosen speakers, using the default: {e}"),
+        }
+    }
+    DeviceSinkBuilder::open_default_sink().map_err(|e| format!("No speakers or headphones found: {e}"))
+}
+
+impl Output {
+    /// Opens the speakers and hands their player to `stop`, so barge-in and the cloud voice use it.
+    fn open(stop: &StopSwitch) -> Result<Self, String> {
+        let mut sink = open_sink()?;
+        // Switching speakers drops the old sink on purpose; rodio would log that as a warning.
+        sink.log_on_drop(false);
+        let player = Arc::new(Player::connect_new(sink.mixer()));
+        match stop.player.lock() {
+            Ok(mut slot) => *slot = Some(Arc::clone(&player)),
+            Err(e) => eprintln!("couldn't share the speech player for interruptions: {e}"),
+        }
+        Ok(Self { _sink: sink, player })
+    }
+}
+
+/// The newly chosen speakers; None (logged) keeps the current ones.
+fn reopened(stop: &StopSwitch) -> Option<Output> {
+    Output::open(stop).inspect_err(|reason| eprintln!("couldn't switch speakers, keeping the current ones: {reason}")).ok()
+}
+
+/// No natural voice: every queued line fails with `reason`. The speaker stays open (and still follows
+/// Settings) for the cloud voice.
+fn refuse_all(app: &AppHandle, commands: Receiver<SpeakerCommand>, stop: &StopSwitch, mut output: Option<Output>, reason: String) {
     set_tts_voices(app, Err(reason.clone()));
-    for job in jobs {
-        report(app, job.id, false, Some(reason.clone()));
+    for command in commands {
+        match command {
+            SpeakerCommand::Say(job) => report(app, job.id, false, Some(reason.clone())),
+            SpeakerCommand::SwitchOutput => output = reopened(stop).or(output),
+        }
+    }
+}
+
+fn say(app: &AppHandle, engines: &Engines, cache: &mut PhraseCache, player: &Player, job: SpeakJob, stop: &Arc<StopSwitch>) {
+    if !job.play {
+        return prepare(engines, cache, &job, stop);
+    }
+    let result = if cancelled(stop, &job) { Ok(true) } else { speak(engines, cache, player, &job, stop) };
+    match result {
+        Ok(interrupted) => report(app, job.id, interrupted, None),
+        Err(reason) => report(app, job.id, false, Some(reason)),
     }
 }
 
 /// The speaker thread: opens the output device and loads the natural voices once, then speaks queued
 /// jobs in order. The device opens first and stays open, so the cloud voice can play through the same
 /// speaker (and the same barge-in stop) even when no local voice is installed.
-pub fn worker(app: AppHandle, jobs: Receiver<SpeakJob>, stop: Arc<StopSwitch>) {
-    let sink = match DeviceSinkBuilder::open_default_sink() {
-        Ok(sink) => sink,
-        Err(e) => return refuse_all(&app, jobs, format!("No speakers or headphones found: {e}")),
+pub fn worker(app: AppHandle, commands: Receiver<SpeakerCommand>, stop: Arc<StopSwitch>) {
+    let mut output = match Output::open(&stop) {
+        Ok(output) => output,
+        Err(reason) => return refuse_all(&app, commands, &stop, None, reason),
     };
-    let player = Arc::new(Player::connect_new(sink.mixer()));
-    match stop.player.lock() {
-        Ok(mut slot) => *slot = Some(Arc::clone(&player)),
-        Err(e) => eprintln!("couldn't share the speech player for interruptions: {e}"),
-    }
     let engines = match Engines::load() {
         Ok(engines) => engines,
-        Err(reason) => return refuse_all(&app, jobs, reason),
+        Err(reason) => return refuse_all(&app, commands, &stop, Some(output), reason),
     };
     set_tts_voices(&app, Ok(engines.voices()));
     let mut cache = PhraseCache::new(PHRASE_CACHE_SIZE);
-    for job in jobs {
-        if !job.play {
-            prepare(&engines, &mut cache, &job, &stop);
-            continue;
-        }
-        let result = if cancelled(&stop, &job) { Ok(true) } else { speak(&engines, &mut cache, &player, &job, &stop) };
-        match result {
-            Ok(interrupted) => report(&app, job.id, interrupted, None),
-            Err(reason) => report(&app, job.id, false, Some(reason)),
+    for command in commands {
+        match command {
+            SpeakerCommand::Say(job) => say(&app, &engines, &mut cache, &output.player, job, &stop),
+            SpeakerCommand::SwitchOutput => output = reopened(&stop).unwrap_or(output),
         }
     }
 }

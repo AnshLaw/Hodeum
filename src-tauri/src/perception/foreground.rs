@@ -35,7 +35,7 @@ pub fn root_window(hwnd: HWND) -> HWND {
     unsafe { GetAncestor(hwnd, GA_ROOT) }
 }
 
-fn class_name(hwnd: HWND) -> String {
+pub fn class_name(hwnd: HWND) -> String {
     let mut buffer = [0u16; TEXT_BUFFER];
     // SAFETY: the buffer outlives the call and its length is passed implicitly by the slice.
     let len = unsafe { GetClassNameW(hwnd, &mut buffer) };

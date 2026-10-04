@@ -39,6 +39,9 @@ pub struct Observation {
     pub window_title: String,
     pub elements: Vec<ElementDto>,
     pub at: u64,
+    /// The window that was read; guidance placed from this read is drawn only over it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window: Option<super::window_watch::WindowDto>,
 }
 
 /// UIA localized control types ("Tab Item", "check box") -> task-pack role vocabulary ("tab item").

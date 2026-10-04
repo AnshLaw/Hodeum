@@ -2,7 +2,8 @@
 //! so Hodey's own voice from the speakers is removed before speech recognition (Windows 11 Voice
 //! Clarity, or the sound driver's own canceller). Used only when Windows confirms echo cancellation is
 //! on; otherwise the plain microphone is used and the frontend's transcript echo check does the work.
-//! Windows converts the audio to 16 kHz mono f32 itself.
+//! Windows converts the audio to 16 kHz mono f32 itself. Uses the microphone and speakers picked in
+//! Settings while they're plugged in, else the Windows defaults.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
@@ -14,13 +15,14 @@ use windows::core::{GUID, PCWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::Media::Audio::{
     eCapture, eCommunications, eConsole, eRender, AudioCategory_Communications, AudioClientProperties, IAcousticEchoCancellationControl, IAudioCaptureClient,
-    IAudioClient2, IAudioClientDuckingControl, IAudioEffectsManager, IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
+    IAudioClient2, IAudioClientDuckingControl, IAudioEffectsManager, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
     AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, AUDCLNT_STREAMOPTIONS_NONE, AUDIO_DUCKING_OPTIONS_DO_NOT_DUCK_OTHER_STREAMS,
     AUDIO_EFFECT, AUDIO_EFFECT_STATE_ON, WAVEFORMATEX,
 };
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED};
 use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
 
+use super::devices::{active_endpoint, chosen_input, chosen_output};
 use super::listen::SAMPLE_RATE;
 
 /// `AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION` (ksmedia.h).
@@ -106,7 +108,7 @@ impl Drop for Stream {
 impl Stream {
     unsafe fn open() -> windows::core::Result<Self> {
         let devices: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
-        let client: IAudioClient2 = devices.GetDefaultAudioEndpoint(eCapture, eCommunications)?.Activate(CLSCTX_ALL, None)?;
+        let client: IAudioClient2 = microphone(&devices)?.Activate(CLSCTX_ALL, None)?;
         let properties = AudioClientProperties {
             cbSize: size_of::<AudioClientProperties>() as u32,
             bIsOffload: false.into(),
@@ -167,6 +169,14 @@ fn mono_16k() -> WAVEFORMATEX {
     }
 }
 
+/// The chosen microphone while it's plugged in, else the default communications microphone.
+unsafe fn microphone(devices: &IMMDeviceEnumerator) -> windows::core::Result<IMMDevice> {
+    match chosen_input().and_then(|id| active_endpoint(devices, &id, "microphone")) {
+        Some(device) => Ok(device),
+        None => devices.GetDefaultAudioEndpoint(eCapture, eCommunications),
+    }
+}
+
 /// A communications stream makes Windows turn other sounds down, Hodey's voice included; opt out.
 unsafe fn dont_duck_others(client: &IAudioClient2) {
     let result = client.GetService::<IAudioClientDuckingControl>().and_then(|c| c.SetDuckingOptionsForCurrentStream(AUDIO_DUCKING_OPTIONS_DO_NOT_DUCK_OTHER_STREAMS));
@@ -175,11 +185,15 @@ unsafe fn dont_duck_others(client: &IAudioClient2) {
     }
 }
 
-/// Points the canceller at the speakers Hodey talks through (the default output). Optional: without
-/// it Windows uses the default output anyway.
+/// Points the canceller at the speakers Hodey talks through (the chosen ones, else the default output).
+/// Optional: without it Windows uses the default output anyway.
 unsafe fn aim_at_speakers(client: &IAudioClient2, devices: &IMMDeviceEnumerator) {
     let result = (|| {
-        let id = devices.GetDefaultAudioEndpoint(eRender, eConsole)?.GetId()?;
+        let speakers = match chosen_output().and_then(|id| active_endpoint(devices, &id, "speaker")) {
+            Some(device) => device,
+            None => devices.GetDefaultAudioEndpoint(eRender, eConsole)?,
+        };
+        let id = speakers.GetId()?;
         let aimed = client.GetService::<IAcousticEchoCancellationControl>().and_then(|c| c.SetEchoCancellationRenderEndpoint(PCWSTR(id.0)));
         CoTaskMemFree(Some(id.0 as *const _));
         aimed

@@ -3,6 +3,7 @@
 
 pub mod asr;
 pub mod cache;
+pub mod devices;
 pub mod echo_mic;
 pub mod listen;
 pub mod models;
@@ -18,8 +19,9 @@ use std::thread;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use asr::EngineKind;
 use listen::{ListenCommand, ListenMode};
-use speak::{SpeakJob, StopSwitch};
+use speak::{SpeakJob, SpeakerCommand, StopSwitch};
 
 const STATUS_EVENT: &str = "voice:status";
 
@@ -38,12 +40,31 @@ pub struct VoiceStatus {
     pub tts_detail: Option<String>,
     /// Hodey's natural voices (Kokoro first, then Supertonic).
     pub voices: Vec<voices::VoiceOption>,
+    /// The speech engine listening now ("nemotron" or "whisper"); None until one has loaded.
+    #[serde(rename = "asrEngine")]
+    pub asr_engine: Option<&'static str>,
+}
+
+/// One speech-recognition model for Settings > Voice.
+#[derive(Debug, Clone, Serialize)]
+pub struct AsrModel {
+    pub id: &'static str,
+    pub label: &'static str,
+    /// Its model files are installed.
+    pub available: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VoiceModels {
+    pub asr: Vec<AsrModel>,
+    /// The engine listening now, else the one picked (until one has loaded).
+    pub active: &'static str,
 }
 
 pub struct Voice {
     status: Mutex<VoiceStatus>,
     listen: Mutex<Sender<ListenCommand>>,
-    speak: Mutex<Sender<SpeakJob>>,
+    speak: Mutex<Sender<SpeakerCommand>>,
     stop: Arc<StopSwitch>,
 }
 
@@ -80,6 +101,10 @@ pub(crate) fn set_status_detail(app: &AppHandle, detail: Option<String>) {
     update(app, |s| s.detail = detail);
 }
 
+pub(crate) fn set_asr_engine(app: &AppHandle, engine: Option<&'static str>) {
+    update(app, |s| s.asr_engine = engine);
+}
+
 pub(crate) fn set_tts_voices(app: &AppHandle, voices: Result<Vec<voices::VoiceOption>, String>) {
     update(app, |s| match voices {
         Ok(list) => {
@@ -104,7 +129,7 @@ pub fn start(app: &AppHandle) {
     let (listen_tx, listen_rx) = mpsc::channel();
     let (speak_tx, speak_rx) = mpsc::channel();
     let stop = Arc::new(StopSwitch::default());
-    let status = VoiceStatus { asr, tts: "loading", listening: false, standby: false, detail, tts_detail: None, voices: Vec::new() };
+    let status = VoiceStatus { asr, tts: "loading", listening: false, standby: false, detail, tts_detail: None, voices: Vec::new(), asr_engine: None };
     app.manage(Voice { status: Mutex::new(status), listen: Mutex::new(listen_tx), speak: Mutex::new(speak_tx), stop: Arc::clone(&stop) });
     let listener = app.clone();
     let installed = asr == "ready";
@@ -172,6 +197,27 @@ pub fn voice_converse(voice: State<'_, Voice>) -> Result<(), String> {
     send_listen(&voice, ListenCommand::Start { mode: ListenMode::Conversation })
 }
 
+/// Settings > Voice > Speech model: the engines this build has, and which is listening.
+#[tauri::command]
+pub fn voice_models(voice: State<'_, Voice>) -> Result<VoiceModels, String> {
+    let root = models::voice_root();
+    let asr = asr::ENGINE_KINDS.into_iter().map(|kind| AsrModel { id: kind.id(), label: kind.label(), available: asr::available(kind, &root) }).collect();
+    let listening = voice.status.lock().map_err(|e| e.to_string())?.asr_engine;
+    Ok(VoiceModels { asr, active: listening.unwrap_or_else(|| asr::preferred().id()) })
+}
+
+/// Settings > Voice > Speech model: listen with this engine from the next utterance on. The frontend
+/// keeps the choice and sends it again at startup.
+#[tauri::command]
+pub fn set_asr_model(id: String, voice: State<'_, Voice>) -> Result<(), String> {
+    let kind = EngineKind::from_id(&id).ok_or_else(|| format!("unknown speech model: {id}"))?;
+    if !asr::available(kind, &models::voice_root()) {
+        return Err(format!("{} isn't installed. {}", kind.label(), models::SETUP_HINT));
+    }
+    asr::prefer(kind)?;
+    send_listen(&voice, ListenCommand::SwitchEngine)
+}
+
 #[tauri::command]
 pub fn voice_stop(voice: State<'_, Voice>) -> Result<(), String> {
     send_listen(&voice, ListenCommand::Stop)
@@ -181,7 +227,7 @@ pub fn voice_stop(voice: State<'_, Voice>) -> Result<(), String> {
 pub fn tts_speak(id: String, text: String, voice_id: String, speed: f32, voice: State<'_, Voice>) -> Result<(), String> {
     let generation = voice.stop.generation.load(std::sync::atomic::Ordering::SeqCst);
     let job = SpeakJob { id, text, voice: voice_id, speed, generation, play: true };
-    voice.speak.lock().map_err(|e| e.to_string())?.send(job).map_err(|_| "Hodey's voice has stopped; restart Hodeum.".to_string())
+    voice.speak.lock().map_err(|e| e.to_string())?.send(SpeakerCommand::Say(job)).map_err(|_| "Hodey's voice has stopped; restart Hodeum.".to_string())
 }
 
 /// Synthesizes likely lines (acknowledgements) ahead of time, silently, so they start instantly.
@@ -191,7 +237,7 @@ pub fn tts_prepare(texts: Vec<String>, voice_id: String, speed: f32, voice: Stat
     let sender = voice.speak.lock().map_err(|e| e.to_string())?;
     for text in texts {
         let job = SpeakJob { id: String::new(), text, voice: voice_id.clone(), speed, generation, play: false };
-        sender.send(job).map_err(|_| "Hodey's voice has stopped; restart Hodeum.".to_string())?;
+        sender.send(SpeakerCommand::Say(job)).map_err(|_| "Hodey's voice has stopped; restart Hodeum.".to_string())?;
     }
     Ok(())
 }
@@ -204,12 +250,22 @@ pub fn tts_stop(voice: State<'_, Voice>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::listen::{load_engines, transcribe};
+    use super::{AsrModel, VoiceModels};
     use super::models::{asr_files, tts_files, voice_root};
     use super::models::kokoro_files;
     use super::speak::{load_kokoro, load_tts};
     use sherpa_onnx::{GenerationConfig, LinearResampler};
 
     const ASR_RATE: i32 = 16_000;
+
+    #[test]
+    fn models_serialize_the_way_the_frontend_reads_them() {
+        let models = VoiceModels { asr: vec![AsrModel { id: "whisper", label: "Whisper base (multilingual)", available: true }], active: "whisper" };
+        assert_eq!(
+            serde_json::to_string(&models).unwrap(),
+            r#"{"asr":[{"id":"whisper","label":"Whisper base (multilingual)","available":true}],"active":"whisper"}"#
+        );
+    }
 
     /// Needs the real models (scripts/setup-local-ai.ps1): `cargo test --lib -- --ignored voice_round_trip`.
     /// Copy target/debug/{onnxruntime*,sherpa-onnx-*}.dll into target/debug/deps first: otherwise the

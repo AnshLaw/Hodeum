@@ -19,13 +19,21 @@ pub fn is_app(exe: &str, app: &str) -> bool {
 }
 
 /// The frontmost open window of `app`.
-fn find_app(app: &str) -> Result<Option<HWND>, String> {
+pub(crate) fn find_app(app: &str) -> Result<Option<HWND>, String> {
     Ok(app_windows()?.into_iter().find(|&h| exe_stem(h).is_ok_and(|exe| is_app(&exe, app))))
+}
+
+/// The frontmost window of `app` whose title mentions `hint` (the file it has open), ignoring case.
+pub(crate) fn find_app_titled(app: &str, hint: &str) -> Result<Option<HWND>, String> {
+    let hint = hint.to_lowercase();
+    Ok(app_windows()?
+        .into_iter()
+        .find(|&h| exe_stem(h).is_ok_and(|exe| is_app(&exe, app)) && window_title(h).to_lowercase().contains(&hint)))
 }
 
 /// Raises `hwnd`. Allowed because the learner just clicked Hodey; if Windows still refuses, borrow
 /// the foreground thread's input state for the switch.
-fn bring_forward(hwnd: HWND) -> Result<(), String> {
+pub(crate) fn bring_forward(hwnd: HWND) -> Result<(), String> {
     // SAFETY: all calls tolerate stale handles; thread input is detached on every path.
     unsafe {
         if IsIconic(hwnd).as_bool() {

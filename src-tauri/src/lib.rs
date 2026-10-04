@@ -2,6 +2,7 @@ mod account;
 #[cfg(test)]
 mod ai_root;
 mod app_focus;
+mod app_launch;
 mod app_window;
 mod chat_context;
 mod child_job;
@@ -34,6 +35,7 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     tray::install(app)?;
     hit_test::spawn(app.clone());
     perception::input_hook::spawn(app.clone())?;
+    perception::window_watch::spawn(app.clone(), app.state::<perception::Perception>().last_external());
     vlm::spawn(app.clone());
     voice::start(app);
     hodey_key::spawn(app.clone())?;
@@ -73,6 +75,7 @@ pub fn run() {
             perception::observe,
             perception::perform_click,
             perception::capture_active_window,
+            perception::window_watch::learner_window,
             phone::ocr_frame,
             phone::airplay::airplay_start,
             phone::airplay::airplay_stop,
@@ -86,6 +89,7 @@ pub fn run() {
             chat_context::last_app_window,
             chat_context::capture_window,
             app_focus::focus_app,
+            app_launch::launch_app,
             web_search::web_search,
             voice::voice_status,
             voice::voice_start,
@@ -96,6 +100,10 @@ pub fn run() {
             voice::tts_speak,
             voice::tts_stop,
             voice::tts_prepare,
+            voice::voice_models,
+            voice::set_asr_model,
+            voice::devices::audio_devices,
+            voice::devices::set_audio_devices,
             hodey_key::set_hodey_key,
             account::auth_listen,
             account::open_url,
