@@ -53,9 +53,11 @@
   stroke-dasharray: 7 5;
 }
 
+/* Grows by the same distance on every side (per-axis scale from pulseScale), so it stays concentric. */
 .hl__pulse {
   stroke: var(--hd-accent);
   stroke-width: 2;
+  vector-effect: non-scaling-stroke;
   transform-box: fill-box;
   transform-origin: center;
   animation: hl-pulse 1.8s var(--hd-ease) 300ms infinite;
@@ -68,7 +70,7 @@
   }
   to {
     opacity: 0;
-    transform: scale(1.22);
+    transform: scale(var(--pulse-sx, 1), var(--pulse-sy, 1));
   }
 }
 
