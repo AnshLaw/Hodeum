@@ -171,6 +171,27 @@ body {
   display: none;
 }
 
+/* Ribbon commands draw their own glyph instead of the placeholder square. */
+.mock-el--icon::before {
+  display: none;
+}
+
+.mock-el__icon {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  fill: none;
+  stroke: #217346;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mock-el__icon .fill {
+  fill: #cfe5d8;
+  stroke: none;
+}
+
 .mock-el--window {
   align-items: flex-start;
   padding: 14px 16px;

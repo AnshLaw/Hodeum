@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { Rect, UiElement } from "../lib/types";
 import type { MockApp, MouseButton } from "../providers/mock-perception";
 import { APP_WINDOW } from "./scenes/layout";
+import { ribbonIcon } from "./ribbon-icons";
 
 const ELEMENT_LAYER_BASE = 10;
 /** Containers whose accessible name isn't visible text in the real app. */
@@ -12,10 +13,11 @@ export function rectStyle(rect: Rect): CSSProperties {
 }
 
 function MockElement({ element, layer, onPress }: { element: UiElement; layer: number; onPress: (id: string, button: MouseButton) => void }) {
+  const icon = element.id.startsWith("ribbon:") ? ribbonIcon(element.name) : undefined;
   return (
     <button
       type="button"
-      className={`mock-el mock-el--${element.role.replace(/\s+/g, "-")}`}
+      className={`mock-el mock-el--${element.role.replace(/\s+/g, "-")}${icon ? " mock-el--icon" : ""}`}
       style={{ ...rectStyle(element.bounds), zIndex: ELEMENT_LAYER_BASE + layer }}
       data-selected={element.selected ? "true" : undefined}
       onClick={() => onPress(element.id, "left")}
@@ -24,6 +26,7 @@ function MockElement({ element, layer, onPress }: { element: UiElement; layer: n
         onPress(element.id, "right");
       }}
     >
+      {icon}
       {UNLABELLED_ROLES.has(element.role) ? null : <span>{element.name}</span>}
     </button>
   );

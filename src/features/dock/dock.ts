@@ -45,6 +45,11 @@ export function savePrefs(storage: WriteStorage, prefs: DockPrefs): void {
   }
 }
 
+/** Starting preferences for a surface with a different default (the practice stage); a saved choice always wins. */
+export function seedPrefs(storage: ReadStorage & WriteStorage, prefs: DockPrefs): void {
+  if (storage.getItem(PREFS_KEY) === null) savePrefs(storage, prefs);
+}
+
 /** Commands from the tray menu and the Hodey key + H. Must match ids in src-tauri/src/tray.rs. */
 export type ShellCommand = "toggle-visibility" | "dock-top" | "dock-left" | "dock-right" | "pinned" | "auto" | "sidebar-copilot" | "sidebar-floating";
 
