@@ -31,7 +31,7 @@ export interface VoiceDeps {
 }
 
 /** Ways to close the conversation; they end it without being treated as a command or question. */
-const CLOSERS = /^(?:(?:ok(?:ay)?|thanks|thank you)[ ,]*)?(?:that'?s all|that is all|bye|goodbye|stop listening|no thanks|nothing|never ?mind|i'?m good|all good)[.!]?$/i;
+const CLOSERS = /^(?:(?:ok(?:ay)?|thanks|thank you)[ ,]*)?(?:that'?s all|that is all|bye|goodbye|stop listening|no thanks|nothing|never ?mind|i'?m good|all good)[.!]?$|^(?:(?:ठीक है|ओके|धन्यवाद|शुक्रिया)[ ,]*)?(?:बस|बस इतना ही|बस इतना|धन्यवाद|शुक्रिया|थैंक यू|कुछ नहीं|बाय)[।.!]?$/iu;
 
 /** Words, keeping Devanagari vowel signs (marks) inside their words. */
 const wordsOf = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}' ]/gu, " ").split(/\s+/).filter(Boolean);

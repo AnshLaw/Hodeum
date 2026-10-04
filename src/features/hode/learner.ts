@@ -1,4 +1,4 @@
-import { COPY } from "../../lib/copy";
+import { spoken } from "../../lib/spoken";
 import { ASSISTANCE_LEVELS, type StepOutcome, type TaskStep } from "../../lib/types";
 import { beginStep, inWrongApp, requestReason, waitForApp } from "./flow";
 import {
@@ -38,11 +38,11 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
   if (!s.pack || nextIndex >= s.pack.steps.length) {
     return {
       state: { ...finished, phase: "success", action: undefined },
-      effects: [...done, { type: "say", text: COPY.hodeCompleteSpeech }],
+      effects: [...done, { type: "say", text: spoken(s.language).hodeCompleteSpeech }],
     };
   }
   const unaided = !s.escalated && (s.level === "observe" || s.level === "independent");
-  const praise: HodeEffect[] = unaided ? [{ type: "say", text: COPY.rememberedOnYourOwn }] : [];
+  const praise: HodeEffect[] = unaided ? [{ type: "say", text: spoken(s.language).rememberedOnYourOwn }] : [];
   return withLeadingEffects(beginStep(finished, nextIndex), [...done, ...praise]);
 }
 

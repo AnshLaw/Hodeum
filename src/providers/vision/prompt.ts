@@ -1,4 +1,5 @@
 import { center, containsPoint, intersects } from "../../lib/coords";
+import type { ReplyLanguage } from "../../lib/language";
 import type { Rect, TeachingContext, UiElement } from "../../lib/types";
 import { nameMatches } from "../../features/hode/signals";
 import { BOX_SCALE } from "./schema";
@@ -82,6 +83,14 @@ export function fromImageBox(box: number[], frame: Rect): Rect {
   return { x, y, width: (Math.abs(x2 - x1) / BOX_SCALE) * frame.width, height: (Math.abs(y2 - y1) / BOX_SCALE) * frame.height };
 }
 
+/** Hindi is written in Devanagari, English words included: Hodey's voice says it far better that way. */
+const LANGUAGE_LINES: Record<ReplyLanguage, string | undefined> = {
+  en: undefined,
+  hi: 'Write "speech" in Hindi, in Devanagari script. Write English words and control names in Devanagari too, as they sound (Insert → इंसर्ट, PivotTable → पिवट टेबल).',
+  hinglish:
+    'Write "speech" in Hinglish: everyday Hindi with English computer words mixed in, the way people in India talk about computers. Use Devanagari script for all of it, English words included (Insert tab → इंसर्ट टैब).',
+};
+
 function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
   const lines = [`App: <screen>${untrusted(context.observation.app)} — ${untrusted(context.observation.windowTitle)}</screen>.`];
   if (context.goal) lines.push(`The learner's goal: <learner>${untrusted(context.goal)}</learner>.`);
@@ -101,6 +110,8 @@ function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
   } else {
     lines.push('Tell the learner the next thing to do with kind "guide".');
   }
+  const language = LANGUAGE_LINES[context.language ?? "en"];
+  if (language) lines.push(language);
   return lines;
 }
 

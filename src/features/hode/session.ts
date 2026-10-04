@@ -2,6 +2,7 @@ import { padRect } from "../../lib/coords";
 import { requestReason } from "./flow";
 import { clampToMode } from "./policy";
 import { COPY } from "../../lib/copy";
+import { spoken } from "../../lib/spoken";
 import {
   QUESTION_PADDING_PX,
   initialState,
@@ -64,7 +65,8 @@ export function onVoiceQuestion(s: HodeState, e: EventOf<"VOICE_QUESTION">): Tra
   const resumePhase = answeringAlready || s.phase === "answering" ? (s.resumePhase ?? resumeTarget(s)) : resumeTarget(s);
   const requestId = s.requestId + 1;
   // A quick acknowledgement while Hodey looks, varied so it doesn't sound canned.
-  const ack = COPY.acks[requestId % COPY.acks.length];
+  const { acks } = spoken(s.language);
+  const ack = acks[requestId % acks.length];
   return {
     state: { ...s, phase: "observing", spokenQuestion: question, question: undefined, resumePhase, requestId },
     effects: [{ type: "stopSpeech" }, { type: "cancelStuckTimer" }, { type: "say", text: ack }, { type: "observe" }],
@@ -100,9 +102,9 @@ export function onDismiss(s: HodeState): Transition {
     case "answering":
       return resume(s);
     case "success":
-      return { state: initialState, effects: [{ type: "clearOverlay" }] };
+      return { state: { ...initialState, language: s.language }, effects: [{ type: "clearOverlay" }] };
     case "goal_entry":
-      return { state: { ...initialState, focusRegion: s.focusRegion }, effects: [] };
+      return { state: { ...initialState, focusRegion: s.focusRegion, language: s.language }, effects: [] };
     default:
       return noop(s);
   }
@@ -120,7 +122,11 @@ export function onResume(s: HodeState): Transition {
 
 export function onEndHode(s: HodeState): Transition {
   if (s.phase === "idle") return noop(s);
-  return { state: initialState, effects: STOP_EVERYTHING };
+  return { state: { ...initialState, language: s.language }, effects: STOP_EVERYTHING };
+}
+
+export function onSetLanguage(s: HodeState, e: EventOf<"SET_LANGUAGE">): Transition {
+  return { state: { ...s, language: e.language }, effects: [] };
 }
 
 export function onProviderFailed(s: HodeState, e: EventOf<"PROVIDER_FAILED">): Transition {

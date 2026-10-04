@@ -1,5 +1,6 @@
 import type { Settings } from "../../data/settings";
-import { COPY } from "../../lib/copy";
+import { replyLanguage } from "../../lib/language";
+import { spoken } from "../../lib/spoken";
 import type { ActivityTracker } from "../../lib/activity";
 import type { SpeechInput } from "./speech-input";
 import type { VoicePreview } from "../../app/services";
@@ -32,10 +33,12 @@ export function createLocalVoice(bridge: VoiceBridge): LocalVoice {
       preferNatural = choice.engine === "natural";
       natural.voiceId = choice.engine === "natural" ? choice.id : "";
       windows.voiceName = choice.engine === "windows" ? choice.uri : "";
+      natural.hindiVoiceId = voice.hindiVoice;
       natural.rate = voice.rate;
       windows.rate = voice.rate;
       // The quick acknowledgements are said often and must start instantly: prepare them in this voice.
-      if (preferNatural) natural.prepare([...COPY.acks]).catch((error) => console.error("Couldn't prepare Hodey's phrases", error));
+      const language = replyLanguage(voice.language);
+      if (preferNatural || language !== "en") natural.prepare([...spoken(language).acks]).catch((error) => console.error("Couldn't prepare Hodey's phrases", error));
     },
   };
 }

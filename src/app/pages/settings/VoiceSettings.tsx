@@ -11,10 +11,12 @@ import { WakeWords } from "./WakeWords";
 const LANGUAGE_OPTIONS: [SpeechLanguage, string][] = [
   ["en", "English (US)"],
   ["en-GB", "English (UK)"],
-  ["hi", "Hindi"],
-  ["auto", "Hindi + English"],
+  ["hi", "हिन्दी Hindi"],
+  ["auto", "Hinglish"],
 ];
 const PREVIEW_TEXT = "Hi, I'm Hodey. Click the Insert tab, and I'll show you what comes next.";
+const HINDI_PREVIEW_TEXT = "नमस्ते, मैं होडी हूँ। ऊपर इंसर्ट टैब पर क्लिक कीजिए, फिर आगे का रास्ता साथ में देखते हैं।";
+const isHindiVoice = (voice: NaturalVoice) => voice.description.startsWith("Hindi");
 const RATE_STEP = 0.05;
 
 /** On-device voices; the list arrives asynchronously in WebView2. */
@@ -34,9 +36,9 @@ async function* once(text: string): AsyncGenerator<string> {
   yield text;
 }
 
-function preview(voice: Settings["voice"], natural: VoicePreview | undefined, onError: (message: string) => void): void {
+function preview(voice: Settings["voice"], natural: VoicePreview | undefined, onError: (message: string) => void, text = PREVIEW_TEXT): void {
   const speaking = natural
-    ? natural.preview(voice, PREVIEW_TEXT)
+    ? natural.preview(voice, text)
     : (() => {
         const tts = new WebSpeechTTSProvider();
         tts.rate = voice.rate;
@@ -75,9 +77,22 @@ export function VoiceSettings({ voice, natural, onChange }: { voice: Settings["v
       <Row label="Hands-free" detail="Say “Hey Hodey” any time, no key needed. The mic stays on (orange dot) and speech is checked on this PC for a wake word; anything else is dropped at once. Nothing is recorded or sent. Uses some CPU.">
         <input type="checkbox" className="hswitch" checked={voice.handsFree} onChange={(e) => onChange({ ...voice, handsFree: e.target.checked })} aria-label="Hands-free" />
       </Row>
-      <Row label="Your speech" detail="What you speak to Hodey. There's no Indian-English option in the speech model; if English (US) mishears you, try English (UK). Hindi + English handles switching between the two.">
-        <Segmented label="Your speech" options={LANGUAGE_OPTIONS} value={voice.language} onSelect={(language) => onChange({ ...voice, language })} />
+      <Row label="Language" detail="Hodey listens for this and answers in it. Hinglish follows you switching between Hindi and English. There's no Indian-English option in the speech model; if English (US) mishears you, try English (UK).">
+        <Segmented label="Language" options={LANGUAGE_OPTIONS} value={voice.language} onSelect={(language) => onChange({ ...voice, language })} />
       </Row>
+      {(voice.language === "hi" || voice.language === "auto") && naturalVoices.some(isHindiVoice) && (
+        <>
+          <Row label="Hindi voice" detail="Says Hodey's Hindi and Hinglish answers. Press ▶ to hear one.">
+            <span />
+          </Row>
+          <VoiceGallery
+            voices={naturalVoices.filter(isHindiVoice)}
+            selected={`${NATURAL_PREFIX}${voice.hindiVoice}`}
+            onSelect={(name) => onChange({ ...voice, hindiVoice: name.slice(NATURAL_PREFIX.length) })}
+            onPreview={(name) => preview({ ...voice, hindiVoice: name.slice(NATURAL_PREFIX.length) }, natural, setError, HINDI_PREVIEW_TEXT)}
+          />
+        </>
+      )}
       <Row label="Wake words" detail="Start what you say with any of these and Hodey knows you mean it. Add your own names for Hodey.">
         <span />
       </Row>
@@ -86,7 +101,7 @@ export function VoiceSettings({ voice, natural, onChange }: { voice: Settings["v
         <span />
       </Row>
       {naturalVoices.length > 0 ? (
-        <VoiceGallery voices={naturalVoices} selected={voice.name} onSelect={(name) => onChange({ ...voice, name })} onPreview={(name) => preview({ ...voice, name }, natural, setError)} />
+        <VoiceGallery voices={naturalVoices.filter((v) => !isHindiVoice(v))} selected={voice.name} onSelect={(name) => onChange({ ...voice, name })} onPreview={(name) => preview({ ...voice, name }, natural, setError)} />
       ) : (
         <p className="hmuted hvoices__missing">{natural ? "Hodey's natural voices are loading, or aren't installed yet (scripts/setup-local-ai.ps1)." : "Natural voices run in the Hodeum desktop app."}</p>
       )}

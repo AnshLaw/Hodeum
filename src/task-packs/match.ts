@@ -2,10 +2,15 @@ import type { TaskPack } from "../lib/types";
 
 const MATCH_THRESHOLD = 0.6;
 
+/** Devanagari's nukta (ज़ vs ज): speech recognition writes it inconsistently, so it's ignored. */
+const NUKTA = /\u093C/g;
+
 function tokens(text: string): string[] {
   return text
+    .normalize("NFC")
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(NUKTA, "")
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter(Boolean);
 }
@@ -34,10 +39,10 @@ export function matchGoal(goal: string, packs: TaskPack[]): TaskPack | undefined
  * when capitalised or after a cue like "in", so "pick the right word" doesn't open Microsoft Word.
  */
 const APP_PATTERNS: [string, RegExp][] = [
-  ["Excel", /\bexcel\b|\bspreadsheet/i],
-  ["PowerPoint", /\bpower ?point\b/i],
+  ["Excel", /\bexcel\b|\bspreadsheet|एक्सेल/i],
+  ["PowerPoint", /\bpower ?point\b|पावर ?पॉइंट/i],
   ["Word", /\b(?:microsoft |ms )?Word\b|\b(?:in|using|open|with) word\b/],
-  ["File Explorer", /\b(?:file )?explorer\b/i],
+  ["File Explorer", /\b(?:file )?explorer\b|एक्सप्लोरर/i],
   ["Chrome", /\bchrome\b/i],
   ["Edge", /\bmicrosoft edge\b|\b(?:in|using|open) edge\b/i],
   ["Outlook", /\boutlook\b/i],

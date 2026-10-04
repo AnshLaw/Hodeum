@@ -1,5 +1,5 @@
 import { area, center, containsPoint, intersects } from "../lib/coords";
-import { COPY } from "../lib/copy";
+import { spoken } from "../lib/spoken";
 import type { ActionTarget, LearnerAnnotation, Rect, TaskStep, TeachingAction, TeachingContext, UiElement } from "../lib/types";
 import { findByNames, nameMatches } from "../features/hode/signals";
 import type { ReasoningProvider } from "./interfaces";
@@ -39,7 +39,7 @@ function locateTarget(step: TaskStep, elements: UiElement[], focus?: Rect): Acti
 function guideStep(context: TeachingContext, step: TaskStep): TeachingAction {
   const level = context.assistanceLevel;
   const target = locateTarget(step, context.observation.elements, context.focusRegion?.shape.bounds);
-  if (!target) return { kind: "clarify", speech: COPY.clarify, skill: step.skill, assistanceLevel: level };
+  if (!target) return { kind: "clarify", speech: spoken(context.language).clarify, skill: step.skill, assistanceLevel: level };
   return {
     kind: context.correction ? "correct" : "guide",
     speech: context.correction ?? step.speech[level],
@@ -63,9 +63,9 @@ function answerSpoken(context: TeachingContext, utterance: string): TeachingActi
     .sort((a, b) => b.name.length - a.name.length)[0];
   const skill = context.step?.skill ?? GENERAL_SKILL;
   const level = context.assistanceLevel;
-  if (!named) return { kind: "answer", speech: COPY.needVisionToAnswer, skill, assistanceLevel: level };
+  if (!named) return { kind: "answer", speech: spoken(context.language).needVisionToAnswer, skill, assistanceLevel: level };
   const target = { elementId: named.id, bounds: named.bounds, confidence: named.confidence, label: named.name };
-  return { kind: "answer", speech: COPY.itsHere(named.name), target, skill, assistanceLevel: level };
+  return { kind: "answer", speech: spoken(context.language).itsHere(named.name), target, skill, assistanceLevel: level };
 }
 
 /** Prefer the smallest element whose centre is inside the mark — a button over the pane that contains it. */
@@ -78,16 +78,17 @@ function pickMarkedElement(elements: UiElement[], region: Rect): UiElement | und
 function describe(element: UiElement, context: TeachingContext): string {
   const matches = (step: TaskStep) => step.target.names.some((n) => nameMatches(n, element.name));
   const packStep = context.pack?.steps.find(matches);
-  const base = packStep ? `That's ${element.name}. ${packStep.explain}` : `That's the "${element.name}" ${element.role}.`;
+  const say = spoken(context.language);
+  const base = packStep ? say.thatsControl(element.name, packStep.explain) : say.thatsElement(element.name, element.role);
   const isCurrentTarget = context.step !== undefined && matches(context.step);
-  return isCurrentTarget ? `${base} It's the one you need for this step.` : base;
+  return isCurrentTarget ? `${base} ${say.neededForThisStep}` : base;
 }
 
 function answerAbout(context: TeachingContext, annotation: LearnerAnnotation): TeachingAction {
   const element = pickMarkedElement(context.observation.elements, annotation.shape.bounds);
   const skill = context.step?.skill ?? GENERAL_SKILL;
   const level = context.assistanceLevel;
-  if (!element) return { kind: "answer", speech: COPY.nothingMarked, skill, assistanceLevel: level };
+  if (!element) return { kind: "answer", speech: spoken(context.language).nothingMarked, skill, assistanceLevel: level };
   return {
     kind: "answer",
     speech: describe(element, context),

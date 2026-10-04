@@ -1,3 +1,4 @@
+import type { ReplyLanguage } from "./language";
 export const ASSISTANCE_LEVELS = ["demonstrate", "guide", "hint", "observe", "independent"] as const;
 export type AssistanceLevel = (typeof ASSISTANCE_LEVELS)[number];
 
@@ -122,6 +123,8 @@ export interface TeachingContext {
   openGoal?: boolean;
   /** The instruction the learner was last given (open-ended Hodes). */
   lastInstruction?: string;
+  /** What to reply in; English when absent. */
+  language?: ReplyLanguage;
 }
 
 export type SkillStatus = "new" | "learning" | "mastered";

@@ -18,6 +18,8 @@ export type HodeyAccessory = (typeof HODEY_ACCESSORIES)[number];
 /** Must match ASR_LANGUAGES in src-tauri/src/voice/listen.rs. */
 export const SPEECH_LANGUAGES = ["en", "en-GB", "hi", "auto"] as const;
 export type SpeechLanguage = (typeof SPEECH_LANGUAGES)[number];
+/** Kokoro's "Alpha" (Hindi, female). */
+export const DEFAULT_HINDI_VOICE = "kokoro:31";
 export const MAX_WAKE_WORDS = 8;
 export const MAX_WAKE_WORD = 30;
 /** Longest voice id kept; Windows voice URIs are well under this. */
@@ -46,6 +48,8 @@ export const settingsSchema = z.object({
     handsFree: z.boolean().default(false),
     /** What the learner speaks: Nemotron's language prompt (no en-IN exists; en-GB can suit Indian English). */
     language: z.enum(SPEECH_LANGUAGES).catch("en").default("en"),
+    /** The natural voice for Hindi and Hinglish sentences (Kokoro's Hindi speakers). */
+    hindiVoice: z.string().max(MAX_VOICE_NAME).default(DEFAULT_HINDI_VOICE),
     /** Extra names for Hodey ("Hey Hodes"), recognised like "Hey Hodey". */
     wakeWords: z.array(z.string().trim().min(1).max(MAX_WAKE_WORD)).max(MAX_WAKE_WORDS).default([]),
   }),
@@ -64,7 +68,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type Appearance = Settings["appearance"];
 
 export const DEFAULT_SETTINGS: Settings = {
-  voice: { enabled: true, rate: 1.05, name: "", conversation: true, handsFree: false, language: "en", wakeWords: [] },
+  voice: { enabled: true, rate: 1.05, name: "", conversation: true, handsFree: false, language: "en", hindiVoice: DEFAULT_HINDI_VOICE, wakeWords: [] },
   mode: "teach",
   stuckSeconds: 12,
   appearance: { ...DEFAULT_APPEARANCE },

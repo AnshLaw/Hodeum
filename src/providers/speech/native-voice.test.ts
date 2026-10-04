@@ -83,6 +83,20 @@ describe("NativeSpeechInput", () => {
   });
 });
 
+describe("NativeTTSProvider in Hindi", () => {
+  it("says Hindi sentences with the Hindi voice and English ones with the chosen voice", async () => {
+    const { bridge, invoke } = fakeBridge();
+    const tts = new NativeTTSProvider(bridge);
+    tts.voiceId = "kokoro:3";
+    tts.hindiVoiceId = "kokoro:33";
+    tts.speak(words("इंसर्ट टैब खोलिए।"), new AbortController().signal).catch(() => undefined);
+    tts.speak(words("Open the Insert tab."), new AbortController().signal).catch(() => undefined);
+    await settle();
+    const voices = invoke.mock.calls.filter(([command]) => command === "tts_speak").map(([, args]) => (args as { voiceId: string }).voiceId);
+    expect(voices).toEqual(["kokoro:33", "kokoro:3"]);
+  });
+});
+
 describe("NativeTTSProvider", () => {
   it("speaks through Supertonic and resolves when that utterance is done", async () => {
     const { bridge, fire, invoke } = fakeBridge();

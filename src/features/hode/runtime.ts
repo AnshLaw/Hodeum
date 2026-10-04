@@ -1,3 +1,4 @@
+import type { ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
 import type { AssistanceLevel, HodeMode, Rect, StepOutcome, TeachingContext } from "../../lib/types";
@@ -84,9 +85,10 @@ export class HodeRuntime {
     return this.defaultMode;
   }
 
-  configure(options: { mode: HodeMode; stuckMs: number }): void {
+  configure(options: { mode: HodeMode; stuckMs: number; language?: ReplyLanguage }): void {
     this.defaultMode = options.mode;
     this.stuckMs = options.stuckMs;
+    if (options.language && options.language !== this.state.language) this.dispatch({ type: "SET_LANGUAGE", language: options.language });
   }
 
   /** Barge-in: the learner started talking, so Hodey stops mid-sentence. */

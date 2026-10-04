@@ -1,4 +1,6 @@
 import { COPY } from "../../lib/copy";
+import { spoken } from "../../lib/spoken";
+import { localizePack } from "../../task-packs/localize";
 import type { AssistanceLevel, HodeMode, ScreenObservation, TeachingAction, TeachingContext } from "../../lib/types";
 import {
   STUCK_MS,
@@ -18,7 +20,7 @@ const OPEN_START: Record<HodeMode, AssistanceLevel> = { teach: "hint", help: "ob
 
 export function onStartHode(s: HodeState): Transition {
   if (s.phase !== "idle") return noop(s);
-  return { state: { ...initialState, phase: "goal_entry", focusRegion: s.focusRegion }, effects: [] };
+  return { state: { ...initialState, phase: "goal_entry", focusRegion: s.focusRegion, language: s.language }, effects: [] };
 }
 
 export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Transition {
@@ -30,9 +32,11 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
     const level = OPEN_START[mode];
     return { state: { ...s, goal, app: e.app, mode, open: true, level, notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
   }
-  if (!e.pack) return { state: { ...s, goal, notice: COPY.noPack }, effects: [{ type: "say", text: COPY.noPack }] };
+  const { noPack } = spoken(s.language);
+  if (!e.pack) return { state: { ...s, goal, notice: noPack }, effects: [{ type: "say", text: noPack }] };
   // Bring the pack's app forward first, so Hodey reads Excel rather than whatever had focus.
-  const begun = beginStep({ ...s, goal, mode, pack: e.pack, app: e.pack.app, notice: undefined }, 0);
+  const pack = localizePack(e.pack, s.language);
+  const begun = beginStep({ ...s, goal, mode, pack, app: pack.app, notice: undefined }, 0);
   return { ...begun, effects: [{ type: "focusApp", app: e.pack.app }, ...begun.effects] };
 }
 
@@ -44,7 +48,7 @@ export function sameApp(observed: string, expected: string): boolean {
 /** The learner is in another app: say so and point at nothing until they're back. */
 export function waitForApp(s: HodeState, observation: ScreenObservation): Transition {
   const app = s.app ?? "";
-  const speech = COPY.switchToApp(app);
+  const speech = spoken(s.language).switchToApp(app);
   const action: TeachingAction = { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
   if (s.waitingForApp === app) return { state: { ...s, observation }, effects: [] };
   const effects: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "say", text: speech }];
@@ -101,6 +105,7 @@ function contextFor(s: HodeState, observation: ScreenObservation): TeachingConte
     recentMistakes: s.mistakes,
     openGoal: s.open,
     lastInstruction: s.open ? s.action?.speech : undefined,
+    language: s.language,
   };
 }
 
@@ -123,7 +128,7 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   if (band === "uncertain" && !s.reobserved) {
     return { state: { ...withNotice, phase: "observing", reobserved: true }, effects: [{ type: "observe" }] };
   }
-  const shown: TeachingAction = band === "uncertain" ? { ...action, kind: "clarify", speech: COPY.clarify, target: undefined } : action;
+  const shown: TeachingAction = band === "uncertain" ? { ...action, kind: "clarify", speech: spoken(s.language).clarify, target: undefined } : action;
   return showGuidance(withNotice, shown);
 }
 
@@ -138,7 +143,7 @@ function showGuidance(s: HodeState, action: TeachingAction): Transition {
 function finishOpenHode(s: HodeState, action: TeachingAction): Transition {
   return {
     state: { ...s, phase: "success", action: undefined },
-    effects: [{ type: "cancelStuckTimer" }, { type: "clearOverlay" }, { type: "say", text: action.speech || COPY.hodeCompleteSpeech }],
+    effects: [{ type: "cancelStuckTimer" }, { type: "clearOverlay" }, { type: "say", text: action.speech || spoken(s.language).hodeCompleteSpeech }],
   };
 }
 

@@ -1,3 +1,5 @@
+import { DEFAULT_HINDI_VOICE } from "../../data/settings";
+import { hasDevanagari } from "../../lib/language";
 import type { TTSProvider } from "../interfaces";
 import type { SpeechInput, SpeechInputStatus } from "./speech-input";
 
@@ -145,8 +147,14 @@ export class NativeTTSProvider implements TTSProvider {
   rate = 1;
   /** A natural voice id like "kokoro:3"; empty for Hodey's default. */
   voiceId = "";
+  /** The voice for Hindi sentences (Devanagari text). */
+  hindiVoiceId = DEFAULT_HINDI_VOICE;
 
   constructor(private readonly bridge: VoiceBridge, private readonly voice?: NativeVoiceStatus) {}
+
+  private voiceFor(text: string): string {
+    return hasDevanagari(text) ? this.hindiVoiceId : this.voiceId;
+  }
 
   async speak(text: AsyncIterable<string>, signal: AbortSignal): Promise<void> {
     const content = await collect(text, signal);
@@ -164,7 +172,7 @@ export class NativeTTSProvider implements TTSProvider {
         this.stop().then(resolve, reject);
       }, { once: true });
     });
-    await this.bridge.invoke<void>("tts_speak", { id, text: content, voiceId: this.voiceId, speed: this.rate });
+    await this.bridge.invoke<void>("tts_speak", { id, text: content, voiceId: this.voiceFor(content), speed: this.rate });
     await finished;
   }
 
@@ -173,8 +181,11 @@ export class NativeTTSProvider implements TTSProvider {
   }
 
   /** Synthesizes likely lines ahead of time (silently) so they start instantly when needed. */
-  prepare(texts: string[]): Promise<void> {
-    return this.bridge.invoke<void>("tts_prepare", { texts, voiceId: this.voiceId, speed: this.rate });
+  async prepare(texts: string[]): Promise<void> {
+    const hindi = texts.filter(hasDevanagari);
+    const english = texts.filter((text) => !hasDevanagari(text));
+    if (english.length > 0) await this.bridge.invoke<void>("tts_prepare", { texts: english, voiceId: this.voiceId, speed: this.rate });
+    if (hindi.length > 0) await this.bridge.invoke<void>("tts_prepare", { texts: hindi, voiceId: this.hindiVoiceId, speed: this.rate });
   }
 
   async healthCheck(): Promise<boolean> {
@@ -194,8 +205,9 @@ export class RoutedTTS implements TTSProvider {
   ) {}
 
   async speak(text: AsyncIterable<string>, signal: AbortSignal): Promise<void> {
-    if (!this.useNatural()) return this.windows.speak(text, signal);
     const content = await collect(text, signal);
+    // Windows' English voices can't read Hindi; Hindi always goes to Hodey's Hindi voice.
+    if (!this.useNatural() && !hasDevanagari(content)) return this.windows.speak(once(content), signal);
     try {
       await this.natural.speak(once(content), signal);
     } catch (error) {

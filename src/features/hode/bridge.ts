@@ -1,3 +1,4 @@
+import { replyLanguage } from "../../lib/language";
 import type { Bus, HodeSummary } from "../../lib/bus";
 import type { HodeMode, TaskPack } from "../../lib/types";
 import { HodeRecorder } from "../../data/recorder";
@@ -46,7 +47,7 @@ export function startFromApp(runtime: HodeRuntime, goal: string, packs: TaskPack
 }
 
 function applySettings(deps: BridgeDeps, settings: Settings): void {
-  deps.runtime.configure({ mode: settings.mode, stuckMs: settings.stuckSeconds * MS_PER_SECOND });
+  deps.runtime.configure({ mode: settings.mode, stuckMs: settings.stuckSeconds * MS_PER_SECOND, language: replyLanguage(settings.voice.language) });
   deps.runtime.setMuted(!settings.voice.enabled);
   deps.applyVoice(settings.voice);
   deps.applyHodeyKey?.(settings.hodeyKey);

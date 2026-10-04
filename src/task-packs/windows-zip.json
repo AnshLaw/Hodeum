@@ -2,7 +2,7 @@
   "id": "windows-zip",
   "title": "Zip files",
   "app": "File Explorer",
-  "goalPhrases": ["zip files", "zip", "compress", "make a zip"],
+  "goalPhrases": ["zip files", "zip", "compress", "make a zip", "ज़िप", "कंप्रेस", "ज़िप फ़ाइल"],
   "prerequisites": ["Open File Explorer and select the files you want to zip."],
   "steps": [
     {

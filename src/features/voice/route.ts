@@ -31,6 +31,28 @@ const COMMANDS: [RegExp, HodeEvent][] = [
  *  after a greeting, and Hodey's name alone only in its real spellings. Includes Hindi script ("हे होडी"). */
 const HANDS_FREE_WAKE = /^(?:(?:hey|hi|hello|ok|okay)[ ,]+(?:hode?y|hod[iy]e?|hoadie|howdy|body)|hode?y|hod[iy]e?|hoadie|(?:(?:हे|हाय|ओके)[ ,]*)?होडी)(?=[\s,!.?]|$)[,!.?]?\s*/i;
 
+/** The same controls in Hindi and Hinglish, as Hindi speech recognition writes them (in Devanagari). */
+const HINDI_COMMANDS: [string, HodeEvent][] = [
+  ["हिंट(?: दो| दीजिए| चाहिए)?|संकेत(?: दो| दीजिए)?|मदद(?: करो| कीजिए| चाहिए)?|हेल्प(?: करो)?|मैं (?:फंस|फँस|अटक) (?:गया|गई)", { type: "HINT_REQUESTED" }],
+  ["समझाओ|समझाइए|समझाइये|क्यों|एक्सप्लेन करो", { type: "EXPLAIN_REQUESTED" }],
+  ["(?:फिर से|दोबारा)(?: बोलो| बोलिए| कहो| कहिए)?|रिपीट(?: करो)?|क्या (?:बोला|कहा)", { type: "REPEAT" }],
+  ["हो गया|कर दिया|कर लिया|डन|(?:फिर से|दोबारा) देखो", { type: "LOOK_AGAIN" }],
+  ["मुझे (?:करने|ट्राई करने) दो|मैं (?:खुद )?(?:करता|करती) ह(?:ूं|ूँ)", { type: "LET_ME_TRY" }],
+  ["रुको|रुकिए|एक मिनट|पॉज़?(?: करो)?", { type: "PAUSE" }],
+  ["आगे बढ़ो|आगे बढ़िए|चलो आगे|जारी रखो|कंटिन्यू(?: करो)?", { type: "RESUME" }],
+  ["बंद करो|बंद कीजिए|ख़त्म करो|स्टॉप|बस करो|होड बंद करो", { type: "END_HODE" }],
+  ["ठीक है|ओके|समझ (?:गया|गई)|अच्छा", { type: "DISMISS" }],
+  ["टीच मोड(?: (?:में|पर) (?:जाओ|चलो))?", { type: "SET_MODE", mode: "teach" }],
+  ["हेल्प मोड(?: (?:में|पर) (?:जाओ|चलो))?", { type: "SET_MODE", mode: "help" }],
+  ["एजेंट मोड(?: (?:में|पर) (?:जाओ|चलो))?|हर स्टेप (?:में|पर) (?:गाइड करो|बताओ)", { type: "SET_MODE", mode: "agent" }],
+  ["(?:सारे|सभी|पूरे) स्टेप(?:्स)? दिखाओ|पूरा तरीका दिखाओ", { type: "SHOW_ALL_STEPS" }],
+];
+const POLITE_HINDI = /कृपया|प्लीज़?|ज़रा/g;
+/** Devanagari's nukta (ज़ vs ज): speech recognition writes it inconsistently, so it's ignored. */
+const NUKTA = /\u093C/g;
+const withoutNukta = (text: string) => text.normalize("NFC").replace(NUKTA, "");
+const HINDI_PATTERNS: [RegExp, HodeEvent][] = HINDI_COMMANDS.map(([source, event]) => [new RegExp(`^(?:${withoutNukta(source)})$`, "u"), event]);
+
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const customWake = (word: string) => new RegExp(`^${escapeRegExp(word.trim()).replace(/\s+/g, "[\\s,]+")}(?=[\\s,!.?]|$)[,!.?]?\\s*`, "i");
@@ -53,8 +75,11 @@ export function wakeRest(text: string, wakeWords: string[]): string | undefined 
 }
 
 function asCommand(text: string): HodeEvent | undefined {
-  const bare = text.toLowerCase().replace(POLITE, " ").replace(/[^\w' ]/g, " ").replace(/\s+/g, " ").trim();
-  return COMMANDS.find(([pattern]) => pattern.test(bare))?.[1];
+  const bare = withoutNukta(text.toLowerCase().replace(POLITE, " ").replace(POLITE_HINDI, " "))
+    .replace(/[^\p{L}\p{M}\p{N}' ]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return [...COMMANDS, ...HINDI_PATTERNS].find(([pattern]) => pattern.test(bare))?.[1];
 }
 
 const question = (text: string): HodeEvent => ({ type: "VOICE_QUESTION", question: text });

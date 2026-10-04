@@ -1,3 +1,4 @@
+import type { ReplyLanguage } from "../../lib/language";
 import type {
   AssistanceLevel,
   HodeMode,
@@ -65,6 +66,8 @@ export interface HodeState {
   mode: HodeMode;
   /** Teach mode keeps upcoming steps hidden unless the learner asks to see the whole flow. */
   showAllSteps: boolean;
+  /** What Hodey replies in (Settings > Voice > Language); kept across Hodes. */
+  language: ReplyLanguage;
 }
 
 export const initialState: HodeState = {
@@ -81,6 +84,7 @@ export const initialState: HodeState = {
   mode: "teach",
   showAllSteps: false,
   open: false,
+  language: "en",
 };
 
 export type HodeEvent =
@@ -90,6 +94,8 @@ export type HodeEvent =
   | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null }
   /** Switch teach / help / agent, mid-Hode too. */
   | { type: "SET_MODE"; mode: HodeMode }
+  /** Settings changed what Hodey replies in. */
+  | { type: "SET_LANGUAGE"; language: ReplyLanguage }
   /** Teach mode: show (or hide again) the steps still to come. */
   | { type: "SHOW_ALL_STEPS" }
   | { type: "OBSERVED"; observation: ScreenObservation }
