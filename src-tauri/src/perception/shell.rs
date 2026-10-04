@@ -22,7 +22,7 @@ use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, GetWindowRect, IsWindowVisible};
 
-use super::foreground::exe_stem;
+use super::foreground::{exe_stem, monitor_rect};
 use super::model::{normalize_role, ElementDto, RectDto};
 use super::uia::{err, rect_dto, type_role, UIA_CONFIDENCE, UIA_SOURCE};
 
@@ -136,6 +136,13 @@ pub fn is_flyout_search_box(seen: &Seen) -> bool {
 /// On screen with a real size: an auto-hidden taskbar's buttons and a hidden search box are not.
 pub fn on_screen(seen: &Seen) -> bool {
     !seen.offscreen && seen.bounds.width >= MIN_SIDE_PX && seen.bounds.height >= MIN_SIDE_PX
+}
+
+/// Whether the middle of `bounds` is on `area`. An auto-hidden taskbar slides off its monitor, leaving a 2 px
+/// sliver, while UI Automation may still call its buttons on screen.
+pub fn centre_within(bounds: &RectDto, area: &RectDto) -> bool {
+    let (x, y) = (bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0);
+    x >= area.x && x < area.x + area.width && y >= area.y && y < area.y + area.height
 }
 
 /// One taskbar's Start button and search box: the first of each on screen, Start first.
@@ -373,12 +380,26 @@ fn button_parent(automation: &UIAutomation, taskbar: UIElement) -> Result<(UIEle
     }
 }
 
-/// A taskbar's controls that might be its Start button or search box.
+/// The monitor a taskbar belongs to, in physical px.
+fn taskbar_monitor(taskbar: HWND) -> Option<RectDto> {
+    let monitor = monitor_rect(taskbar);
+    if monitor.is_none() {
+        log::warn!("couldn't read which monitor a taskbar is on, so an auto-hidden one can't be told apart");
+    }
+    monitor.map(|m| RectDto { x: f64::from(m.x), y: f64::from(m.y), width: f64::from(m.width), height: f64::from(m.height) })
+}
+
+/// A taskbar's controls that might be its Start button or search box; those past its monitor's edge count as off screen.
 fn taskbar_candidates(automation: &UIAutomation, taskbar: HWND) -> Result<Vec<Seen>, String> {
     let root = automation.element_from_handle(Handle::from(taskbar.0 as isize)).map_err(err)?;
     let (parent, scope) = button_parent(automation, root)?;
     let found = matched(parent.find_all_build_cache(scope, &taskbar_query(automation)?, &target_cache(automation)?))?;
-    Ok(found.unwrap_or_default().iter().map(seen_of).collect())
+    let monitor = taskbar_monitor(taskbar);
+    let mark_hidden = |mut seen: Seen| {
+        seen.offscreen |= monitor.as_ref().is_some_and(|area| !centre_within(&seen.bounds, area));
+        seen
+    };
+    Ok(found.unwrap_or_default().iter().map(seen_of).map(mark_hidden).collect())
 }
 
 /// Every taskbar's Start button and search box, and how many such controls they have on screen or not.
@@ -513,6 +534,16 @@ mod tests {
         no_search[2].bounds = RectDto { x: 0.0, y: 0.0, width: 0.0, height: 0.0 };
         let picked: Vec<_> = pick_taskbar(&no_search).into_iter().map(|(target, _)| target).collect();
         assert_eq!(picked, [Target::Start], "search hidden in the taskbar settings");
+    }
+
+    #[test]
+    fn an_auto_hidden_taskbars_buttons_sit_past_the_screen_edge() {
+        let main = RectDto { x: 0.0, y: 0.0, width: 3072.0, height: 1920.0 };
+        assert!(centre_within(&RectDto { x: 739.0, y: 1824.0, width: 91.0, height: 97.0 }, &main));
+        assert!(!centre_within(&RectDto { x: 739.0, y: 1918.0, width: 91.0, height: 97.0 }, &main), "slid down, a 2 px sliver left");
+        assert!(!centre_within(&RectDto { x: -95.0, y: 400.0, width: 97.0, height: 91.0 }, &main), "slid left");
+        let left_monitor = RectDto { x: -3200.0, y: 879.0, width: 3200.0, height: 1800.0 };
+        assert!(centre_within(&RectDto { x: -2352.0, y: 2582.0, width: 91.0, height: 97.0 }, &left_monitor));
     }
 
     #[test]
