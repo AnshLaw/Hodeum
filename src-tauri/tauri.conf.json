@@ -77,7 +77,7 @@
     "shortDescription": "Hodeum: AI that teaches, not takes over",
     "longDescription": "Hodeum is a local-first teaching companion. Hodey guides you through real tasks on your PC while you do the work.",
     "resources": [
-      "resources/samples/*"
+      "resources/samples/**/*"
     ],
     "icon": [
       "icons/32x32.png",

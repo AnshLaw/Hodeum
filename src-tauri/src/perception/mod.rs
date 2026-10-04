@@ -14,10 +14,11 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use base64::prelude::{Engine, BASE64_STANDARD};
 use tauri::{AppHandle, State};
 
+use crate::apps::identity::identify_window;
 use crate::dock::geometry::PxRect;
 use crate::surfaces;
 
-use model::{app_name, Observation, RectDto};
+use model::{Observation, RectDto};
 use press::{PressButton, PressRequest, Seen};
 use uia::UiaReader;
 
@@ -100,14 +101,12 @@ fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<
     if elapsed > SLOW_SNAPSHOT_MS {
         eprintln!("UIA snapshot took {elapsed} ms for {} elements", elements.len());
     }
-    let stem = foreground::exe_stem(hwnd).unwrap_or_else(|error| {
-        eprintln!("couldn't read the app's process name: {error}");
-        String::new()
-    });
+    let identity = identify_window(hwnd);
     let at = now_ms();
     reader.remember(Seen { at, pid: foreground::window_pid(hwnd), elements: handles });
-    let window = window_watch::window_frame(hwnd);
-    let observation = Observation { app: app_name(&stem), window_title: foreground::window_title(hwnd), elements, at, window, app_id: None };
+    let window = window_watch::window_frame(hwnd).map(|frame| frame.with_identity(&identity));
+    let app_id = (!identity.id.is_empty()).then(|| identity.id.clone());
+    let observation = Observation { app: identity.name, window_title: foreground::window_title(hwnd), elements, at, window, app_id };
     Ok((observation, foreground::monitor_rect(hwnd)))
 }
 
@@ -167,29 +166,60 @@ pub async fn perform_click(
 
 /// Mirrors `CapturedFrame` in `src/providers/vision/types.ts`.
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CapturedFrame {
-    /// Base64 PNG, longest side at most 1280 px.
+    /// Base64 image bytes of type `mime` (JPEG now), longest side at most 1280 px. Keeps its old name so
+    /// existing readers work; build data URLs from `mime`.
     png: String,
+    mime: &'static str,
     /// Where the captured window sits on screen, in physical px (to map model coordinates back).
     rect: RectDto,
+    /// The window that was captured, so a reply can be checked against the window that was read.
+    window_id: isize,
 }
 
-/// Downscaled capture of the learner's app for the local vision model. Kept in memory only.
+/// Downscaled capture for the local vision model, kept in memory only: window `window_id` (the one the
+/// last observation read, so the picture matches the controls) or, without it, the learner's app now.
 #[tauri::command]
-pub async fn capture_active_window(state: State<'_, Perception>) -> Result<CapturedFrame, String> {
-    let hwnd = state.learner_window()?;
+pub async fn capture_active_window(window_id: Option<isize>, state: State<'_, Perception>) -> Result<CapturedFrame, String> {
+    let hwnd = match window_id {
+        Some(id) => capturable(id)?,
+        None => state.learner_window()?,
+    };
     tauri::async_runtime::spawn_blocking(move || capture_frame(hwnd)).await.map_err(|e| e.to_string())?
+}
+
+/// A window Hodey may look at: still open and not one of Hodeum's own.
+pub fn capturable(hwnd: isize) -> Result<isize, String> {
+    let handle = windows::Win32::Foundation::HWND(hwnd as *mut _);
+    // SAFETY: IsWindow accepts any handle value.
+    if !unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(handle)) }.as_bool() {
+        return Err("The app window Hodey read has closed.".into());
+    }
+    if foreground::window_pid(handle) == std::process::id() {
+        return Err("Hodey can't look at its own windows.".into());
+    }
+    Ok(hwnd)
 }
 
 /// One window, downscaled and base64-encoded in memory. Blocking.
 pub fn capture_frame(hwnd: isize) -> Result<CapturedFrame, String> {
-    let capture = capture::capture_png(hwnd)?;
-    Ok(CapturedFrame { png: BASE64_STANDARD.encode(capture.png), rect: capture.rect })
+    let capture = capture::capture_jpeg(hwnd)?;
+    Ok(CapturedFrame { png: BASE64_STANDARD.encode(capture.jpeg), mime: capture::CAPTURE_MIME, rect: capture.rect, window_id: hwnd })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::may_press;
+    use super::{may_press, CapturedFrame, RectDto};
+
+    #[test]
+    fn captured_frames_name_their_window_and_image_type() {
+        let frame = CapturedFrame { png: "AA==".into(), mime: "image/jpeg", rect: RectDto { x: 0.0, y: 0.0, width: 1.0, height: 1.0 }, window_id: 42 };
+        let json = serde_json::to_value(&frame).unwrap();
+        assert_eq!(json["windowId"], 42);
+        assert_eq!(json["mime"], "image/jpeg");
+        assert_eq!(json["png"], "AA==");
+    }
 
     #[test]
     fn only_the_notch_may_click_for_the_learner() {

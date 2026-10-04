@@ -7,8 +7,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetWindow, GetWindowLongPtrW, IsWindowVisible, GWL_EXSTYLE, GW_OWNER, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
-use crate::perception::foreground::{exe_stem, window_pid, window_title};
-use crate::perception::{capture_frame, CapturedFrame, Perception};
+use crate::apps::identity::identify_window;
+use crate::perception::foreground::{window_pid, window_title};
+use crate::perception::model::app_name;
+use crate::perception::{capturable, capture_frame, CapturedFrame, Perception};
 
 /// Windows smaller than this (physical px) are tooltips and helpers, not apps.
 const MIN_WINDOW_SIDE: u32 = 120;
@@ -74,12 +76,11 @@ fn candidate(window: &xcap::Window, ours: u32) -> Result<Option<WindowInfo>, xca
     Ok(Some(info_for(hwnd)))
 }
 
+/// The window with its app's friendly name ("Excel", "Settings"), not its process ("EXCEL", "ApplicationFrameHost").
 fn info_for(hwnd: isize) -> WindowInfo {
     let handle = HWND(hwnd as *mut _);
-    let app = exe_stem(handle).unwrap_or_else(|error| {
-        eprintln!("couldn't read the app's process name: {error}");
-        String::new()
-    });
+    let identity = identify_window(handle);
+    let app = if identity.name.is_empty() { app_name(&identity.exe) } else { identity.name };
     WindowInfo { id: hwnd.to_string(), title: window_title(handle), app }
 }
 
@@ -116,10 +117,7 @@ pub fn last_app_window(state: State<'_, Perception>) -> Option<WindowInfo> {
 /// A capture of one chosen window for the local model. Hodeum's own windows are refused.
 #[tauri::command]
 pub async fn capture_window(id: String) -> Result<CapturedFrame, String> {
-    let hwnd = parse_id(&id)?;
-    if window_pid(HWND(hwnd as *mut _)) == std::process::id() {
-        return Err("Hodey can't look at its own windows.".into());
-    }
+    let hwnd = capturable(parse_id(&id)?)?;
     tauri::async_runtime::spawn_blocking(move || capture_frame(hwnd)).await.map_err(|e| e.to_string())?
 }
 

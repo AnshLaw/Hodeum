@@ -1,0 +1,6 @@
+Hotel booking
+
+Hotel: Seaview Inn (practice booking, not real)
+Check-in: Friday 2:00 pm
+Check-out: Sunday 11:00 am
+Room: double, sea view

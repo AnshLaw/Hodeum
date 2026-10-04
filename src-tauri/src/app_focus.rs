@@ -7,28 +7,34 @@ use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE,
 };
 
+use crate::apps::identity::{identify_window, AppIdentity};
 use crate::chat_context::{app_windows, WindowInfo};
-use crate::perception::foreground::{exe_stem, window_title};
-use crate::perception::model::app_name;
+use crate::perception::foreground::window_title;
 use crate::perception::Perception;
 use crate::surfaces::FocusReturn;
 
-/// Whether a window's process maps to the app a task pack names (e.g. EXCEL -> "Excel").
-pub fn is_app(exe: &str, app: &str) -> bool {
-    !exe.is_empty() && app_name(exe).eq_ignore_ascii_case(app)
+/// Whether a window's app is the one asked for, by stable id ("settings") or friendly name ("Settings").
+pub fn matches_app(identity: &AppIdentity, app: &str) -> bool {
+    let app = app.trim();
+    let same = |field: &str| !field.is_empty() && field.eq_ignore_ascii_case(app);
+    !app.is_empty() && (same(&identity.id) || same(&identity.name))
 }
 
-/// The frontmost open window of `app`.
-pub(crate) fn find_app(app: &str) -> Result<Option<HWND>, String> {
-    Ok(app_windows()?.into_iter().find(|&h| exe_stem(h).is_ok_and(|exe| is_app(&exe, app))))
+/// The frontmost open window whose app passes `wanted`. Store apps are found by their frame, which is
+/// the window to bring forward.
+pub(crate) fn find_window(wanted: impl Fn(HWND, &AppIdentity) -> bool) -> Result<Option<(HWND, AppIdentity)>, String> {
+    Ok(app_windows()?.into_iter().map(|h| (h, identify_window(h))).find(|(h, identity)| wanted(*h, identity)))
+}
+
+/// The frontmost open window of `app` (an app id or name).
+pub(crate) fn find_app(app: &str) -> Result<Option<(HWND, AppIdentity)>, String> {
+    find_window(|_, identity| matches_app(identity, app))
 }
 
 /// The frontmost window of `app` whose title mentions `hint` (the file it has open), ignoring case.
-pub(crate) fn find_app_titled(app: &str, hint: &str) -> Result<Option<HWND>, String> {
+pub(crate) fn find_app_titled(app: &str, hint: &str) -> Result<Option<(HWND, AppIdentity)>, String> {
     let hint = hint.to_lowercase();
-    Ok(app_windows()?
-        .into_iter()
-        .find(|&h| exe_stem(h).is_ok_and(|exe| is_app(&exe, app)) && window_title(h).to_lowercase().contains(&hint)))
+    find_window(|h, identity| matches_app(identity, app) && window_title(h).to_lowercase().contains(&hint))
 }
 
 /// Raises `hwnd`. Allowed because the learner just clicked Hodey; if Windows still refuses, borrow
@@ -54,31 +60,48 @@ pub(crate) fn bring_forward(hwnd: HWND) -> Result<(), String> {
     }
 }
 
-/// Brings the app forward and makes it the window Hodey reads. `None` when it isn't open.
-#[tauri::command]
-pub fn focus_app(app: String, perception: State<'_, Perception>, focus: State<'_, FocusReturn>) -> Result<Option<WindowInfo>, String> {
-    let Some(hwnd) = find_app(&app)? else { return Ok(None) };
+/// Makes `hwnd` the window Hodey reads, sends focus back to it after the notch, and raises it.
+pub(crate) fn adopt(hwnd: HWND, identity: &AppIdentity, fallback_name: &str, perception: &Perception, focus: &FocusReturn) -> Result<WindowInfo, String> {
     let id = hwnd.0 as isize;
     perception.remember(id);
     focus.redirect(id)?;
+    let app = if identity.name.is_empty() { fallback_name.to_string() } else { identity.name.clone() };
     if let Err(reason) = bring_forward(hwnd) {
         // Still usable: Hodey reads this window, and asks the learner to click into it if needed.
         eprintln!("couldn't bring {app} forward: {reason}");
     }
-    Ok(Some(WindowInfo { id: id.to_string(), title: window_title(hwnd), app }))
+    Ok(WindowInfo { id: id.to_string(), title: window_title(hwnd), app })
+}
+
+/// Brings the app (an app id or name) forward and makes it the window Hodey reads. `None` when it isn't open.
+#[tauri::command]
+pub fn focus_app(app: String, perception: State<'_, Perception>, focus: State<'_, FocusReturn>) -> Result<Option<WindowInfo>, String> {
+    let Some((hwnd, identity)) = find_app(&app)? else { return Ok(None) };
+    adopt(hwnd, &identity, &app, &perception, &focus).map(Some)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::is_app;
+    use super::matches_app;
+    use crate::apps::identity::AppIdentity;
+
+    fn app(id: &str, name: &str) -> AppIdentity {
+        AppIdentity { id: id.into(), name: name.into(), exe: String::new() }
+    }
 
     #[test]
-    fn matches_packs_to_processes() {
-        assert!(is_app("EXCEL", "Excel"));
-        assert!(is_app("explorer", "File Explorer"));
-        assert!(!is_app("Code", "Excel"));
-        assert!(!is_app("", "Excel"));
-        assert!(is_app("msedge", "Edge"));
-        assert!(is_app("chrome", "Chrome"));
+    fn matches_apps_by_id_or_name_ignoring_case() {
+        assert!(matches_app(&app("excel", "Excel"), "Excel"));
+        assert!(matches_app(&app("file-explorer", "File Explorer"), "file-explorer"));
+        assert!(matches_app(&app("settings", "Settings"), "settings"));
+        assert!(matches_app(&app("whatsapp", "WhatsApp"), "WhatsApp"));
+        assert!(!matches_app(&app("code", "VS Code"), "Excel"));
+    }
+
+    #[test]
+    fn never_matches_unknown_apps_or_empty_requests() {
+        assert!(!matches_app(&app("", ""), ""));
+        assert!(!matches_app(&app("", ""), "Settings"));
+        assert!(!matches_app(&app("excel", "Excel"), "  "));
     }
 }
