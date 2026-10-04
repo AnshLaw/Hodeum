@@ -111,19 +111,21 @@ function overlayStyle(action: TeachingAction): OverlayStyle {
   }
 }
 
-export function overlayFor(action: TeachingAction, pin?: Rect): OverlayPrimitive[] {
+/** `nearby`: bounds of text around the target, so its label can keep clear of them. */
+export function overlayFor(action: TeachingAction, pin?: Rect, nearby: Rect[] = []): OverlayPrimitive[] {
   const primitives: OverlayPrimitive[] = pin ? [{ kind: "pin", bounds: pin }] : [];
   const target = action.target;
   const style = overlayStyle(action);
   if (!target || style === "none") return primitives;
   const band = confidenceBand(target.confidence);
   if (band === "uncertain") return primitives;
+  const keepClear = nearby.length > 0 ? { keepClear: nearby } : {};
   if (band === "broad") {
-    primitives.push({ kind: "highlight", bounds: padRect(target.bounds, BROAD_PADDING_PX), label: target.label, emphasis: "broad" });
+    primitives.push({ kind: "highlight", bounds: padRect(target.bounds, BROAD_PADDING_PX), label: target.label, emphasis: "broad", ...keepClear });
     return primitives;
   }
   if (style === "full") primitives.push({ kind: "spotlight", bounds: target.bounds });
-  primitives.push({ kind: "highlight", bounds: target.bounds, label: target.label, emphasis: "precise" });
+  primitives.push({ kind: "highlight", bounds: target.bounds, label: target.label, emphasis: "precise", ...keepClear });
   if (style === "full") primitives.push({ kind: "arrow", to: target.bounds });
   return primitives;
 }

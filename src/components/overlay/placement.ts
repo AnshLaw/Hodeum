@@ -12,8 +12,12 @@ const ARROW_BEND = 0.25;
 /** Arrows and labels keep this far from the monitor edge. */
 const VIEWPORT_MARGIN_PX = 8;
 export const LABEL_GAP_PX = 8;
-/** The highlight ring's outset: labels keep clear of the ring, not just the element. */
-const TARGET_CLEARANCE_PX = 4;
+/** The highlight ring's outset from the target. */
+export const TARGET_CLEARANCE_PX = 4;
+/** An attached chip's bottom (or top) sits this far over the ring: on the border, never inside the target. */
+const ATTACH_OVERLAP_PX = TARGET_CLEARANCE_PX;
+/** Attached chips keep clear of the ring's rounded corners. */
+const ATTACH_CORNER_INSET_PX = 10;
 const DEGREES_PER_RADIAN = 180 / Math.PI;
 /** Width-to-height ratio past which a target reads as a row (a menu item, a list entry). */
 const ROW_ASPECT = 4;
@@ -116,14 +120,14 @@ function arrowFrom(visible: Rect, side: Side, viewport: Size): ArrowGeometry | u
 /**
  * A short curved arrow from the side with the most room that doesn't run into `avoid` (the notch,
  * say). The tip lands just outside the middle of that edge and points straight at the target's
- * centre. Undefined when the target is off-screen or no side has room for an on-screen arrow.
+ * centre. Undefined when the target is off-screen or every side with room runs into `avoid`:
+ * an arrow hidden under the notch is worse than none, and the highlight still shows the target.
  */
 export function arrowGeometry(target: Rect, viewport: Size, avoid: Rect[] = []): ArrowGeometry | undefined {
   const visible = visiblePart(target, viewport);
   if (!visible) return undefined;
   const fitting = sidesByRoom(visible, viewport).flatMap((side) => arrowFrom(visible, side, viewport) ?? []);
-  const clear = fitting.find((arrow) => !avoid.some((zone) => intersects(arrowBounds(arrow), zone)));
-  return clear ?? fitting[0];
+  return fitting.find((arrow) => !avoid.some((zone) => intersects(arrowBounds(arrow), zone)));
 }
 
 /** Everything the drawn arrow covers, head and stroke included. */
@@ -145,42 +149,73 @@ function chipBeside(anchor: Rect, side: Side, chip: Size, gap: number): Rect {
   return { x: anchor.x, y: anchor.y + anchor.height + gap, ...chip };
 }
 
-/** Beyond the arrow's tail, in the open space the arrow came from. */
-function chipAtTail(arrow: ArrowGeometry, chip: Size): Rect {
-  const tail = { x: arrow.start.x, y: arrow.start.y, width: 0, height: 0 };
-  const beside = chipBeside(tail, arrow.side, chip, LABEL_GAP_PX + ARROW_HALF_WIDTH_PX);
-  const vertical = arrow.side === "top" || arrow.side === "bottom";
-  return vertical ? { ...beside, x: arrow.start.x - chip.width / 2 } : beside;
+type Edge = "top" | "bottom";
+type Align = "end" | "start";
+
+/**
+ * A chip resting on the ring's top or bottom border, like a tab. It sits at the row's end first:
+ * text (the target's own, a heading above it) usually starts at the left. Centred when the target
+ * is narrower than the chip.
+ */
+function chipOnEdge(ring: Rect, edge: Edge, align: Align, chip: Size): Rect {
+  const y = edge === "top" ? ring.y + ATTACH_OVERLAP_PX - chip.height : ring.y + ring.height - ATTACH_OVERLAP_PX;
+  const roomy = chip.width + ATTACH_CORNER_INSET_PX * 2 <= ring.width;
+  if (!roomy) return { x: ring.x + (ring.width - chip.width) / 2, y, ...chip };
+  const x = align === "end" ? ring.x + ring.width - ATTACH_CORNER_INSET_PX - chip.width : ring.x + ATTACH_CORNER_INSET_PX;
+  return { x, y, ...chip };
 }
+
+const ATTACHED: [Edge, Align][] = [
+  ["top", "end"],
+  ["top", "start"],
+  ["bottom", "end"],
+  ["bottom", "start"],
+];
 
 export interface LabelRequest {
   target: Rect;
   chip: Size;
   viewport: Size;
-  /** Other primitives' footprints the chip must not cover. */
+  /** What the chip shouldn't cover: other primitives' footprints and text near the target. */
   avoid: Rect[];
+  /** What the chip must never sit under, even when nothing else fits (the notch). */
+  keepOut?: Rect[];
   /** The arrow pointing at this target, if one is drawn. */
   arrow?: ArrowGeometry;
 }
 
+/** On the box's top edge, then its bottom edge, then beside it (opposite the arrow first). */
 function labelCandidates({ target, chip, viewport, arrow }: LabelRequest): Rect[] {
   const ring = padRect(target, TARGET_CLEARANCE_PX);
+  const attached = ATTACHED.map(([edge, align]) => chipOnEdge(ring, edge, align, chip));
   const sides = sidesByRoom(target, viewport);
   const ordered = arrow ? [OPPOSITE[arrow.side], ...sides.filter((s) => s !== OPPOSITE[arrow.side])] : sides;
   const beside = ordered.map((side) => chipBeside(ring, side, chip, LABEL_GAP_PX));
-  const candidates = arrow ? [beside[0], chipAtTail(arrow, chip), ...beside.slice(1)] : beside;
-  return candidates.map((r) => clampInto(r, viewport));
+  return [...attached, ...beside].map((r) => clampInto(r, viewport));
+}
+
+/** Area of `rect` that `zones` cover (overlaps between zones counted twice: it's only a ranking). */
+function coveredArea(rect: Rect, zones: Rect[]): number {
+  return zones.reduce((sum, zone) => {
+    const width = Math.min(rect.x + rect.width, zone.x + zone.width) - Math.max(rect.x, zone.x);
+    const height = Math.min(rect.y + rect.height, zone.y + zone.height) - Math.max(rect.y, zone.y);
+    return sum + Math.max(width, 0) * Math.max(height, 0);
+  }, 0);
 }
 
 /**
- * Top-left corner for a target's label chip: opposite the arrow, else at the arrow's tail, else
- * beside the target on its roomiest side; always on-screen and clear of the target and other marks.
+ * Top-left corner for a target's label chip: attached to the highlight's border where that covers
+ * no nearby text, else beside it; always on-screen, off the target, and never under `keepOut`.
+ * When every spot covers something, the one covering least wins.
  */
 export function labelPosition(request: LabelRequest): Point {
-  const blocked = [padRect(request.target, TARGET_CLEARANCE_PX), ...request.avoid, ...(request.arrow ? [arrowBounds(request.arrow)] : [])];
+  const hard = [request.target, ...(request.keepOut ?? [])];
+  const soft = [...request.avoid, ...(request.arrow ? [arrowBounds(request.arrow)] : [])];
   const candidates = labelCandidates(request);
-  const clear = candidates.find((r) => !blocked.some((b) => intersects(r, b)));
-  const { x, y } = clear ?? candidates[0];
+  const allowed = candidates.filter((r) => !hard.some((zone) => intersects(r, zone)));
+  const pool = allowed.length > 0 ? allowed : candidates;
+  // Stable sort: equally good spots keep the preferred order (top edge first).
+  const { x, y } = [...pool].sort((a, b) => coveredArea(a, soft) - coveredArea(b, soft))[0];
   return { x, y };
 }
 

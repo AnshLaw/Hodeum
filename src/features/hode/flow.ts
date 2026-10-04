@@ -13,6 +13,7 @@ import {
   type HodeState,
   type Transition,
 } from "./model";
+import { neighboursOf } from "./neighbours";
 import { confidenceBand, nudgeStartLevel, overlayFor } from "./policy";
 
 /** Open-ended Hodes have no saved skill: the vision model phrases each step at the mode's level. */
@@ -143,8 +144,14 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   return showGuidance(withNotice, shown);
 }
 
+/** The action's overlay, with the text around its target so the label can keep clear of it. */
+function overlayOf(s: HodeState, action: TeachingAction) {
+  const nearby = action.target && s.observation ? neighboursOf(action.target.bounds, s.observation.elements) : [];
+  return overlayFor(action, pinFor(s), nearby);
+}
+
 function showGuidance(s: HodeState, action: TeachingAction): Transition {
-  const primitives = overlayFor(action, pinFor(s));
+  const primitives = overlayOf(s, action);
   const effects: HodeEffect[] = [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }];
   // On the phone every scroll re-locates the target; saying the same sentence again would nag.
   const repeat = s.pack?.surface === "phone" && action.speech === s.action?.speech;
@@ -164,7 +171,7 @@ function showAnswer(s: HodeState, action: TeachingAction): Transition {
   return {
     state: { ...s, phase: "answering", action },
     effects: [
-      { type: "renderOverlay", primitives: overlayFor(action, pinFor(s)) },
+      { type: "renderOverlay", primitives: overlayOf(s, action) },
       { type: "say", text: action.speech },
     ],
   };

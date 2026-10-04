@@ -3,17 +3,31 @@ import type { Bus } from "../../lib/bus";
 import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
 import type { HodeRuntime } from "../../features/hode/runtime";
-import { coversTarget, guidanceFootprint } from "./footprint";
+import type { OverlayPrimitive } from "../../lib/types";
+import { coversTarget, guidanceFootprint, notchScreenRect } from "./footprint";
 import type { NotchControl } from "./notch-view";
 
 /** Long enough to read what moved and the next suggestion; hovering holds it longer. */
 const SUCCESS_DISPLAY_MS = 5000;
 
+/** Tells the overlay where the surface is (physical screen px), so arrows and labels keep out from under it. */
+function broadcastRect(element: HTMLElement, shell: NativeShell, bus: Bus): void {
+  const box = element.getBoundingClientRect();
+  // The surface's container spans the notch window (Tauri) or the stage's desktop: its origin is the window's.
+  const base = element.parentElement?.getBoundingClientRect() ?? { x: 0, y: 0 };
+  const local = { x: box.x - base.x, y: box.y - base.y, width: box.width, height: box.height };
+  shell
+    .notchOrigin()
+    .then((origin) => bus.emit("notch:rect", { rect: notchScreenRect(local, origin) }))
+    .catch(reportError("Couldn't tell the overlay where the notch is"));
+}
+
 /**
- * Keeps the native hit-test in sync with the surface as it animates, so only it captures clicks.
- * `layoutKey` changes when the surface element is swapped (top notch <-> sidebar).
+ * Keeps the native hit-test (and the overlay's idea of where the notch is) in sync with the surface
+ * as it animates, so only it captures clicks. `layoutKey` changes when the surface element is swapped
+ * (top notch <-> sidebar).
  */
-export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShell, layoutKey: string): void {
+export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShell, bus: Bus, layoutKey: string): void {
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -24,8 +38,10 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
         // Includes transforms, so a tucked-away (auto-hidden) surface reports just its visible sliver.
         const { x, y, width, height } = element.getBoundingClientRect();
         shell.setNotchHitRect({ x, y, width, height }).catch(reportError("Couldn't update the notch hit area"));
+        broadcastRect(element, shell, bus);
       });
     };
+    const offRequest = bus.on("notch:rect-request", report);
     const observer = new ResizeObserver(report);
     observer.observe(element);
     // Sliding in and out of auto-hide is a transform, which ResizeObserver doesn't see.
@@ -37,9 +53,10 @@ export function useHitRect(ref: RefObject<HTMLElement | null>, shell: NativeShel
       observer.disconnect();
       element.removeEventListener("transitionend", report);
       window.removeEventListener("resize", report);
+      offRequest();
       cancelAnimationFrame(frame);
     };
-  }, [ref, shell, layoutKey]);
+  }, [ref, shell, bus, layoutKey]);
 }
 
 /**
@@ -126,33 +143,60 @@ export function useControlHandler(runtime: HodeRuntime, bus: Bus): (control: Not
   );
 }
 
-/** Whether the current highlight sits under the expanded top notch card (so the card should step aside). */
-export function useCoveringTarget(bus: Bus, shell: NativeShell, ref: RefObject<HTMLElement | null>, enabled: boolean): boolean {
+/** Reports the guidance card's bottom (CSS px in the notch window) while it's shown at full size. */
+export function useCardBottom(ref: RefObject<HTMLElement | null>, active: boolean, onBottom: (bottom: number) => void): void {
+  useEffect(() => {
+    const element = ref.current;
+    if (!active || !element) return;
+    // The surface's offset parent is the container at the notch window's top, so this includes any top inset.
+    const measure = () => onBottom(element.offsetTop + element.offsetHeight);
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    measure();
+    return () => observer.disconnect();
+  }, [ref, active, onBottom]);
+}
+
+/** The Windows highlights currently on screen, as the runtime last rendered them. */
+function useDesktopPrimitives(bus: Bus): OverlayPrimitive[] {
+  const [primitives, setPrimitives] = useState<OverlayPrimitive[]>([]);
+  useEffect(() => {
+    // Phone highlights sit on the mirror inside the notch, never under it.
+    const offRender = bus.on("overlay:render", ({ primitives: next, surface }) => setPrimitives((surface ?? "windows") === "windows" ? next : []));
+    const offClear = bus.on("overlay:clear", () => setPrimitives([]));
+    return () => {
+      offRender();
+      offClear();
+    };
+  }, [bus]);
+  return primitives;
+}
+
+/**
+ * Whether the current highlight sits under the expanded top notch card (so the card should step aside).
+ * Re-checked when the highlight changes and when the card's measured height does: the card grows with
+ * its text, and a fixed estimate let a two-line card cover a target without stepping aside.
+ */
+export function useCoveringTarget(bus: Bus, shell: NativeShell, ref: RefObject<HTMLElement | null>, enabled: boolean, cardBottom?: number): boolean {
+  const primitives = useDesktopPrimitives(bus);
   const [covering, setCovering] = useState(false);
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || primitives.length === 0) {
       setCovering(false);
       return;
     }
     let alive = true;
-    const offRender = bus.on("overlay:render", ({ primitives, surface }) => {
-      // Phone highlights sit on the mirror inside the notch, never under it.
-      if ((surface ?? "windows") !== "windows") return setCovering(false);
-      shell
-        .notchOrigin()
-        .then((origin) => {
-          // The notch is centred in its container (the notch window in Tauri, the desktop layer in the stage).
-          const width = ref.current?.parentElement?.clientWidth ?? window.innerWidth;
-          if (alive) setCovering(coversTarget(guidanceFootprint(origin, width), primitives));
-        })
-        .catch(reportError("Couldn't check whether the notch covers the target"));
-    });
-    const offClear = bus.on("overlay:clear", () => setCovering(false));
+    shell
+      .notchOrigin()
+      .then((origin) => {
+        // The notch is centred in its container (the notch window in Tauri, the desktop layer in the stage).
+        const width = ref.current?.parentElement?.clientWidth ?? window.innerWidth;
+        if (alive) setCovering(coversTarget(guidanceFootprint(origin, width, cardBottom), primitives));
+      })
+      .catch(reportError("Couldn't check whether the notch covers the target"));
     return () => {
       alive = false;
-      offRender();
-      offClear();
     };
-  }, [bus, shell, ref, enabled]);
+  }, [primitives, shell, ref, enabled, cardBottom]);
   return covering;
 }

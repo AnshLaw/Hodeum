@@ -1,7 +1,7 @@
 import type { ActivityChannel } from "./activity";
 import type { AccountStatus } from "../features/account/types";
 import type { AppPresence, DockPrefs } from "../features/dock/dock";
-import type { LearnerAnnotation, OverlayPrimitive, Surface } from "./types";
+import type { LearnerAnnotation, OverlayPrimitive, Rect, Surface } from "./types";
 
 type Empty = Record<string, never>;
 
@@ -9,6 +9,10 @@ export interface BusEvents {
   /** Highlights for one surface; absent means the Windows desktop. The notch draws "phone" ones on the mirror. */
   "overlay:render": { primitives: OverlayPrimitive[]; surface?: Surface };
   "overlay:clear": Empty;
+  /** Where the notch surface is right now (physical screen px), so the overlay keeps arrows and labels out from under it. */
+  "notch:rect": { rect: Rect };
+  /** Ask the notch to report its rect (the overlay just loaded). */
+  "notch:rect-request": Empty;
   "annotate:start": Empty;
   "annotate:cancel": Empty;
   "annotation:submitted": { annotation: LearnerAnnotation };

@@ -102,27 +102,38 @@ function footprint(primitive: OverlayPrimitive, arrow: ArrowGeometry | undefined
   return undefined;
 }
 
-/** Where the expanded notch card sits (top centre), so arrows and labels don't hide beneath it. */
-function notchZone(size: Size): Rect {
+/** Until the notch reports where it is: the expanded card's usual spot (top centre). */
+function estimatedNotch(size: Size): Rect {
   const width = NOTCH_WIDTHS.guidance;
   return { x: (size.width - width) / 2, y: 0, width, height: GUIDANCE_CARD_HEIGHT };
 }
 
-function arrowsFor(primitives: OverlayPrimitive[], size: Size): Map<OverlayPrimitive, ArrowGeometry | undefined> {
-  const avoid = [notchZone(size)];
-  return new Map(primitives.map((p) => [p, p.kind === "arrow" ? arrowGeometry(p.to, size, avoid) : undefined]));
+function arrowsFor(primitives: OverlayPrimitive[], size: Size, keepOut: Rect[]): Map<OverlayPrimitive, ArrowGeometry | undefined> {
+  return new Map(primitives.map((p) => [p, p.kind === "arrow" ? arrowGeometry(p.to, size, keepOut) : undefined]));
 }
 
-function labelPlacer(label: OverlayPrimitive & { kind: "highlight" }, primitives: OverlayPrimitive[], arrows: Map<OverlayPrimitive, ArrowGeometry | undefined>, size: Size) {
+interface LabelScene {
+  primitives: OverlayPrimitive[];
+  arrows: Map<OverlayPrimitive, ArrowGeometry | undefined>;
+  size: Size;
+  keepOut: Rect[];
+}
+
+function labelPlacer(label: OverlayPrimitive & { kind: "highlight" }, { primitives, arrows, size, keepOut }: LabelScene) {
   const pointing = primitives.find((p) => p.kind === "arrow" && sameRect(p.to, label.bounds));
   const marks = primitives.filter((p) => p !== label).flatMap((p) => footprint(p, arrows.get(p)) ?? []);
-  const avoid = [notchZone(size), ...marks];
-  return (chip: Size) => labelPosition({ target: label.bounds, chip, viewport: size, avoid, arrow: pointing && arrows.get(pointing) });
+  const avoid = [...marks, ...(label.keepClear ?? [])];
+  return (chip: Size) => labelPosition({ target: label.bounds, chip, viewport: size, avoid, keepOut, arrow: pointing && arrows.get(pointing) });
 }
 
-/** Draws guidance primitives (already in overlay CSS pixels). Purely visual: never captures input. */
-export function GuidanceLayer({ primitives, size }: { primitives: OverlayPrimitive[]; size: Size }) {
-  const arrows = arrowsFor(primitives, size);
+/**
+ * Draws guidance primitives (already in overlay CSS pixels). Purely visual: never captures input.
+ * `keepOut`: where the notch is; arrows and labels never go under it.
+ */
+export function GuidanceLayer({ primitives, size, keepOut }: { primitives: OverlayPrimitive[]; size: Size; keepOut?: Rect[] }) {
+  const zones = keepOut ?? [estimatedNotch(size)];
+  const arrows = arrowsFor(primitives, size, zones);
+  const scene: LabelScene = { primitives, arrows, size, keepOut: zones };
   return (
     <>
       <svg className="guidance" width={size.width} height={size.height} aria-hidden="true">
@@ -131,7 +142,7 @@ export function GuidanceLayer({ primitives, size }: { primitives: OverlayPrimiti
         ))}
       </svg>
       {primitives.map((p) =>
-        p.kind === "highlight" && p.label ? <LabelChip key={`label-${keyOf(p)}`} text={p.label} place={labelPlacer(p, primitives, arrows, size)} /> : null,
+        p.kind === "highlight" && p.label ? <LabelChip key={`label-${keyOf(p)}`} text={p.label} place={labelPlacer(p, scene)} /> : null,
       )}
     </>
   );

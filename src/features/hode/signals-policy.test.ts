@@ -111,6 +111,13 @@ describe("overlayFor", () => {
     expect(highlight).toMatchObject({ kind: "highlight", emphasis: "broad", bounds: { x: 26, y: -24, width: 88, height: 68 } });
   });
 
+  it("tells the label which nearby text to keep clear of", () => {
+    const heading = { x: 40, y: -30, width: 100, height: 20 };
+    const highlight = overlayFor(guideAction({ assistanceLevel: "guide" }), undefined, [heading]).find((p) => p.kind === "highlight");
+    expect(highlight).toMatchObject({ kind: "highlight", keepClear: [heading] });
+    expect(overlayFor(guideAction({ assistanceLevel: "guide" }))[0]).not.toHaveProperty("keepClear");
+  });
+
   it("low confidence draws nothing but keeps the pin", () => {
     const action = guideAction({ target: { elementId: "x", bounds: INSERT_BOUNDS, confidence: 0.4, label: "Insert" } });
     expect(kinds(action, INSERT_BOUNDS)).toEqual(["pin"]);

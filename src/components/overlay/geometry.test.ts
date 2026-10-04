@@ -31,6 +31,11 @@ describe("coordinate conversion", () => {
   it("converts overlay primitives into overlay CSS pixels", () => {
     expect(primitiveToOverlay({ kind: "arrow", to: { x: 2020, y: 100, width: 50, height: 50 } }, monitor)).toEqual({ kind: "arrow", to: { x: 80, y: 80, width: 40, height: 40 } });
   });
+
+  it("maps a highlight's nearby text with it, so the label avoids it at any DPI", () => {
+    const highlight = { kind: "highlight" as const, bounds: { x: 2020, y: 100, width: 50, height: 50 }, emphasis: "precise" as const, keepClear: [{ x: 2020, y: 50, width: 100, height: 25 }] };
+    expect(primitiveToOverlay(highlight, monitor)).toMatchObject({ bounds: { x: 80, y: 80 }, keepClear: [{ x: 80, y: 40, width: 80, height: 20 }] });
+  });
 });
 
 describe("composerPosition", () => {

@@ -3,7 +3,8 @@ import { guidanceHidden, type AppPresenceState } from "../../app/frame";
 import type { Bus } from "../../lib/bus";
 import { reportError } from "../../lib/errors";
 import type { NativeShell } from "../../lib/shell";
-import type { AnnotationShape, LearnerAnnotation, MonitorInfo, OverlayPrimitive, Surface } from "../../lib/types";
+import { toOverlay } from "../../lib/coords";
+import type { AnnotationShape, LearnerAnnotation, MonitorInfo, OverlayPrimitive, Rect, Surface } from "../../lib/types";
 import { useElementSize } from "../shared/use-element-size";
 import { AnnotateLayer } from "./AnnotateLayer";
 import { GuidanceLayer } from "./GuidanceLayer";
@@ -52,6 +53,17 @@ function useOverlayBus(bus: Bus, surfaces: Surface[]) {
   return { primitives: guidanceHidden(app) ? [] : primitives, annotating, setAnnotating };
 }
 
+/** Where the notch is (physical screen px), as it reports it; asks once in case it reported before we listened. */
+function useNotchRect(bus: Bus): Rect | undefined {
+  const [rect, setRect] = useState<Rect>();
+  useEffect(() => {
+    const off = bus.on("notch:rect", ({ rect: next }) => setRect(next));
+    bus.emit("notch:rect-request", {});
+    return off;
+  }, [bus]);
+  return rect;
+}
+
 /** The click-through guidance surface; becomes interactive only while the learner is marking for Point & Ask. */
 const DESKTOP_ONLY: Surface[] = ["windows"];
 
@@ -60,6 +72,7 @@ export function GuidanceOverlay({ bus, shell, surfaces = DESKTOP_ONLY }: { bus: 
   const size = useElementSize(rootRef);
   const monitor = useOverlayMonitor(shell);
   const { primitives, annotating, setAnnotating } = useOverlayBus(bus, surfaces);
+  const notch = useNotchRect(bus);
 
   useEffect(() => {
     shell.setOverlayInteractive(annotating).catch(reportError("Couldn't switch the overlay mode"));
@@ -81,9 +94,10 @@ export function GuidanceOverlay({ bus, shell, surfaces = DESKTOP_ONLY }: { bus: 
   );
 
   const local = monitor ? primitives.map((p) => primitiveToOverlay(p, monitor)) : [];
+  const keepOut = monitor && notch ? [toOverlay(notch, monitor)] : undefined;
   return (
     <div ref={rootRef} className="overlay-root">
-      <GuidanceLayer primitives={local} size={size} />
+      <GuidanceLayer primitives={local} size={size} keepOut={keepOut} />
       {annotating && <AnnotateLayer size={size} onSubmit={submit} onCancel={cancel} />}
     </div>
   );
