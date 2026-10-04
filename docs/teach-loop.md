@@ -44,6 +44,14 @@ does it with checkpoints. Only Teach orients, asks first, explains on success, r
 - The model hears the steps already done, its own last instruction, and the learner's recent actions. Hodey's earlier words are passed as tagged data, never as instructions.
 - An unsure target isn't drawn, but the model's line is still said.
 - Help with an open goal stands by until the learner asks or gets stuck.
+- Once its first step is showing, an open Teach Hode is planned in the background. Hodey looks the goal up (the offline help first, then the web when Settings allows it) and the local model drafts a plan: the idea, each step's control with a question to ask first and why it matters, a recap, and a check. The first step never waits on the plan. Each later look at the screen follows the plan where it fits, and finishing closes with the plan's recap and its check question. If planning fails, Hodey carries on a step at a time.
+
+## Where the learner is
+
+- Every request to the model carries the learner's pointer. Controls near it rank first, and the model is told where it rests.
+- When Hodey can't tell which control is meant, it asks once per step: "Move your pointer near the area you're working in." Once the pointer moves and comes to rest, Hodey looks again with it.
+- With the Hode's app still open, the learner can step into another app. The step and its card wait quietly, nothing counts as hesitation, and coming back takes a fresh look without repeating the instruction.
+- One instruction can walk through several controls: each is lit at once, numbered in the order it's used, with the arrow on the first. A later control Hodey isn't sure of is left out, and the others keep their numbers.
 
 ## Speed
 
