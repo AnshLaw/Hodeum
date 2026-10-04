@@ -137,37 +137,9 @@
   stroke-width: 4.5;
 }
 
-/* Light runs down the arrow toward the target, then rests a beat. */
-.arrow .arrow__flow {
-  stroke: var(--hd-beam-core);
-  stroke-width: 2;
-  stroke-dasharray: 18 82;
-  animation: arrow-flow 1.8s var(--hd-ease) 700ms infinite both;
-}
-
-@keyframes arrow-flow {
-  0% {
-    opacity: 0;
-    stroke-dashoffset: 18;
-  }
-  15% {
-    opacity: 1;
-  }
-  70% {
-    opacity: 1;
-    stroke-dashoffset: -82;
-  }
-  85%,
-  100% {
-    opacity: 0;
-    stroke-dashoffset: -82;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .beam-ring__comet,
-  .beam-ring__ping,
-  .arrow .arrow__flow {
+  .beam-ring__ping {
     display: none;
   }
 

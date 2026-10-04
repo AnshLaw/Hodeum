@@ -19,6 +19,7 @@ interface AnnotateLayerProps {
 
 const MARK_RADIUS_PX = 6;
 const HANDLE_PX = 7;
+const HANDLE_RADIUS_PX = 2;
 /** Room the pointer hint needs below and right of the pointer before it flips to the other side. */
 const HINT_ROOM: Size = { width: 340, height: 64 };
 
@@ -54,7 +55,7 @@ function Draft({ gesture }: { gesture: Gesture }) {
       <rect className="annotate__draft-under" {...box} rx={MARK_RADIUS_PX} />
       <rect className="annotate__draft-line" {...box} rx={MARK_RADIUS_PX} />
       {corners(box).map(([name, c]) => (
-        <rect key={name} className="annotate__handle" x={c.x - HANDLE_PX / 2} y={c.y - HANDLE_PX / 2} width={HANDLE_PX} height={HANDLE_PX} rx={2} />
+        <rect key={name} className="annotate__handle" x={c.x - HANDLE_PX / 2} y={c.y - HANDLE_PX / 2} width={HANDLE_PX} height={HANDLE_PX} rx={HANDLE_RADIUS_PX} />
       ))}
     </g>
   );

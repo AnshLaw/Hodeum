@@ -13,11 +13,14 @@ interface ComposerProps {
   onSubmit: (intent: LearnerAnnotation["intent"], question?: string) => void;
 }
 
-/** Which side of the mark the composer opened on, so it grows out of the mark rather than from nowhere. */
-function sideOf(anchor: Rect, at: Point): "right" | "left" | "below" {
+/**
+ * Which side of the mark the composer opened on, so it grows out of the mark rather than from nowhere.
+ * It opens below unless that's off-screen, when it's pushed up, possibly above the mark.
+ */
+function sideOf(anchor: Rect, at: Point): "right" | "left" | "below" | "above" {
   if (at.x >= anchor.x + anchor.width) return "right";
   if (at.x + COMPOSER_SIZE.width <= anchor.x) return "left";
-  return "below";
+  return at.y + COMPOSER_SIZE.height <= anchor.y ? "above" : "below";
 }
 
 export function Composer({ anchor, viewport, onSubmit }: ComposerProps) {

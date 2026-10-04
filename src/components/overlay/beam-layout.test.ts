@@ -12,16 +12,18 @@ describe("ringPerimeter", () => {
     expect(ringPerimeter({ x: 0, y: 0, width: 100, height: 40 }, RADIUS)).toBeCloseTo(2 * 140 - (8 - 2 * Math.PI) * RADIUS);
   });
 
-  it("caps the corner radius at half the short side, like SVG does", () => {
+  it("caps the corner radius at half the short side", () => {
     const stadium = 2 * (20 - 10) + Math.PI * 10;
     expect(ringPerimeter({ x: 0, y: 0, width: 20, height: 10 }, RADIUS)).toBeCloseTo(stadium);
   });
 });
 
 describe("beamLayout", () => {
-  it("draws the comet tail, body and head at full length on a roomy ring", () => {
+  it("draws the comet at full length on any roomy ring, brightening from tail to head", () => {
     const layout = beamLayout(button, RADIUS, "precise");
+    const bigger = beamLayout(pane, RADIUS, "precise");
     expect(layout.perimeter).toBeCloseTo(ringPerimeter(button, RADIUS));
+    expect(bigger).toMatchObject({ tail: layout.tail, body: layout.body, head: layout.head });
     expect(layout.tail).toBeGreaterThan(layout.body);
     expect(layout.body).toBeGreaterThan(layout.head);
     expect(layout.tail).toBeLessThan(layout.perimeter / 2);

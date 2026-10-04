@@ -262,8 +262,18 @@ export function NotchBar(props: BarProps) {
   );
 }
 
-/** `extra` replaces the plain skill chips, e.g. the success card's skill progress. */
-export function NotchContent({ view, expanded, fallbackDetail, onControl, extra }: { view: NotchView; expanded: boolean; fallbackDetail?: string; onControl: OnControl; extra?: ReactNode }) {
+interface NotchContentProps {
+  view: NotchView;
+  expanded: boolean;
+  fallbackDetail?: string;
+  onControl: OnControl;
+  /** Replaces the plain skill chips, e.g. the success card's skill progress. */
+  extra?: ReactNode;
+  /** Toggles that are on; by default, the step list while the view carries it. */
+  active?: NotchControl[];
+}
+
+export function NotchContent({ view, expanded, fallbackDetail, onControl, extra, active = view.steps ? ["all_steps"] : [] }: NotchContentProps) {
   const detail = view.detail ?? (view.mode === "idle" ? fallbackDetail : undefined);
   if (!expanded) return detail ? <p className="notch__subline">{detail}</p> : null;
   return (
@@ -282,7 +292,7 @@ export function NotchContent({ view, expanded, fallbackDetail, onControl, extra 
       )}
       {extra ?? (view.skills && <SkillChips skills={view.skills} />)}
       {view.steps && <StepList steps={view.steps} />}
-      {view.controls.length > 0 && <ControlButtons controls={view.controls} hintLabel={view.hintLabel} onControl={onControl} spread active={view.steps ? ["all_steps"] : undefined} />}
+      {view.controls.length > 0 && <ControlButtons controls={view.controls} hintLabel={view.hintLabel} onControl={onControl} spread active={active} />}
     </div>
   );
 }

@@ -36,6 +36,40 @@
   animation: arrow-draw 420ms var(--hd-ease) 120ms both;
 }
 
+/* Light runs down the shaft toward the target, then rests a beat. The gap outruns the shaft (pathLength
+   100), so no second dash glints at the tip when each run starts. */
+.arrow .arrow__flow {
+  stroke: var(--hd-beam-core);
+  stroke-width: 2;
+  stroke-dasharray: 18 100;
+  animation: arrow-flow 1.8s var(--hd-ease) 700ms infinite both;
+}
+
+@keyframes arrow-flow {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 18;
+  }
+  15% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+    stroke-dashoffset: -82;
+  }
+  85%,
+  100% {
+    opacity: 0;
+    stroke-dashoffset: -82;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow .arrow__flow {
+    display: none;
+  }
+}
+
 @keyframes arrow-draw {
   from {
     stroke-dashoffset: 100;
@@ -200,6 +234,12 @@
   transform-origin: top center;
 }
 
+.composer--above {
+  --from-x: 0px;
+  --from-y: 10px;
+  transform-origin: bottom center;
+}
+
 @keyframes composer-in {
   from {
     opacity: 0;
@@ -270,14 +310,15 @@
   margin-top: 10px;
 }
 
-.chip--focus {
+/* Scoped to the composer so it out-ranks the shared .chip border whatever order the stylesheets load in. */
+.composer .chip--focus {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   border-style: dashed;
 }
 
-.chip--focus svg {
+.composer .chip--focus svg {
   width: 13px;
   height: 13px;
 }

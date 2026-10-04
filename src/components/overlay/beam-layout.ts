@@ -27,7 +27,11 @@ export interface BeamLayout {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
-/** Straight sides plus four quarter-circle corners; the radius is capped at half the short side, as SVG does. */
+/**
+ * Straight sides plus four quarter-circle corners, the radius capped at half the short side. SVG caps
+ * each axis on its own (elliptical corners on a very flat ring), but the ring's pathLength rescales the
+ * dashes to the drawn outline, so this only has to be close.
+ */
 export function ringPerimeter(ring: Rect, radius: number): number {
   const r = Math.min(radius, ring.width / 2, ring.height / 2);
   return 2 * (ring.width + ring.height) - (8 - 2 * Math.PI) * r;

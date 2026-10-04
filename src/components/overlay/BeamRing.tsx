@@ -16,9 +16,24 @@ const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 
 /** How the ring arrives: drawn in, glided over from the last target, or (when unsure) faded in. */
 type Arrival = "trace" | "glide" | "fade";
+/** When the ring is in place: once drawn in, or once it has glided over. */
+const ARRIVE_MS: Record<Arrival, number> = { trace: TRACE_MS, glide: GLIDE_MS, fade: 0 };
+/** Gliding, the comet circles on the way; drawn in, it takes over where the drawing ends. */
+const COMET_START_MS: Record<Arrival, number> = { trace: TRACE_MS, glide: 0, fade: 0 };
 
 /** The last ring per channel, so the next target's ring can glide in from it. */
 const lastShown = new Map<string, ShownRing>();
+
+const isEmpty = (r: Rect) => r.width <= 0 || r.height <= 0;
+
+/** Where the ring is drawn right now, which mid-glide is between its last target and this one. */
+function liveRect(group: SVGGElement | null, fallback: Rect): Rect {
+  const line = group?.querySelector<SVGRectElement>(".beam-ring__line");
+  if (!line) return fallback;
+  const { x, y, width, height } = line.getBBox();
+  const live = { x, y, width, height };
+  return isEmpty(live) ? fallback : live;
+}
 
 function glideFrames(from: Rect, to: Rect): Keyframe[] {
   const frame = (r: Rect) => ({ x: `${r.x}px`, y: `${r.y}px`, width: `${r.width}px`, height: `${r.height}px` });
@@ -28,6 +43,14 @@ function glideFrames(from: Rect, to: Rect): Keyframe[] {
 /** Glides every part of the ring over from the channel's previous ring, and records this ring for the next. */
 function useGlide(group: RefObject<SVGGElement | null>, ring: Rect, channel: string | undefined): Rect | undefined {
   const [from] = useState(() => (channel ? glideOrigin(lastShown.get(channel), ring, performance.now()) : undefined));
+  // Declared before the glide so its cleanup runs first, reading where the ring is before the glide is cancelled.
+  useLayoutEffect(() => {
+    if (!channel || isEmpty(ring)) return;
+    const shown = { x: ring.x, y: ring.y, width: ring.width, height: ring.height };
+    const element = group.current;
+    lastShown.set(channel, { rect: shown });
+    return () => void lastShown.set(channel, { rect: liveRect(element, shown), hiddenAt: performance.now() });
+  }, [channel, group, ring.x, ring.y, ring.width, ring.height]);
   useLayoutEffect(() => {
     const element = group.current;
     if (!from || !element || window.matchMedia(REDUCED_MOTION).matches) return;
@@ -36,12 +59,6 @@ function useGlide(group: RefObject<SVGGElement | null>, ring: Rect, channel: str
     return () => animations.forEach((animation) => animation.cancel());
     // Mount-only: a new target mounts a new ring, so `ring` never changes under a running glide.
   }, [from, group]);
-  useLayoutEffect(() => {
-    if (!channel) return;
-    const shown = { x: ring.x, y: ring.y, width: ring.width, height: ring.height };
-    lastShown.set(channel, { rect: shown });
-    return () => void lastShown.set(channel, { rect: shown, hiddenAt: performance.now() });
-  }, [channel, ring.x, ring.y, ring.width, ring.height]);
   return from;
 }
 
@@ -59,9 +76,8 @@ function ringStyle(ring: Rect, layout: BeamLayout, arrival: Arrival): CSSPropert
   return {
     "--beam-perimeter": layout.perimeter,
     "--beam-lap": `${layout.lapMs}ms`,
-    "--beam-arrive": `${arrival === "glide" ? GLIDE_MS : arrival === "trace" ? TRACE_MS : 0}ms`,
-    // Gliding, the comet circles on the way; drawn in, it takes over where the drawing ends.
-    "--comet-start": `${arrival === "trace" ? TRACE_MS : 0}ms`,
+    "--beam-arrive": `${ARRIVE_MS[arrival]}ms`,
+    "--comet-start": `${COMET_START_MS[arrival]}ms`,
     "--ping-sx": ping.x,
     "--ping-sy": ping.y,
   } as CSSProperties;
@@ -85,7 +101,7 @@ export function BeamRing({ ring, radius, emphasis, channel }: BeamRingProps) {
   const tint = `beam-tint-${useId().replace(/[^\w-]/g, "")}`;
   const from = useGlide(group, ring, channel);
   // Nothing to ring: a target with no size on screen.
-  if (ring.width <= 0 || ring.height <= 0) return null;
+  if (isEmpty(ring)) return null;
   const arrival: Arrival = from ? "glide" : emphasis === "broad" ? "fade" : "trace";
   const layout = beamLayout(ring, radius, emphasis);
   const shape = { x: ring.x, y: ring.y, width: ring.width, height: ring.height, rx: radius };

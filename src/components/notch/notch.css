@@ -304,10 +304,14 @@
   background: var(--hd-glass);
 }
 
-/* :where keeps these below the shared hover, pressed and danger states. */
-.notch__tools :where(.icon-btn) {
+/* Out-ranks the shared .icon-btn whatever order the stylesheets load in (dev and release builds
+   differ); the background steps aside while hovered or pressed, so those shared states still show. */
+.notch__tools .icon-btn {
   width: 26px;
   height: 26px;
+}
+
+.notch__tools .icon-btn:not(:hover, [aria-pressed="true"]) {
   background: transparent;
 }
 
