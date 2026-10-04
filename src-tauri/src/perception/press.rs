@@ -28,12 +28,21 @@ pub enum PressButton {
     Right,
 }
 
-/// The latest screen read's elements, by the ids the web side was given, with the box each had.
+/// One element of a screen read: the box it had and the process that owned it then.
+pub struct SeenElement {
+    pub element: UIElement,
+    pub bounds: RectDto,
+    /// Store apps (Calculator, Settings) draw their controls from a process other than the window's frame
+    /// (ApplicationFrameHost), so each element's own process is recorded when it is read.
+    pub pid: Option<u32>,
+}
+
+/// The latest screen read's elements, by the ids the web side was given.
 pub struct Seen {
     pub at: u64,
-    /// The learner's app: every press must land in this process.
+    /// The learner's window's process: the fallback for an element whose own process couldn't be read.
     pub pid: u32,
-    pub elements: HashMap<String, (UIElement, RectDto)>,
+    pub elements: HashMap<String, SeenElement>,
 }
 
 pub struct PressRequest {
@@ -57,6 +66,11 @@ pub fn centre(bounds: &RectDto) -> (i32, i32) {
 
 fn inside(inner: &RectDto, outer: &RectDto) -> bool {
     inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height
+}
+
+/// The process a press must still land in: the one that owned the element when it was read.
+pub fn expected_pid(recorded: Option<u32>, frame: u32) -> u32 {
+    recorded.unwrap_or(frame)
 }
 
 /// Only the latest read, and only while it's fresh.
@@ -108,8 +122,10 @@ fn selected_item_box(automation: &UIAutomation, list: &UIElement, list_box: &Rec
 /// Clicks the element `request` names from `seen`, moving the pointer there so the learner sees it.
 pub fn press(automation: &UIAutomation, walker: &UITreeWalker, seen: &Seen, request: &PressRequest, now: u64) -> Result<(), String> {
     check_read(seen.at, request.observed_at, now)?;
-    let (element, seen_box) = seen.elements.get(&request.element_id).ok_or(STALE)?;
-    let element_box = verify(automation, walker, element, seen_box, &request.name, seen.pid)?;
+    let seen_element = seen.elements.get(&request.element_id).ok_or(STALE)?;
+    let element = &seen_element.element;
+    let pid = expected_pid(seen_element.pid, seen.pid);
+    let element_box = verify(automation, walker, element, &seen_element.bounds, &request.name, pid)?;
     let is_list = element.get_control_type().map(|t| t == ControlType::List).unwrap_or(false);
     let click_box = match request.button {
         PressButton::Right if is_list => selected_item_box(automation, element, &element_box)?,
@@ -153,6 +169,14 @@ mod tests {
         assert_eq!(check_read(1_000, 1_000, 2_000), Ok(()));
         assert_eq!(check_read(1_000, 999, 2_000), Err(STALE));
         assert_eq!(check_read(1_000, 1_000, 1_000 + MAX_READ_AGE_MS + 1), Err(STALE));
+    }
+
+    #[test]
+    fn checks_a_press_against_the_process_that_owned_the_control() {
+        const FRAME: u32 = 19_296;
+        const CALCULATOR: u32 = 24_596;
+        assert_eq!(expected_pid(Some(CALCULATOR), FRAME), CALCULATOR);
+        assert_eq!(expected_pid(None, FRAME), FRAME);
     }
 
     #[test]
