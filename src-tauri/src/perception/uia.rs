@@ -24,6 +24,13 @@ pub const WALK_BUDGET: Duration = Duration::from_millis(400);
 /// After a walk cut short, the time for searching out the wanted controls it didn't read, all names together.
 /// A dialog that just opened, a shell view or a big ribbon can be slow to walk at first.
 pub const SEARCH_BUDGET: Duration = Duration::from_millis(400);
+/// Window classes of dialogs, whose trees are small: a full search there is quick. One UI Automation search of a
+/// big app window can't be cut short and can take minutes (Excel's grid), so those are never searched.
+const SEARCHABLE_CLASSES: [&str; 3] = ["#32770", "bosa_sdm", "NUIDialog"];
+
+fn searchable(class_name: &str) -> bool {
+    !class_name.is_empty() && SEARCHABLE_CLASSES.iter().any(|prefix| class_name.starts_with(prefix))
+}
 /// UI Automation answers "nothing there" with an empty success, which the crate reports as an error of code 0.
 const NOTHING_FOUND: i32 = 0;
 pub(super) const UIA_CONFIDENCE: f64 = 0.95;
@@ -321,7 +328,8 @@ impl UiaReader {
         walk.stack.push(Node { element: root.clone(), depth: 0, scope: Scope::App, container: None });
         walk.run();
         walk.stats.elapsed_ms = started.elapsed().as_millis();
-        let search = if walk.stats.incomplete(walk.out.len()) { walk.search_out(&root, &wanted_names(want), SEARCH_BUDGET) } else { SearchStats::default() };
+        let dialog = root.get_classname().is_ok_and(|class| searchable(&class));
+        let search = if dialog && walk.stats.incomplete(walk.out.len()) { walk.search_out(&root, &wanted_names(want), SEARCH_BUDGET) } else { SearchStats::default() };
         Ok(Read { elements: walk.out, handles: walk.handles, walk: walk.stats, search })
     }
 
@@ -654,6 +662,16 @@ fn describe(element: &UIElement, sequence: usize, container: Option<&str>) -> Op
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn searches_only_dialogs_where_a_full_search_is_quick() {
+        assert!(searchable("#32770"), "common dialogs: Save As, Open");
+        assert!(searchable("bosa_sdm_XL9"), "Office dialogs: Create PivotTable");
+        assert!(searchable("NUIDialog"));
+        assert!(!searchable("XLMAIN"), "Excel's window: the grid makes a full search take minutes");
+        assert!(!searchable("Notepad"));
+        assert!(!searchable(""));
+    }
 
     const ON: i32 = ToggleState::On as i32;
     const OFF: i32 = ToggleState::Off as i32;
