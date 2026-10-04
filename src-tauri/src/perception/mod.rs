@@ -107,7 +107,7 @@ fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<
     let at = now_ms();
     reader.remember(Seen { at, pid: foreground::window_pid(hwnd), elements: handles });
     let window = window_watch::window_frame(hwnd);
-    let observation = Observation { app: app_name(&stem), window_title: foreground::window_title(hwnd), elements, at, window };
+    let observation = Observation { app: app_name(&stem), window_title: foreground::window_title(hwnd), elements, at, window, app_id: None };
     Ok((observation, foreground::monitor_rect(hwnd)))
 }
 
