@@ -32,7 +32,8 @@ export class MockPerception implements PerceptionAdapter {
     private readonly latencyMs = 0,
   ) {}
 
-  async observe(region?: Rect): Promise<ScreenObservation> {
+  /** A scripted scene is always read whole, so the step's wanted controls (`_want`) change nothing. */
+  async observe(region?: Rect, _want?: string[]): Promise<ScreenObservation> {
     if (this.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
     return this.snapshot(region);
   }

@@ -67,6 +67,16 @@ describe("withScreenActivity", () => {
     vi.advanceTimersByTime(ACTIVITY_LINGER_MS);
     expect(tracker.current().screen).toBe(false);
   });
+
+  it("passes the step's controls on, to a read and to the reads after the learner's actions", async () => {
+    const observe = vi.fn(async () => HOME_SELECTED);
+    const setWanted = vi.fn();
+    const wrapped = withScreenActivity({ observe, onLearnerAction: () => () => undefined, setWanted }, new ActivityTracker());
+    await wrapped.observe(undefined, ["Insert"]);
+    expect(observe).toHaveBeenCalledWith(undefined, ["Insert"]);
+    wrapped.setWanted?.(["PivotTable"]);
+    expect(setWanted).toHaveBeenCalledWith(["PivotTable"]);
+  });
 });
 
 describe("screenWatch", () => {

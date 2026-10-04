@@ -27,8 +27,13 @@ export class SurfacePerception implements PerceptionAdapter {
     this.applyWatching();
   }
 
-  observe(region?: Rect): Promise<ScreenObservation> {
-    return this.adapters[this.active].observe(region);
+  observe(region?: Rect, want?: string[]): Promise<ScreenObservation> {
+    return this.adapters[this.active].observe(region, want);
+  }
+
+  /** Every surface that can use them hears the step's controls, so whichever the Hode moves to has them. */
+  setWanted(names: string[]): void {
+    SURFACES.forEach((surface) => this.adapters[surface].setWanted?.(names));
   }
 
   async focusApp(app: string): Promise<boolean> {

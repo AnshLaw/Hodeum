@@ -37,6 +37,27 @@ describe("NativePerception", () => {
     expect(invoke).toHaveBeenCalledWith("observe", { region });
   });
 
+  it("asks the native read to search out the step's controls if its walk misses them", async () => {
+    const { bridge, invoke } = fakeBridge([HOME_SELECTED]);
+    await new NativePerception(bridge).observe(undefined, ["File name:", "Save"]);
+    expect(invoke).toHaveBeenCalledWith("observe", { region: null, want: ["File name:", "Save"] });
+  });
+
+  it("reads after the learner's actions look for the step's controls too", async () => {
+    const { bridge, invoke, fire } = fakeBridge([HOME_SELECTED, INSERT_SELECTED]);
+    const perception = new NativePerception(bridge);
+    perception.onLearnerAction(vi.fn());
+    perception.setWatching(true);
+    perception.setWanted(["File name:"]);
+    fire();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("observe", { region: null, want: ["File name:"] });
+    perception.setWanted([]);
+    fire();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("observe", { region: null });
+  });
+
   it("ignores learner input until a Hode is watching", async () => {
     const { bridge, invoke, fire } = fakeBridge([INSERT_SELECTED]);
     const perception = new NativePerception(bridge);

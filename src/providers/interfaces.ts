@@ -80,8 +80,14 @@ export interface AppSwitch {
 
 /** UI Automation, the detector, and the practice stage's mock all sit behind this. */
 export interface PerceptionAdapter {
-  observe(region?: Rect): Promise<ScreenObservation>;
+  /**
+   * `want`: names of the controls the current lesson step needs. A read whose time-boxed walk misses them
+   * (a dialog that has only just opened answers slowly) searches them out by name.
+   */
+  observe(region?: Rect, want?: string[]): Promise<ScreenObservation>;
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void;
+  /** The current step's controls (`observe`'s `want`) for the reads that follow the learner's own actions; [] for none. */
+  setWanted?(names: string[]): void;
   /** Brings an open window of `app` (e.g. "Excel") to the front. False when none is open. */
   focusApp?(app: string): Promise<boolean>;
   /** Opens `app` (with the pack's practice file) and brings it to the front. False when it didn't appear in time. */
