@@ -93,6 +93,31 @@
   animation: hd-fade-in 160ms ease 460ms both;
 }
 
+/* A control's place in the flow when one step lights several: accent disc, dark ink and outline, so it
+   reads on light and dark apps alike. */
+.order-badge {
+  animation: hd-fade-in 200ms ease 160ms both;
+}
+
+.order-badge circle {
+  fill: var(--hd-accent);
+  stroke: var(--hd-outline);
+  stroke-width: 1.5;
+}
+
+.order-badge text {
+  fill: var(--hd-accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .order-badge {
+    animation: none;
+  }
+}
+
 .pin rect {
   fill: none;
 }
