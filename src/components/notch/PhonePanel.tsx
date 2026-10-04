@@ -3,9 +3,10 @@ import type { Bus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
 import type { OverlayPrimitive, Rect, Size } from "../../lib/types";
 import { listCameras, type CameraInfo } from "../../features/phone/camera-source";
+import { airplayGuide } from "../../features/phone/airplay-network";
 import type { PhoneMirror } from "../../features/phone/phone-mirror";
-import type { PhoneSourceKind, PhoneSourceStatus } from "../../features/phone/phone-source";
-import { loadPhonePrefs, savePhonePrefs } from "../../features/phone/prefs";
+import type { AirplayNetwork, PhoneSourceKind, PhoneSourceStatus } from "../../features/phone/phone-source";
+import { loadPhonePrefs, savePhonePrefs, type AirplayNetworkChoice } from "../../features/phone/prefs";
 import { BeamRing } from "../overlay/BeamRing";
 import { markRect } from "./phone-layout";
 
@@ -64,8 +65,31 @@ function StatusCard({ status, kind, onRetry }: { status: PhoneSourceStatus; kind
       </div>
     );
   }
-  const text = status.state === "waiting" ? (kind === "airplay" ? COPY.phoneWaitingAirplay : COPY.phoneWaitingCamera) : COPY.phoneConnecting;
+  if (status.state === "waiting" && kind === "airplay") return <AirplayCard network={status.network} onRetry={onRetry} />;
+  const text = status.state === "waiting" ? COPY.phoneWaitingCamera : COPY.phoneConnecting;
   return <div className="phone-panel__card" role="status"><p>{text}</p></div>;
+}
+
+/** How to get the iPhone to the receiver: join the network it's on, then Screen Mirroring → Hodeum. */
+function AirplayCard({ network, onRetry }: { network?: AirplayNetwork; onRetry: () => void }) {
+  const guide = airplayGuide(network);
+  const switchTo = guide.switchTo;
+  const choose = (airplayNetwork: AirplayNetworkChoice) => {
+    savePhonePrefs({ ...loadPhonePrefs(), airplayNetwork });
+    onRetry();
+  };
+  return (
+    <div className="phone-panel__card" role="status">
+      <ol className="phone-panel__steps">
+        {guide.steps.map((step) => <li key={step}>{step}</li>)}
+      </ol>
+      {guide.note && <p className="phone-panel__hint">{guide.note}</p>}
+      <div className="phone-panel__actions">
+        <button type="button" className="btn" onClick={onRetry}>{COPY.retry}</button>
+        {switchTo && <button type="button" className="btn btn--neutral" onClick={() => choose(switchTo.network)}>{switchTo.label}</button>}
+      </div>
+    </div>
+  );
 }
 
 interface PhoneScreenProps {
