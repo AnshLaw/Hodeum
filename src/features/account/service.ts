@@ -27,6 +27,8 @@ export interface SyncSession {
   stop(): void;
   status(): SyncStatus;
   subscribe(listener: (status: SyncStatus) => void): () => void;
+  /** Sync and tell the web dashboard this PC is here, now ("Try again"). */
+  retry(): Promise<void>;
 }
 
 /** Choices about this PC, so they aren't synced. */
@@ -77,6 +79,7 @@ export class AccountService {
     bus.on("account:cancel", () => this.cancel());
     bus.on("account:sign-out", () => void this.signOut());
     bus.on("account:pause", ({ paused }) => this.setPaused(paused));
+    bus.on("account:retry", () => void this.retry());
     if (!backend) return this.broadcast();
     backend.onUserChange((user) => this.userChanged(user));
     try {
@@ -118,6 +121,15 @@ export class AccountService {
     } catch (error) {
       console.error("Sign-out failed", error);
       this.update({ error: `Couldn't sign out: ${errorText(error)}` });
+    }
+  }
+
+  async retry(): Promise<void> {
+    try {
+      await this.session?.sync.retry();
+    } catch (error) {
+      console.error("Retrying sync failed", error);
+      this.update({ sync: { ...this.current.sync, state: "error", error: errorText(error) } });
     }
   }
 

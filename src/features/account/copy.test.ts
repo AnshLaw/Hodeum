@@ -24,4 +24,13 @@ describe("account copy", () => {
     expect(syncDetail(signedIn({ sync: { state: "blocked", error: "belongs to another account" } }), NOW)).toBe("belongs to another account");
     expect(railNote(signedIn({ sync: { state: "blocked" } }))).toBe("Everything stays on this PC");
   });
+
+  it("never says it's syncing when the last sync failed or sign-in didn't finish", () => {
+    expect(railNote(signedIn({ sync: { state: "error", error: "The web dashboard can't see this PC: offline" } }))).toBe("Sync failed · see Settings › Account");
+    expect(railNote({ ...SIGNED_OUT, error: "invalid nonce" })).toBe("Sign-in didn't finish · see Settings › Account");
+  });
+
+  it("says plainly when the web dashboard can't see this PC", () => {
+    expect(syncDetail(signedIn({ sync: { state: "error", error: "The web dashboard can't see this PC: offline" } }), NOW)).toBe("The web dashboard can't see this PC: offline. Everything is still on this PC; Hodeum will retry.");
+  });
 });

@@ -58,5 +58,8 @@ Only after sign-in, and only while sync isn't paused: skills, Hodes and their st
 | No Google button on the site | The page's origin isn't in the OAuth client's JS origins (changes can take a few minutes) |
 | "The sign-in that came back didn't match this one" | A stale or forged sign-in page; start again from Hodeum |
 | "This PC's learning belongs to another Hodeum account" | The PC's local data was first synced by a different Google account |
+| Dashboard: "No PC is linked to <email> yet" | Hodeum on the PC never finished signing in with that Google account, or sync is paused there. A PC appears only after the app itself is signed in (Settings › Account shows "Signed in" and "Synced …"); the browser tab saying "Almost done" isn't enough |
+| Settings: "Sign-in didn't finish: …" (rail: "Sign-in didn't finish") | The browser came back but Supabase refused the Google token, or the wait was cancelled; sign in again |
+| Settings: "The web dashboard can't see this PC: …" | The `devices` heartbeat upsert failed (network, expired session, or missing table/policy); fix it and press Try again |
 | Dashboard: "<PC> didn't answer" | Hodeum isn't running there, isn't signed in, or sync is paused |
 | "Last sync failed: …" in Settings | Network or Supabase error; local data is untouched and the next pass retries |

@@ -11,7 +11,7 @@ import { HodeumMark } from "../components/shared/icons";
 import { googleClientId } from "../features/account/config";
 import { accountUser } from "../features/account/supabase-auth";
 import type { DeviceRow } from "../features/sync/types";
-import { isOnline } from "./devices";
+import { isOnline, noPcMessage } from "./devices";
 import { GoogleButton } from "./GoogleButton";
 import { useDashboard, useSession, type Dashboard } from "./use-dashboard";
 import "../app/app.css";
@@ -58,9 +58,9 @@ function SignIn({ client }: { client: SupabaseClient }) {
 
 function PcPicker({ dashboard }: { dashboard: Dashboard }) {
   const { devices, target, choose } = dashboard;
-  if (devices.state === "loading") return <p className="hweb-pc hmuted">Looking for your PCs…</p>;
-  if (devices.state === "error") return <p className="hweb-pc hchat__error">Couldn't load your PCs: {devices.message}</p>;
-  if (devices.value.length === 0) return <p className="hweb-pc hmuted">No PC yet. In the Hodeum app: Settings › Account › Sign in.</p>;
+  if (devices.state === "loading") return <p className="hweb-pc hmuted">{noPcMessage(devices, undefined)}</p>;
+  if (devices.state === "error") return <p className="hweb-pc hchat__error">Couldn't load your PCs.</p>;
+  if (devices.value.length === 0) return <p className="hweb-pc hmuted">No PC linked yet.</p>;
   const now = Date.now();
   return (
     <label className="hweb-pc">
@@ -103,11 +103,18 @@ function Rail({ page, onSelect, dashboard, client, email }: { page: WebPage; onS
   );
 }
 
-function Notice({ dashboard }: { dashboard: Dashboard }) {
-  const { feedback, target } = dashboard;
+function Notice({ dashboard, email }: { dashboard: Dashboard; email?: string }) {
+  const { feedback, target, devices } = dashboard;
   const offline = target && !isOnline(target, Date.now());
+  // Missing PCs are explained up front, not only after "Start a Hode" fails.
+  const missing = !target && devices.state !== "loading" && !feedback;
   return (
     <div className="hweb-notices" aria-live="polite">
+      {missing && (
+        <p className="hweb-notice" data-tone="error">
+          {noPcMessage(devices, email)}
+        </p>
+      )}
       {offline && <p className="hweb-notice" data-tone="error">{target.name} looks offline. A Hode you start now begins if Hodeum opens there within 2 minutes.</p>}
       {feedback && (
         <p className="hweb-notice" data-tone={feedback.tone}>
@@ -119,7 +126,7 @@ function Notice({ dashboard }: { dashboard: Dashboard }) {
 }
 
 function Shell({ client, email }: { client: SupabaseClient; email?: string }) {
-  const dashboard = useDashboard(client);
+  const dashboard = useDashboard(client, email);
   const [page, setPage] = useState<WebPage>("home");
   const services = useMemo<AppServices>(() => ({ ...dashboard.services, window: NO_WINDOW, limitation: "Ask Hodey runs on your PC." }), [dashboard.services]);
   const live = useLiveHode(services.bus);
@@ -129,7 +136,7 @@ function Shell({ client, email }: { client: SupabaseClient; email?: string }) {
       <div className="happ__body">
         <Rail page={page} onSelect={setPage} dashboard={dashboard} client={client} email={email} />
         <main className="happ__main" key={page}>
-          <Notice dashboard={dashboard} />
+          <Notice dashboard={dashboard} email={email} />
           {page === "home" && <HomePage services={services} live={live} onNavigate={navigate} />}
           {page === "hodes" && <HodesPage services={services} />}
           {page === "learning" && <LearningPage services={services} />}
