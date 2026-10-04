@@ -3,6 +3,9 @@ import type { ReasoningProvider } from "../interfaces";
 import { LANGUAGE_LINES, selectCandidates, untrusted } from "../vision/prompt";
 import { validateReply, type VisionReply } from "../vision/schema";
 import { CloudSkipped } from "./gated";
+import { cloudName } from "./redact";
+
+export { CONTENT_PLACEHOLDER } from "./redact";
 import type { KeyPresence } from "./keys";
 
 /** Enough controls to ground any step; keeps each request small (PRD §10.1: UIA metadata only). */
@@ -44,7 +47,7 @@ export function describeSignal(signal: StateSignal): string {
 
 function stepLines(context: TeachingContext): string[] {
   const lines = [`App: <screen>${untrusted(context.observation.app)}</screen>.`];
-  if (context.goal) lines.push(`The learner's goal: <learner>${untrusted(context.goal)}</learner>.`);
+  // The lesson's title stands in for the goal: the goal is the learner's own words, which stay on this PC.
   if (context.pack) lines.push(`Lesson: ${context.pack.title}.`);
   const step = context.step;
   if (step) {
@@ -56,33 +59,28 @@ function stepLines(context: TeachingContext): string[] {
   return lines;
 }
 
+/** Gemini only ever gets lesson Hodes (open goals stay local), so there's always a planned next step. */
 function instructionLines(context: TeachingContext): string[] {
-  const lines: string[] = [];
-  if (context.openGoal) {
-    lines.push("There is no fixed plan: decide the single next action toward the goal from the controls listed, and point at where to do it.");
-    if (context.lastInstruction) lines.push(`You last told the learner: ${untrusted(context.lastInstruction)}. Check whether they did it.`);
-    lines.push('If the controls show the goal is achieved, reply kind "complete" with a short congratulation. Otherwise reply kind "guide".');
-  } else {
-    lines.push('Tell the learner the next thing to do with kind "guide".');
-  }
+  const lines = ['Tell the learner the next thing to do with kind "guide".'];
   const language = LANGUAGE_LINES[context.language ?? "en"];
   if (language) lines.push(language);
   return lines;
 }
 
-function controlList(candidates: UiElement[]): string {
+/** Content controls are listed by role and position only; ids are left out (some surfaces build them from names). */
+function controlList(candidates: UiElement[], step: TeachingContext["step"]): string {
   return candidates
     .map((element, index) => {
       const { x, y, width, height } = element.bounds;
       const selected = element.selected ? " (selected)" : "";
-      return `${index}. ${untrusted(element.role)} <screen>${untrusted(element.name)}</screen>${selected} id=${untrusted(element.id)} at [${x}, ${y}, ${width}, ${height}]`;
+      return `${index}. ${untrusted(element.role)} <screen>${cloudName(element, step)}</screen>${selected} at [${x}, ${y}, ${width}, ${height}]`;
     })
     .join("\n");
 }
 
-/** Text-only request: the step, the skill level and the listed controls. Never the learner's words. */
+/** Text-only request: the lesson step, the skill level and the listed controls with content hidden. Never the learner's words. */
 export function buildGeminiRequest(context: TeachingContext, candidates: UiElement[]): GeminiRequest {
-  const prompt = [...stepLines(context), ...instructionLines(context), "", "Controls:", controlList(candidates) || "(none found)"].join("\n");
+  const prompt = [...stepLines(context), ...instructionLines(context), "", "Controls:", controlList(candidates, context.step) || "(none found)"].join("\n");
   return { system: SYSTEM_PROMPT, prompt };
 }
 
@@ -120,6 +118,8 @@ export class GeminiReasoningProvider implements ReasoningProvider {
   async reason(context: TeachingContext): Promise<TeachingAction> {
     // Answering needs the learner's words, which never leave the PC: the local model takes it.
     if (context.utterance || context.focusRegion?.intent === "ask") throw new CloudSkipped("gemini", "learner questions stay on this PC");
+    // An open goal has no lesson: its only description is the learner's own words.
+    if (context.openGoal || !context.pack) throw new CloudSkipped("gemini", "open-ended goals stay on this PC");
     const { request, candidates } = this.request(context);
     const raw = await this.bridge.invoke<unknown>("gemini_reason", { request });
     return toGeminiAction(validateReply(raw, "Gemini"), candidates, context);

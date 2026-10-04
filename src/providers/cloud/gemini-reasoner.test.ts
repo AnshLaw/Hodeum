@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HOME_SELECTED, INSERT_BOUNDS, PACK, annotation, el, obs } from "../../features/hode/test-fixtures";
 import type { TeachingContext } from "../../lib/types";
 import { CloudSkipped } from "./gated";
-import { GeminiReasoningProvider, MAX_GEMINI_ELEMENTS, buildGeminiRequest } from "./gemini-reasoner";
+import { CONTENT_PLACEHOLDER, GeminiReasoningProvider, MAX_GEMINI_ELEMENTS, buildGeminiRequest } from "./gemini-reasoner";
 
 const ctx = (overrides: Partial<TeachingContext> = {}): TeachingContext => ({
   goal: "make a pivot table",
@@ -32,7 +32,7 @@ describe("buildGeminiRequest", () => {
   it("sends the step, the skill and the on-screen controls as text", () => {
     const { prompt, system } = buildGeminiRequest(ctx({ language: "hi" }), HOME_SELECTED.elements);
     expect(system).toMatch(/never do the task/i);
-    for (const text of ["make a pivot table", "Test", "Open the Insert tab", "excel.navigation.insert_tab", "guide", "Insert", "tab item:Insert", "50, 0, 40, 20", "Devanagari"]) {
+    for (const text of [PACK.title, "Open the Insert tab", "excel.navigation.insert_tab", "guide", "tab item", "Insert", "50, 0, 40, 20", "Devanagari"]) {
       expect(prompt).toContain(text);
     }
     expect(prompt).toMatch(/"?Insert"? is selected/);
@@ -44,6 +44,39 @@ describe("buildGeminiRequest", () => {
     expect(request).not.toMatch(/salary|90000|bonus|data:image|base64|png/i);
     expect(request).not.toContain("Book1");
     expect(Object.keys(buildGeminiRequest(context, HOME_SELECTED.elements)).sort()).toEqual(["prompt", "system"]);
+  });
+
+  it("sends the lesson's title, never the learner's own goal words", () => {
+    const { prompt } = buildGeminiRequest(ctx({ goal: "pivot my HDFC salary sheet" }), HOME_SELECTED.elements);
+    expect(prompt).toContain(PACK.title);
+    expect(prompt).not.toMatch(/HDFC|salary/);
+  });
+
+  it("hides what content controls say (file names, list items, text boxes) but keeps interface labels", () => {
+    const controls = [el("Share", "button"), el("Tax return 2025.pdf", "list item"), el("Dear landlord", "edit"), el("Priya Sharma", "text")];
+    const { prompt } = buildGeminiRequest(ctx({ step: undefined }), controls);
+    expect(prompt).toContain("Share");
+    expect(prompt).not.toMatch(/Tax return|landlord|Priya/);
+    expect(prompt).toContain(CONTENT_PLACEHOLDER);
+  });
+
+  it("names the step's target by the lesson's own label, whatever control holds it", () => {
+    const step = { ...PACK.steps[0], target: { names: ["Insert*"], label: "Insert" } };
+    const { prompt } = buildGeminiRequest(ctx({ step }), [el("Insert - Jane's budget.xlsx", "list item")]);
+    expect(prompt).toContain('"Insert"');
+    expect(prompt).not.toMatch(/Jane|budget/);
+  });
+
+  it("scrubs emails, links, paths and long numbers from interface labels", () => {
+    const controls = [el("Save to OneDrive - jane@contoso.com", "button"), el("Open C:\\Users\\jane\\Taxes", "button"), el("Open https://bank.example/acct", "button"), el("Invoice 48392017", "button")];
+    const { prompt } = buildGeminiRequest(ctx({ step: undefined }), controls);
+    expect(prompt).toContain("Save to OneDrive");
+    expect(prompt).not.toMatch(/jane|contoso|Taxes|bank\.example|48392017/i);
+  });
+
+  it("never sends element ids, which can carry names on some surfaces", () => {
+    const { prompt } = buildGeminiRequest(ctx(), [el("Insert", "tab item", { id: "file:secret-plan.docx" })]);
+    expect(prompt).not.toContain("secret-plan");
   });
 
   it("caps how many controls are sent", () => {
@@ -93,6 +126,13 @@ describe("GeminiReasoningProvider", () => {
     const provider = new GeminiReasoningProvider({ invoke });
     await expect(provider.reason(ctx({ utterance: "what is this?" }))).rejects.toBeInstanceOf(CloudSkipped);
     await expect(provider.reason(ctx({ focusRegion: annotation("ask", INSERT_BOUNDS) }))).rejects.toBeInstanceOf(CloudSkipped);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("leaves open-ended goals to the local model, since the goal is the learner's own words", async () => {
+    const { invoke } = bridge(POINT_AT_INSERT);
+    const open = ctx({ pack: undefined, step: undefined, openGoal: true, goal: "fix my resume formatting" });
+    await expect(new GeminiReasoningProvider({ invoke }).reason(open)).rejects.toBeInstanceOf(CloudSkipped);
     expect(invoke).not.toHaveBeenCalled();
   });
 
