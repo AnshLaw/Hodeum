@@ -25,6 +25,16 @@ describe("regionAround: where a hint points", () => {
     expect(regionAround(tabs[1], [...tabs, farTab, farRight, button])).toEqual(padRect(box(0, 0, 140, 20), REGION_PADDING_PX));
   });
 
+  it("groups controls of one family: Excel's PivotTable split button sits among plain buttons", () => {
+    const ribbon = [
+      el("PivotTable", "split button", { bounds: box(0, 40, 50, 60) }),
+      el("Recommended PivotTables", "button", { bounds: box(54, 40, 50, 60) }),
+      el("Table", "button", { bounds: box(108, 40, 50, 60) }),
+      el("Bold", "check box", { bounds: box(162, 40, 50, 60) }),
+    ];
+    expect(regionAround(ribbon[0], ribbon)).toEqual(padRect(box(0, 40, 158, 60), REGION_PADDING_PX));
+  });
+
   it("is nothing for a control that stands alone: lighting it up would give the answer away", () => {
     const ok = el("OK", "button", { bounds: box(200, 200, 60, 24) });
     const cancel = el("Cancel", "button", { bounds: box(270, 200, 60, 24) });
