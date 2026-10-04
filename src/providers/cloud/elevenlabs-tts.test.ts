@@ -98,7 +98,7 @@ describe("ElevenLabsTTSProvider", () => {
 });
 
 describe("CloudFirstTTS", () => {
-  function setup(allowed = true, cloudSpeak?: TTSProvider["speak"], shareable = () => true) {
+  function setup(allowed = true, cloudSpeak?: TTSProvider["speak"], shareable: (text: string) => boolean = () => true) {
     const { local, said } = fakeLocal();
     const cloud = { multilingual: true, speak: vi.fn(cloudSpeak ?? (async () => undefined)), stop: vi.fn(async () => undefined), healthCheck: vi.fn(async () => true) };
     const policy = fakePolicy(allowed);

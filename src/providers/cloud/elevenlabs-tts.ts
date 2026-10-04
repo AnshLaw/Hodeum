@@ -67,8 +67,8 @@ export interface CloudFirstDeps {
   local: TTSProvider;
   policy: VoicePolicy;
   activity?: ActivityTracker;
-  /** Whether the line being said may leave the PC (lesson lines yes; answers about the screen no). */
-  shareable: () => boolean;
+  /** Whether this line may leave the PC (lesson lines yes; anything written from the screen no). */
+  shareable: (text: string) => boolean;
 }
 
 /**
@@ -94,7 +94,7 @@ export class CloudFirstTTS implements TTSProvider {
   }
 
   private useCloud(content: string): boolean {
-    if (!this.deps.shareable()) return false;
+    if (!this.deps.shareable(content)) return false;
     if (hasDevanagari(content) && !this.deps.cloud.multilingual) return false;
     return this.deps.policy.allowed(PROVIDER);
   }

@@ -1,22 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { initialState, type HodeState } from "../../features/hode/model";
-import { PACK } from "../../features/hode/test-fixtures";
-import { lessonSpeech } from "./shareable";
+import { spoken } from "../../lib/spoken";
+import { TASK_PACKS } from "../../task-packs";
+import { localizePack } from "../../task-packs/localize";
+import { lessonCorpus, shareableText } from "./shareable";
 
-const lesson: HodeState = { ...initialState, phase: "guiding", pack: PACK };
+const corpus = lessonCorpus(TASK_PACKS);
+const PIVOT = TASK_PACKS.find((pack) => pack.id === "excel-pivot")!;
 
-describe("lessonSpeech", () => {
-  it("allows the cloud voice for a lesson Hode's guidance", () => {
-    expect(lessonSpeech(lesson)).toBe(true);
+describe("shareableText", () => {
+  it("lets lesson lines and Hodey's fixed phrases go to the cloud voice, in every language", () => {
+    expect(shareableText(PIVOT.steps[0].speech.guide, corpus)).toBe(true);
+    expect(shareableText(PIVOT.steps[0].explain, corpus)).toBe(true);
+    expect(shareableText(localizePack(PIVOT, "hi").steps[0].speech.demonstrate, corpus)).toBe(true);
+    expect(shareableText(spoken("hinglish").hodeCompleteSpeech, corpus)).toBe(true);
+    expect(shareableText(spoken().acks[0], corpus)).toBe(true);
   });
 
-  it("keeps answers about the screen local", () => {
-    expect(lessonSpeech({ ...lesson, phase: "answering" })).toBe(false);
-    expect(lessonSpeech({ ...lesson, spokenQuestion: "what is this number?" })).toBe(false);
+  it("keeps anything else local: answers, open-goal guidance, lines that name what's on screen", () => {
+    expect(shareableText("That cell says 90,000.", corpus)).toBe(false);
+    expect(shareableText(spoken().itsHere("Q3 salaries.xlsx"), corpus)).toBe(false);
+    expect(shareableText(`${PIVOT.steps[0].speech.guide} Your file is Budget.xlsx.`, corpus)).toBe(false);
+    expect(shareableText("", corpus)).toBe(false);
   });
 
-  it("keeps open-ended goals and idle chatter local", () => {
-    expect(lessonSpeech({ ...lesson, pack: undefined, open: true })).toBe(false);
-    expect(lessonSpeech(initialState)).toBe(false);
+  it("ignores spacing differences", () => {
+    expect(shareableText(`  ${PIVOT.steps[0].speech.guide}  `, corpus)).toBe(true);
   });
 });

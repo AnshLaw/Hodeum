@@ -13,7 +13,7 @@ import { connectAccount } from "../features/account/connect";
 import { CloudContext } from "../components/notch/cloud-context";
 import { connectCloud } from "../providers/cloud/connect";
 import { CloudFirstTTS, ElevenLabsTTSProvider } from "../providers/cloud/elevenlabs-tts";
-import { lessonSpeech } from "../providers/cloud/shareable";
+import { lessonCorpus, shareableText } from "../providers/cloud/shareable";
 import { GatedReasoner } from "../providers/cloud/gated";
 import { GeminiReasoningProvider } from "../providers/cloud/gemini-reasoner";
 import { connectHodeBridge } from "../features/hode/bridge";
@@ -104,7 +104,8 @@ async function boot(): Promise<void> {
   const gemini = new GatedReasoner(new GeminiReasoningProvider({ invoke }), "gemini", cloud.policy, activity);
   // ElevenLabs first when Settings > Cloud allows it right now; the local voice says anything it skips or fails.
   const elevenlabs = new ElevenLabsTTSProvider(invoke);
-  const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity, shareable: (): boolean => lessonSpeech(runtime.getState()) });
+  const lessonLines = lessonCorpus(TASK_PACKS);
+  const tts = new CloudFirstTTS({ cloud: elevenlabs, local: voice.tts, policy: cloud.policy, activity, shareable: (text) => shareableText(text, lessonLines) });
   // SQLite always; Backboard only while the cloud policy allows it (and writes only in "auto").
   const memory = new RoutedMemory(localMemory, new BackboardMemoryProvider({ invoke, policy: cloud.policy, kv }));
   const runtime = new HodeRuntime({ perception, reasoners: [gemini, local], skills: learning, bus, tts, memory });
