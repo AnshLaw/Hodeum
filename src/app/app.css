@@ -7,6 +7,7 @@
   --happ-line: rgb(var(--hd-fg-rgb) / 0.07);
   --happ-radius: 14px;
   --happ-bubble: #2a2a30;
+  --happ-danger: var(--hd-danger);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -27,6 +28,8 @@
   --happ-card-2: #f0f0f2;
   --happ-line: rgb(0 0 0 / 0.08);
   --happ-bubble: #e8e8ee;
+  /* The notch's red is too light on white; darken it toward the text colour. */
+  --happ-danger: color-mix(in srgb, var(--hd-danger) 70%, #000);
   --hd-fg-rgb: 0 0 0;
   --hd-text: #17171a;
   --hd-text-2: #5b5b64;
@@ -636,6 +639,8 @@
 
 .hchat {
   display: grid;
+  flex: 1;
+  min-width: 0;
   grid-template-columns: 240px minmax(0, 1fr);
   gap: 18px;
   height: 100%;
@@ -760,11 +765,21 @@
   font-size: 11.5px;
 }
 
-.hchat__error,
-.hchat__note {
+/* Errors are red, not the accent: amber already means "look here" across Hodeum. */
+.hchat__error {
   margin: 0 20px 8px;
   font-size: 12.5px;
-  color: var(--hd-accent);
+  color: var(--happ-danger, var(--hd-danger));
+}
+
+.hchat__note {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--happ-line);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--hd-text-2);
+  background: rgb(var(--hd-fg-rgb) / 0.03);
 }
 
 .hcomposer {
@@ -1170,11 +1185,6 @@
   width: 13px;
   height: 13px;
   flex: none;
-}
-
-.hmode-note {
-  margin-top: 10px;
-  font-size: 12px;
 }
 
 /* ---- Voice gallery ---- */
