@@ -6,6 +6,7 @@ import { islandSize, notchView, skillLabel, stepItems } from "./notch-view";
 
 const guiding = (overrides: Partial<HodeState> = {}): HodeState => ({
   ...initialState,
+  mode: "agent",
   phase: "guiding",
   pack: PACK,
   action: guideAction(),
@@ -19,7 +20,7 @@ describe("notchView", () => {
 
   it("shows Hodey's instruction, step progress, and prerequisites on step one", () => {
     const view = notchView(guiding());
-    expect(view).toMatchObject({ title: "Click Insert. I highlighted it.", eyebrow: "Step 1 of 2", detail: "Open the workbook.", hintLabel: COPY.hint });
+    expect(view).toMatchObject({ title: "Click Insert. I highlighted it.", eyebrow: "Step 1 of 2 · Agent", detail: "Open the workbook.", hintLabel: COPY.hint });
     expect(view.controls).toContain("let_me_try");
   });
 
@@ -37,6 +38,24 @@ describe("notchView", () => {
   it("lists learned skills on success", () => {
     const view = notchView({ ...initialState, phase: "success", learnedSkills: ["excel.pivot.create"] });
     expect(view.skills).toEqual(["Pivot · Create"]);
+  });
+});
+
+describe("modes in the notch", () => {
+  it("help mode stands by without spelling out the step", () => {
+    const view = notchView(guiding({ mode: "help", level: "observe", action: guideAction({ speech: "", assistanceLevel: "observe" }) }));
+    expect(view).toMatchObject({ title: COPY.helpStandingBy, eyebrow: "Step 1 of 2 · Help" });
+    expect(view.controls[0]).toBe("hint");
+    expect(view.controls).not.toContain("let_me_try");
+    expect(view.controls).not.toContain("all_steps");
+  });
+
+  it("teach mode offers to show the whole flow, and lists it only when asked", () => {
+    const view = notchView(guiding({ mode: "teach", level: "hint" }));
+    expect(view.eyebrow).toBe("Step 1 of 2 · Teach");
+    expect(view.controls).toContain("all_steps");
+    expect(view.steps).toBeUndefined();
+    expect(notchView(guiding({ mode: "teach", showAllSteps: true })).steps).toHaveLength(2);
   });
 });
 
@@ -76,6 +95,12 @@ describe("skillLabel", () => {
 describe("stepItems", () => {
   it("is empty without a Hode", () => {
     expect(stepItems(initialState)).toEqual([]);
+  });
+
+  it("keeps upcoming steps hidden in teach mode until asked, and the list away in help mode", () => {
+    expect(stepItems(guiding({ mode: "teach" })).map((s) => s.state)).toEqual(["current"]);
+    expect(stepItems(guiding({ mode: "teach", showAllSteps: true })).map((s) => s.state)).toEqual(["current", "todo"]);
+    expect(stepItems(guiding({ mode: "help" }))).toEqual([]);
   });
 
   it("marks finished, current, and upcoming steps", () => {

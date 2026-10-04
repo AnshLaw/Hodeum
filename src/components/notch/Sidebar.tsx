@@ -4,31 +4,12 @@ import { HodeyFace } from "../hodey/HodeyFace";
 import { CheckIcon, CrosshairIcon, ExpandIcon, IconButton, MoreIcon, MutedIcon, VolumeIcon } from "../shared/icons";
 import { DockMenu } from "./DockMenu";
 import { GoalForm } from "./GoalForm";
-import { Grip, LocalBadge, MicButton, NotchContent, PrivacyDots } from "./NotchParts";
-import type { StepItem } from "./notch-view";
+import { Grip, LocalBadge, MicButton, NotchContent, PrivacyDots, StepList } from "./NotchParts";
 import type { SurfaceProps } from "./surface";
 
 const HODEY_TAB_SIZE = 42;
 const HODEY_BAR_SIZE = 40;
 const HODEY_BUSY_SIZE = 112;
-
-function StepList({ steps }: { steps: StepItem[] }) {
-  return (
-    <section className="sidebar__steps" aria-label={COPY.steps}>
-      <p className="dock-menu__label">{COPY.steps}</p>
-      <ol>
-        {steps.map((step) => (
-          <li key={step.id} data-state={step.state}>
-            <span className="sidebar__step-mark" aria-hidden="true">
-              {step.state === "done" ? <CheckIcon /> : null}
-            </span>
-            {step.objective}
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
 
 function IdleStart({ onControl, notice }: Pick<SurfaceProps, "onControl"> & { notice?: string }) {
   return (
@@ -49,9 +30,9 @@ function IdleStart({ onControl, notice }: Pick<SurfaceProps, "onControl"> & { no
 
 function SidebarBody(props: SurfaceProps) {
   const { view, menuOpen, dock, onControl } = props;
-  if (menuOpen) return <DockMenu prefs={dock.prefs} vision={props.vision} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
+  if (menuOpen) return <DockMenu prefs={dock.prefs} vision={props.vision} mode={props.hodeActive ? props.hodeMode : undefined} onModeChange={props.onSetMode} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
   if (view.mode === "goal") {
-    return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
+    return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   }
   if (view.mode === "idle") return <IdleStart onControl={onControl} notice={view.detail ?? props.bootNotice} />;
   if (view.busy) {
@@ -65,7 +46,8 @@ function SidebarBody(props: SurfaceProps) {
   }
   return (
     <>
-      <NotchContent view={view} expanded onControl={onControl} />
+      {/* The panel has its own step list below; don't repeat it inside the card. */}
+      <NotchContent view={{ ...view, steps: undefined }} expanded onControl={onControl} />
       {props.steps.length > 0 && <StepList steps={props.steps} />}
     </>
   );

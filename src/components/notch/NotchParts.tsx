@@ -5,7 +5,7 @@ import { COPY } from "../../lib/copy";
 import { HodeyFace } from "../hodey/HodeyFace";
 import type { HodeyMood } from "../hodey/mood";
 import { CheckIcon, CloseIcon, CrosshairIcon, ExpandIcon, EyeIcon, IconButton, MicIcon, MoreIcon, MutedIcon, PauseIcon, RepeatIcon, VolumeIcon } from "../shared/icons";
-import type { NotchControl, NotchView } from "./notch-view";
+import type { NotchControl, NotchView, StepItem } from "./notch-view";
 
 const LABELS: Record<NotchControl, string> = {
   start: COPY.startHode,
@@ -21,6 +21,7 @@ const LABELS: Record<NotchControl, string> = {
   cancel_annotate: COPY.cancel,
   repeat: COPY.repeat,
   look_again: COPY.lookAgain,
+  all_steps: COPY.allSteps,
 };
 /** Hodey's face in the notch bar, in CSS px. */
 const HODEY_BAR_SIZE = 38;
@@ -93,6 +94,24 @@ export function LocalBadge() {
     <span className="local-badge" title="Everything runs on this PC">
       {COPY.local}
     </span>
+  );
+}
+
+export function StepList({ steps }: { steps: StepItem[] }) {
+  return (
+    <section className="sidebar__steps" aria-label={COPY.steps}>
+      <p className="dock-menu__label">{COPY.steps}</p>
+      <ol>
+        {steps.map((step) => (
+          <li key={step.id} data-state={step.state}>
+            <span className="sidebar__step-mark" aria-hidden="true">
+              {step.state === "done" ? <CheckIcon /> : null}
+            </span>
+            {step.objective}
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -215,6 +234,7 @@ export function NotchContent({ view, expanded, fallbackDetail, onControl }: { vi
         </p>
       )}
       {view.skills && <SkillChips skills={view.skills} />}
+      {view.steps && <StepList steps={view.steps} />}
       {view.controls.length > 0 && <ControlButtons controls={view.controls} hintLabel={view.hintLabel} onControl={onControl} spread />}
     </div>
   );

@@ -2,6 +2,7 @@ import { padRect } from "../../lib/coords";
 import {
   ASSISTANCE_LEVELS,
   type AssistanceLevel,
+  type HodeMode,
   type OverlayPrimitive,
   type Rect,
   type SkillRecord,
@@ -27,9 +28,29 @@ export function relax(level: AssistanceLevel): AssistanceLevel {
   return ASSISTANCE_LEVELS[Math.min(LEAST_HELP, ASSISTANCE_LEVELS.indexOf(level) + 1)];
 }
 
-/** A practised skill resumes where it left off; a new one starts at the learner's chosen preset. */
-export function startingLevel(record: SkillRecord | null, fallback: AssistanceLevel = "demonstrate"): AssistanceLevel {
-  return record?.last_assistance_level ?? fallback;
+const indexOf = (level: AssistanceLevel) => ASSISTANCE_LEVELS.indexOf(level);
+/** Of two levels, the one giving less help. */
+const quieter = (a: AssistanceLevel, b: AssistanceLevel) => (indexOf(a) >= indexOf(b) ? a : b);
+/** Of two levels, the one giving more help. */
+const moreHelp = (a: AssistanceLevel, b: AssistanceLevel) => (indexOf(a) <= indexOf(b) ? a : b);
+
+/** The most help a step may *start* with in each mode (escalation can still go further). */
+const MODE_CEILING: Record<Exclude<HodeMode, "agent">, AssistanceLevel> = { teach: "hint", help: "observe" };
+/** Agent mode never offers less than this. */
+const AGENT_FLOOR: AssistanceLevel = "guide";
+
+/** Keeps a level inside the mode's range: teach challenges first, help waits, agent always guides. */
+export function clampToMode(mode: HodeMode, level: AssistanceLevel): AssistanceLevel {
+  return mode === "agent" ? moreHelp(level, AGENT_FLOOR) : quieter(level, MODE_CEILING[mode]);
+}
+
+/**
+ * Where a step starts. A practised skill resumes at its saved level, within the mode's range; a new
+ * skill starts at the mode's own starting point (agent: a full demonstration).
+ */
+export function startLevel(mode: HodeMode, record: SkillRecord | null): AssistanceLevel {
+  if (!record) return mode === "agent" ? "demonstrate" : MODE_CEILING[mode];
+  return clampToMode(mode, record.last_assistance_level);
 }
 
 /** Escalations already raised `outcome.level` during the step; an unaided completion earns one step less help. */

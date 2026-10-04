@@ -85,7 +85,7 @@ describe.each(settingsStores)("%s settings store", (_, make) => {
   it("starts from defaults and round-trips changes", async () => {
     const store = make();
     expect(await store.load()).toEqual(DEFAULT_SETTINGS);
-    const next = { ...DEFAULT_SETTINGS, help: "confident" as const, stuckSeconds: 20 };
+    const next = { ...DEFAULT_SETTINGS, mode: "help" as const, stuckSeconds: 20 };
     await store.save(next);
     expect(await store.load()).toEqual(next);
   });

@@ -1,5 +1,5 @@
 import { COPY } from "../../lib/copy";
-import type { ScreenObservation, TeachingAction, TeachingContext } from "../../lib/types";
+import type { AssistanceLevel, HodeMode, ScreenObservation, TeachingAction, TeachingContext } from "../../lib/types";
 import {
   STUCK_MS,
   currentStep,
@@ -11,7 +11,10 @@ import {
   type HodeState,
   type Transition,
 } from "./model";
-import { confidenceBand, overlayFor, startingLevel } from "./policy";
+import { confidenceBand, overlayFor, startLevel } from "./policy";
+
+/** Open-ended Hodes have no saved skill: the vision model phrases each step at the mode's level. */
+const OPEN_START: Record<HodeMode, AssistanceLevel> = { teach: "hint", help: "observe", agent: "guide" };
 
 export function onStartHode(s: HodeState): Transition {
   if (s.phase !== "idle") return noop(s);
@@ -21,13 +24,15 @@ export function onStartHode(s: HodeState): Transition {
 export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Transition {
   const goal = e.goal.trim();
   if (s.phase !== "goal_entry" || goal === "") return noop(s);
+  const mode = e.mode ?? s.mode;
   if (!e.pack && e.openAllowed) {
     const focus: HodeEffect[] = e.app ? [{ type: "focusApp", app: e.app }] : [];
-    return { state: { ...s, goal, app: e.app, open: true, level: "guide", notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
+    const level = OPEN_START[mode];
+    return { state: { ...s, goal, app: e.app, mode, open: true, level, notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
   }
   if (!e.pack) return { state: { ...s, goal, notice: COPY.noPack }, effects: [{ type: "say", text: COPY.noPack }] };
   // Bring the pack's app forward first, so Hodey reads Excel rather than whatever had focus.
-  const begun = beginStep({ ...s, goal, pack: e.pack, app: e.pack.app, notice: undefined }, 0);
+  const begun = beginStep({ ...s, goal, mode, pack: e.pack, app: e.pack.app, notice: undefined }, 0);
   return { ...begun, effects: [{ type: "focusApp", app: e.pack.app }, ...begun.effects] };
 }
 
@@ -72,7 +77,7 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
 
 export function onSkillLoaded(s: HodeState, e: EventOf<"SKILL_LOADED">): Transition {
   if (s.phase !== "observing" || currentStep(s)?.skill !== e.skillId) return noop(s);
-  return { state: { ...s, level: startingLevel(e.record, e.fallbackLevel) }, effects: [{ type: "observe" }] };
+  return { state: { ...s, level: startLevel(s.mode, e.record) }, effects: [{ type: "observe" }] };
 }
 
 export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {

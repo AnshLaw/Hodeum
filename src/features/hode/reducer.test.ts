@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COPY } from "../../lib/copy";
-import type { AssistanceLevel } from "../../lib/types";
+import type { AssistanceLevel, HodeMode, SkillRecord } from "../../lib/types";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState, type Transition } from "./model";
 import { step } from "./reducer";
 import {
@@ -22,13 +22,18 @@ function fold(state: HodeState, ...events: HodeEvent[]): Transition {
 }
 
 const types = (t: Transition): HodeEffect["type"][] => t.effects.map((e) => e.type);
-const START: HodeEvent[] = [{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "teach me", pack: PACK }];
+/** Agent mode: every step guided, a new skill fully demonstrated (the original assistance ladder). */
+const START: HodeEvent[] = [{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "teach me", pack: PACK, mode: "agent" }];
+
+/** The mode whose range contains `level`: agent for full guidance, teach for the quieter levels. */
+const modeFor = (level: AssistanceLevel) => (level === "demonstrate" || level === "guide" ? "agent" : "teach");
 
 function reasoning(level: AssistanceLevel = "demonstrate"): HodeState {
   const record = level === "demonstrate" ? null : skillRecord(level);
   return fold(
     initialState,
-    ...START,
+    { type: "START_HODE" },
+    { type: "GOAL_SUBMITTED", goal: "teach me", pack: PACK, mode: modeFor(level) },
     { type: "SKILL_LOADED", skillId: "excel.navigation.insert_tab", record },
     { type: "OBSERVED", observation: HOME_SELECTED },
   ).state;
@@ -55,7 +60,7 @@ describe("starting a Hode", () => {
   });
 
   it("loads the first step's skill, then observes, then reasons", () => {
-    const begun = fold(initialState, ...START);
+    const begun = fold(initialState, { type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "teach me", pack: PACK, mode: "teach" });
     expect(begun.state.phase).toBe("observing");
     expect(begun.effects).toEqual([
       { type: "focusApp", app: "Excel" },
@@ -67,6 +72,36 @@ describe("starting a Hode", () => {
     const observed = step(loaded.state, { type: "OBSERVED", observation: HOME_SELECTED });
     expect(observed.state).toMatchObject({ phase: "reasoning", requestId: 1 });
     expect(observed.effects[0]).toMatchObject({ type: "reason", requestId: 1, context: { step: { id: "open-insert" } } });
+  });
+});
+
+describe("learning modes", () => {
+  const startIn = (mode: HodeMode, record: SkillRecord | null = null) =>
+    fold(initialState, { type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "pivot", pack: PACK, mode }, { type: "SKILL_LOADED", skillId: "excel.navigation.insert_tab", record }).state;
+
+  it("starts a new skill as a challenge in teach mode, silently in help mode, fully guided in agent mode", () => {
+    expect(startIn("teach")).toMatchObject({ mode: "teach", level: "hint" });
+    expect(startIn("help")).toMatchObject({ mode: "help", level: "observe" });
+    expect(startIn("agent")).toMatchObject({ mode: "agent", level: "demonstrate" });
+  });
+
+  it("switching mode mid-step re-reasons at the new level", () => {
+    const g = guiding("demonstrate");
+    const t = step(g, { type: "SET_MODE", mode: "teach" });
+    expect(t.state).toMatchObject({ mode: "teach", level: "hint", phase: "reasoning" });
+    expect(types(t)).toEqual(["cancelStuckTimer", "reason"]);
+  });
+
+  it("switching mode while idle just remembers it", () => {
+    const t = step(initialState, { type: "SET_MODE", mode: "help" });
+    expect(t.state.mode).toBe("help");
+    expect(t.effects).toEqual([]);
+  });
+
+  it("reveals the whole flow only when asked", () => {
+    const g = startIn("teach");
+    expect(g.showAllSteps).toBe(false);
+    expect(step(g, { type: "SHOW_ALL_STEPS" }).state.showAllSteps).toBe(true);
   });
 });
 

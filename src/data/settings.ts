@@ -1,17 +1,6 @@
 import { z } from "zod";
 import { HODEY_KEYS } from "../lib/keys";
-import type { AssistanceLevel } from "../lib/types";
-
-/** PRD §6: learner-selected difficulty. */
-export const HELP_PRESETS = ["beginner", "guided", "confident"] as const;
-export type HelpPreset = (typeof HELP_PRESETS)[number];
-
-/** Where a brand-new skill starts on the assistance ladder for each preset. */
-export const PRESET_START_LEVEL: Record<HelpPreset, AssistanceLevel> = {
-  beginner: "demonstrate",
-  guided: "guide",
-  confident: "hint",
-};
+import { HODE_MODES } from "../lib/types";
 
 const MIN_RATE = 0.6;
 const MAX_RATE = 1.6;
@@ -47,7 +36,8 @@ export const settingsSchema = z.object({
     /** A local Windows voice's URI; empty means the system default. */
     name: z.string().max(MAX_VOICE_NAME).default(""),
   }),
-  help: z.enum(HELP_PRESETS),
+  /** How new Hodes run by default; each Hode can still pick its own. */
+  mode: z.enum(HODE_MODES).catch("teach").default("teach"),
   /** How long Hodey waits without progress before offering more help. */
   stuckSeconds: z.number().int().min(MIN_STUCK_SECONDS).max(MAX_STUCK_SECONDS),
   appearance: appearanceSchema,
@@ -62,7 +52,7 @@ export type Appearance = Settings["appearance"];
 
 export const DEFAULT_SETTINGS: Settings = {
   voice: { enabled: true, rate: 1.05, name: "" },
-  help: "beginner",
+  mode: "teach",
   stuckSeconds: 12,
   appearance: { ...DEFAULT_APPEARANCE },
   webSearch: false,
@@ -78,7 +68,7 @@ export function parseSettings(raw: unknown): Settings {
     const result = settingsSchema.shape[key].safeParse(value[key]);
     return (result.success ? result.data : DEFAULT_SETTINGS[key]) as Settings[K];
   };
-  return { voice: pick("voice"), help: pick("help"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance"), webSearch: pick("webSearch"), hodeyKey: pick("hodeyKey") };
+  return { voice: pick("voice"), mode: pick("mode"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance"), webSearch: pick("webSearch"), hodeyKey: pick("hodeyKey") };
 }
 
 export interface SettingsStore {

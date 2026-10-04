@@ -1123,3 +1123,8 @@
   height: 13px;
   flex: none;
 }
+
+.hmode-note {
+  margin-top: 10px;
+  font-size: 12px;
+}

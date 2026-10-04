@@ -6,6 +6,11 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 
 ## What works today (sub-projects 1 and 2)
 
+**Learning modes** (pick one when you start a Hode; set the default in Settings; switch anytime from ⋯ or by saying "teach mode", "help mode" or "agent mode"). In every mode you do the clicking:
+- **Teach** (default): you learn it for good. Each step starts as a question ("Which tab would you use to add something new?"), with no highlight. If you're stuck or ask for a hint, Hodey shows you, then demonstrates and explains why. Upcoming steps stay hidden until you ask for *All steps*.
+- **Help:** you drive. Hodey watches quietly, verifies each step, and steps in only when you're stuck, make a mistake, or ask.
+- **Agent:** Hodey walks you through every step, with instructions and highlights and the whole flow visible.
+
 **Teaching loop**
 - **Hode engine**: a pure, tested state machine covering the assistance ladder (demonstrate → independent), wrong-action correction, the stuck timer, hints, Explain, Let me try, pause/resume, and dropping stale results so the latest learner action wins.
 - **Task packs**: Excel PivotTable and File Explorer Zip. They contain labels, success signals and common mistakes, and never coordinates (enforced by the schema).

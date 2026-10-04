@@ -1,6 +1,10 @@
 export const ASSISTANCE_LEVELS = ["demonstrate", "guide", "hint", "observe", "independent"] as const;
 export type AssistanceLevel = (typeof ASSISTANCE_LEVELS)[number];
 
+/** How Hodey runs a Hode: teach (learn by doing), help (stand by until asked), agent (guide every step). */
+export const HODE_MODES = ["teach", "help", "agent"] as const;
+export type HodeMode = (typeof HODE_MODES)[number];
+
 export interface Rect {
   x: number;
   y: number;

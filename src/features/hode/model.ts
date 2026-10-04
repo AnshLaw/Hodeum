@@ -1,5 +1,6 @@
 import type {
   AssistanceLevel,
+  HodeMode,
   LearnerAnnotation,
   OverlayPrimitive,
   Rect,
@@ -60,6 +61,10 @@ export interface HodeState {
   app?: string;
   /** That app, while Hodey waits for the learner to open or switch to it. */
   waitingForApp?: string;
+  /** Teach (learn by doing), help (stand by until asked) or agent (guide every step). */
+  mode: HodeMode;
+  /** Teach mode keeps upcoming steps hidden unless the learner asks to see the whole flow. */
+  showAllSteps: boolean;
 }
 
 export const initialState: HodeState = {
@@ -73,15 +78,20 @@ export const initialState: HodeState = {
   requestId: 0,
   reobserved: false,
   learnedSkills: [],
+  mode: "teach",
+  showAllSteps: false,
   open: false,
 };
 
 export type HodeEvent =
   | { type: "START_HODE" }
   /** `openAllowed`: no pack matched, but the local vision model is ready to plan step by step. */
-  | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean; /** Named in an open goal. */ app?: string }
-  /** `fallbackLevel`: where a never-practised skill starts (from the learner's help preset). */
-  | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null; fallbackLevel?: AssistanceLevel }
+  | { type: "GOAL_SUBMITTED"; goal: string; pack?: TaskPack; openAllowed?: boolean; /** Named in an open goal. */ app?: string; mode?: HodeMode }
+  | { type: "SKILL_LOADED"; skillId: string; record: SkillRecord | null }
+  /** Switch teach / help / agent, mid-Hode too. */
+  | { type: "SET_MODE"; mode: HodeMode }
+  /** Teach mode: show (or hide again) the steps still to come. */
+  | { type: "SHOW_ALL_STEPS" }
   | { type: "OBSERVED"; observation: ScreenObservation }
   | { type: "ACTION_READY"; requestId: number; action: TeachingAction; failures: string[] }
   | { type: "LEARNER_ACTED"; observation: ScreenObservation }

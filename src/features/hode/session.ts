@@ -1,4 +1,6 @@
 import { padRect } from "../../lib/coords";
+import { requestReason } from "./flow";
+import { clampToMode } from "./policy";
 import { COPY } from "../../lib/copy";
 import {
   QUESTION_PADDING_PX,
@@ -27,6 +29,25 @@ function resume(s: HodeState): Transition {
   const state: HodeState = { ...s, phase, resumePhase: undefined, question: undefined, spokenQuestion: undefined };
   if (phase === "observing") return { state, effects: [{ type: "observe" }] };
   return { state, effects: [pinOverlay(state.focusRegion?.shape.bounds)] };
+}
+
+/**
+ * A new mode applies at once: the current step's help level moves into the mode's range and, if Hodey
+ * is guiding, it re-reasons so the instruction and highlight match (e.g. agent → teach hides the answer).
+ */
+function withStuckReset(t: Transition): Transition {
+  return { ...t, effects: [{ type: "cancelStuckTimer" }, ...t.effects] };
+}
+
+export function onSetMode(s: HodeState, e: EventOf<"SET_MODE">): Transition {
+  if (s.mode === e.mode) return noop(s);
+  const changed: HodeState = { ...s, mode: e.mode, level: clampToMode(e.mode, s.level), showAllSteps: false };
+  if (s.phase !== "guiding" || !s.observation) return { state: changed, effects: [] };
+  return withStuckReset(requestReason(changed));
+}
+
+export function onShowAllSteps(s: HodeState): Transition {
+  return s.pack ? { state: { ...s, showAllSteps: !s.showAllSteps }, effects: [] } : noop(s);
 }
 
 /** Phases a spoken question can't interrupt: the learner is typing a goal or marking the screen. */

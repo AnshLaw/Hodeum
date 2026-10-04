@@ -112,6 +112,8 @@ export function useControlHandler(runtime: HodeRuntime, bus: Bus): (control: Not
           return dispatch({ type: "DISMISS" });
         case "repeat":
           return dispatch({ type: "REPEAT" });
+        case "all_steps":
+          return dispatch({ type: "SHOW_ALL_STEPS" });
         case "look_again":
           return dispatch({ type: "LOOK_AGAIN" });
       }

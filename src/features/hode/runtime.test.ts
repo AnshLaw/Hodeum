@@ -8,6 +8,7 @@ import { MockPerception } from "../../providers/mock-perception";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
 import { ExcelScene } from "../../stage/scenes/excel";
 import { TASK_PACKS, matchGoal } from "../../task-packs";
+import type { HodeMode } from "../../lib/types";
 import { STUCK_MS } from "./model";
 import { HodeRuntime } from "./runtime";
 
@@ -36,9 +37,9 @@ function setup(reasoners: ReasoningProvider[] = [new TaskPackReasoningProvider()
     },
   };
   const runtime = new HodeRuntime({ perception, reasoners, skills, bus, tts });
-  const start = async () => {
+  const start = async (mode: HodeMode = "agent") => {
     runtime.dispatch({ type: "START_HODE" });
-    runtime.dispatch({ type: "GOAL_SUBMITTED", goal: GOAL, pack: matchGoal(GOAL, TASK_PACKS) });
+    runtime.dispatch({ type: "GOAL_SUBMITTED", goal: GOAL, pack: matchGoal(GOAL, TASK_PACKS), mode });
     await settle();
   };
   const act = async (...ids: string[]) => {
@@ -82,8 +83,9 @@ describe("HodeRuntime end to end", () => {
     await first.start();
     await first.act(...FULL_HODE);
 
+    // Teach mode: a skill practised with full help starts the next Hode as a challenge.
     const second = setup(undefined, skills);
-    await second.start();
+    await second.start("teach");
     await second.act("tab:Insert");
     expect(second.state()).toMatchObject({ stepIndex: 1, level: "hint" });
     expect(second.overlays.at(-1)).toBe("clear");
@@ -109,7 +111,7 @@ describe("HodeRuntime end to end", () => {
     const skills = new MemorySkillStore();
     await skills.recordOutcome("excel.navigation.insert_tab", { completed: true, mistakes: 0, level: "guide", escalated: false });
     const h = setup(undefined, skills);
-    await h.start();
+    await h.start("teach");
     expect(h.state().level).toBe("hint");
     vi.advanceTimersByTime(STUCK_MS);
     await settle();
@@ -160,7 +162,7 @@ describe("bringing the pack's app forward", () => {
     const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
     const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
     runtime.dispatch({ type: "START_HODE" });
-    runtime.dispatch({ type: "GOAL_SUBMITTED", goal: GOAL, pack: matchGoal(GOAL, TASK_PACKS) });
+    runtime.dispatch({ type: "GOAL_SUBMITTED", goal: GOAL, pack: matchGoal(GOAL, TASK_PACKS), mode: "agent" });
     await settle();
     expect(order).toEqual(["focus Excel"]);
     release();

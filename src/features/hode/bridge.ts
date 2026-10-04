@@ -1,7 +1,7 @@
 import type { Bus, HodeSummary } from "../../lib/bus";
-import type { TaskPack } from "../../lib/types";
+import type { HodeMode, TaskPack } from "../../lib/types";
 import { HodeRecorder } from "../../data/recorder";
-import { PRESET_START_LEVEL, type Settings, type SettingsStore } from "../../data/settings";
+import type { Settings, SettingsStore } from "../../data/settings";
 import type { HodeLog } from "../../data/types";
 import { appFromGoal, matchGoal } from "../../task-packs/match";
 import { currentStep, type HodeEvent, type HodeState } from "./model";
@@ -34,8 +34,8 @@ export interface BridgeDeps {
 }
 
 /** A typed goal as an event: its task pack, or (when vision can plan) the app it names. */
-export function goalEvent(goal: string, packs: TaskPack[], openAllowed: boolean): HodeEvent {
-  return { type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed, app: appFromGoal(goal) };
+export function goalEvent(goal: string, packs: TaskPack[], openAllowed: boolean, mode?: HodeMode): HodeEvent {
+  return { type: "GOAL_SUBMITTED", goal, pack: matchGoal(goal, packs), openAllowed, app: appFromGoal(goal), mode };
 }
 
 /** Starts a Hode the app asked for, ending whatever is running first. */
@@ -46,7 +46,7 @@ export function startFromApp(runtime: HodeRuntime, goal: string, packs: TaskPack
 }
 
 function applySettings(deps: BridgeDeps, settings: Settings): void {
-  deps.runtime.configure({ fallbackLevel: PRESET_START_LEVEL[settings.help], stuckMs: settings.stuckSeconds * MS_PER_SECOND });
+  deps.runtime.configure({ mode: settings.mode, stuckMs: settings.stuckSeconds * MS_PER_SECOND });
   deps.runtime.setMuted(!settings.voice.enabled);
   deps.applyVoice(settings.voice);
   deps.applyHodeyKey?.(settings.hodeyKey);

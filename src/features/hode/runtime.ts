@@ -1,6 +1,6 @@
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
-import type { AssistanceLevel, Rect, StepOutcome, TeachingContext } from "../../lib/types";
+import type { AssistanceLevel, HodeMode, Rect, StepOutcome, TeachingContext } from "../../lib/types";
 import type { PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { reasonWithFallback } from "../../providers/router";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState } from "./model";
@@ -34,7 +34,8 @@ export class HodeRuntime {
   private saying: { text: string; endedAt: number | undefined } | undefined;
   private focusing: Promise<void> = Promise.resolve();
   private muted = false;
-  private fallbackLevel: AssistanceLevel = "demonstrate";
+  /** The learner's default mode, used when a goal arrives without one. */
+  private defaultMode: HodeMode = "teach";
   private stuckMs: number | undefined;
   private readonly transitionListeners = new Set<(event: HodeEvent, prev: HodeState, next: HodeState) => void>();
 
@@ -64,7 +65,8 @@ export class HodeRuntime {
     };
   }
 
-  dispatch = (event: HodeEvent): void => {
+  dispatch = (incoming: HodeEvent): void => {
+    const event = incoming.type === "GOAL_SUBMITTED" && !incoming.mode ? { ...incoming, mode: this.defaultMode } : incoming;
     const prev = this.state;
     const { state, effects } = step(prev, event);
     if (state !== prev) {
@@ -76,8 +78,13 @@ export class HodeRuntime {
   };
 
   /** Learner settings: where new skills start and how long before Hodey treats the learner as stuck. */
-  configure(options: { fallbackLevel: AssistanceLevel; stuckMs: number }): void {
-    this.fallbackLevel = options.fallbackLevel;
+  /** The learner's default mode (Settings), offered first when starting a Hode. */
+  getDefaultMode(): HodeMode {
+    return this.defaultMode;
+  }
+
+  configure(options: { mode: HodeMode; stuckMs: number }): void {
+    this.defaultMode = options.mode;
     this.stuckMs = options.stuckMs;
   }
 
@@ -128,7 +135,7 @@ export class HodeRuntime {
     this.pendingWrite
       .then(() => this.deps.skills.get(skillId))
       .then(
-        (record) => this.dispatch({ type: "SKILL_LOADED", skillId, record, fallbackLevel: this.fallbackLevel }),
+        (record) => this.dispatch({ type: "SKILL_LOADED", skillId, record }),
         (error) => this.fail("Couldn't load your skill progress", error),
       );
   }

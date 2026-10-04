@@ -37,6 +37,14 @@ describe("routeUtterance", () => {
     expect(route({ ...guiding, phase: "answering" }, "got it, thanks")).toEqual([{ type: "DISMISS" }]);
   });
 
+  it("switches mode and reveals the flow by voice", () => {
+    expect(route(guiding, "agent mode")).toEqual([{ type: "SET_MODE", mode: "agent" }]);
+    expect(route(guiding, "walk me through every step")).toEqual([{ type: "SET_MODE", mode: "agent" }]);
+    expect(route(guiding, "switch to teach mode")).toEqual([{ type: "SET_MODE", mode: "teach" }]);
+    expect(route(guiding, "help mode please")).toEqual([{ type: "SET_MODE", mode: "help" }]);
+    expect(route(guiding, "show me all the steps")).toEqual([{ type: "SHOW_ALL_STEPS" }]);
+  });
+
   it("asks anything else as a question, mid-Hode", () => {
     expect(route(guiding, "where is the insert tab")).toEqual([{ type: "VOICE_QUESTION", question: "where is the insert tab" }]);
   });

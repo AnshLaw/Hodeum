@@ -20,6 +20,10 @@ const COMMANDS: [RegExp, HodeEvent][] = [
   [/^(?:resume|continue|go on|keep going|carry on)$/, { type: "RESUME" }],
   [/^(?:stop|end|cancel|quit|end (?:the )?hode|stop (?:the )?hode)$/, { type: "END_HODE" }],
   [/^(?:ok|okay|got it|cool|understood|alright|all right)$/, { type: "DISMISS" }],
+  [/^(?:(?:switch to |go to |use )?teach(?:ing)? mode)$/, { type: "SET_MODE", mode: "teach" }],
+  [/^(?:(?:switch to |go to |use )?help mode|just help me if i'?m stuck)$/, { type: "SET_MODE", mode: "help" }],
+  [/^(?:(?:switch to |go to |use )?agent mode|(?:guide|walk) me through (?:every|each) step|(?:guide|walk) me through it)$/, { type: "SET_MODE", mode: "agent" }],
+  [/^(?:show (?:me )?(?:all )?(?:the )?steps|show (?:me )?all (?:of )?the steps|show (?:me )?the whole (?:flow|thing)|what are the steps)$/, { type: "SHOW_ALL_STEPS" }],
 ];
 
 function clean(text: string): string {

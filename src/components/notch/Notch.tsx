@@ -130,8 +130,8 @@ function Orb({ mood, label, activity }: { mood: HodeyMood; label: string; activi
 
 function topBody(props: SurfaceProps, view: NotchView, size: NotchSize, peek: boolean) {
   const { menuOpen, dock, onControl } = props;
-  if (menuOpen) return <DockMenu prefs={dock.prefs} vision={props.vision} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
-  if (view.mode === "goal") return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
+  if (menuOpen) return <DockMenu prefs={dock.prefs} vision={props.vision} mode={props.hodeActive ? props.hodeMode : undefined} onModeChange={props.onSetMode} onChange={dock.update} onHide={() => dock.update({ visibility: "hidden" })} />;
+  if (view.mode === "goal") return <GoalForm packs={props.packs} shell={props.shell} notice={view.detail} defaultMode={props.defaultMode} onSubmit={props.onSubmitGoal} onClose={() => onControl("dismiss")} />;
   if (peek) return null;
   return <NotchContent view={view} expanded={EXPANDED_SIZES.includes(size)} fallbackDetail={props.bootNotice} onControl={onControl} />;
 }
@@ -240,8 +240,11 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
       setMenuOpen(false);
       if (state.phase === "goal_entry") runtime.dispatch({ type: "DISMISS" });
     },
-    onSubmitGoal: (goal) =>
-      runtime.dispatch(goalEvent(goal, packs, visionStatus?.state === "ready")),
+    onSubmitGoal: (goal, mode) => runtime.dispatch(goalEvent(goal, packs, visionStatus?.state === "ready", mode)),
+    hodeMode: state.mode,
+    defaultMode: runtime.getDefaultMode(),
+    hodeActive: state.phase !== "idle" && state.phase !== "goal_entry",
+    onSetMode: (mode) => runtime.dispatch({ type: "SET_MODE", mode }),
   };
   if (dock.prefs.dock === "top") return <TopNotch {...props} surfaceRef={surfaceRef} covering={covering} />;
   return <Sidebar {...props} side={dock.prefs.dock} surfaceRef={surfaceRef} />;

@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { HELP_PRESETS, SETTINGS_LIMITS, type HelpPreset, type Settings } from "../../data/settings";
+import { SETTINGS_LIMITS, type Settings } from "../../data/settings";
+import { MODE_COPY } from "../../lib/modes";
+import { HODE_MODES } from "../../lib/types";
 import type { VisionStatus } from "../../providers/vision/types";
 import type { AppServices, VoicePreview } from "../services";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
@@ -9,11 +11,6 @@ import { KeySettings } from "./settings/KeySettings";
 import { useEditableSettings } from "./settings/use-settings";
 import { VoiceSettings } from "./settings/VoiceSettings";
 
-const PRESET_LABELS: Record<HelpPreset, { title: string; detail: string }> = {
-  beginner: { title: "Beginner", detail: "Hodey shows each step and points at it." },
-  guided: { title: "Guided", detail: "Hodey tells you what to do and highlights it." },
-  confident: { title: "Confident", detail: "Hodey starts with hints and lets you find things." },
-};
 
 const VISION_TEXT: Record<VisionStatus["state"], string> = {
   ready: "Qwen3-VL is running on your GPU.",
@@ -36,14 +33,15 @@ function HodeySettings({ settings, natural, update }: { settings: Settings; natu
       <Row label="Wait before offering help" detail={`${settings.stuckSeconds} seconds without progress`}>
         <input type="range" min={SETTINGS_LIMITS.MIN_STUCK_SECONDS} max={SETTINGS_LIMITS.MAX_STUCK_SECONDS} step={1} value={settings.stuckSeconds} onChange={(e) => update({ ...settings, stuckSeconds: Number(e.target.value) })} aria-label="Wait before offering help" />
       </Row>
-      <div className="hpresets" role="radiogroup" aria-label="How much help for new skills">
-        {HELP_PRESETS.map((preset) => (
-          <button key={preset} type="button" role="radio" aria-checked={settings.help === preset} className="hpreset" onClick={() => update({ ...settings, help: preset })}>
-            <strong>{PRESET_LABELS[preset].title}</strong>
-            <span className="hmuted">{PRESET_LABELS[preset].detail}</span>
+      <div className="hpresets" role="radiogroup" aria-label="Default mode">
+        {HODE_MODES.map((mode) => (
+          <button key={mode} type="button" role="radio" aria-checked={settings.mode === mode} className="hpreset" onClick={() => update({ ...settings, mode })}>
+            <strong>{MODE_COPY[mode].title} mode</strong>
+            <span className="hmuted">{MODE_COPY[mode].detail}</span>
           </button>
         ))}
       </div>
+      <p className="hmuted hmode-note">The default for new Hodes. You can pick another when you start one, or switch mid-Hode from the ⋯ menu or by saying "teach mode", "help mode" or "agent mode".</p>
     </section>
   );
 }

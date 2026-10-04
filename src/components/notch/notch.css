@@ -902,3 +902,31 @@
 .notch--idle:focus-within .notch__bar-title {
   display: none;
 }
+
+/* ---- Mode picker in the goal form ---- */
+.goal__modes {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.goal__mode-detail {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--hd-text-2);
+}
+
+/* The flow inside the top notch, when the learner asks for all steps. */
+.notch__content .sidebar__steps {
+  margin-top: 12px;
+}
+
+/* Long eyebrows ("Step 1 of 5 · Teach") truncate rather than run into the progress dots. */
+.notch__grip {
+  overflow: hidden;
+}
+
+.notch__grip .notch__eyebrow {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

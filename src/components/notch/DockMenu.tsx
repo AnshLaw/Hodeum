@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { COPY } from "../../lib/copy";
 import { HODEY_KEY_LABELS, KEY_LETTERS, hodeyKeySetting } from "../../lib/keys";
+import { MODE_COPY } from "../../lib/modes";
+import { HODE_MODES, type HodeMode } from "../../lib/types";
 import type { Dock, DockPrefs, SidebarStyle, Visibility } from "../../features/dock/dock";
 import type { VisionStatus } from "../../providers/vision/types";
 
@@ -57,6 +59,9 @@ function VisionLine({ status }: { status: VisionStatus }) {
 
 interface DockMenuProps {
   prefs: DockPrefs;
+  /** The running Hode's mode; absent when no Hode is running. */
+  mode?: HodeMode;
+  onModeChange: (mode: HodeMode) => void;
   /** Absent in the browser stage, which has no local model. */
   vision?: VisionStatus;
   onChange: (change: Partial<DockPrefs>) => void;
@@ -70,11 +75,14 @@ function useHodeyKeyLabel(): string {
   return HODEY_KEY_LABELS[key];
 }
 
-export function DockMenu({ prefs, vision, onChange, onHide }: DockMenuProps) {
+const MODE_OPTIONS: [HodeMode, string][] = HODE_MODES.map((mode) => [mode, MODE_COPY[mode].title]);
+
+export function DockMenu({ prefs, vision, mode, onModeChange, onChange, onHide }: DockMenuProps) {
   const keyLabel = useHodeyKeyLabel();
   const idle = prefs.visibility === "hidden" ? "pinned" : prefs.visibility;
   return (
     <div className="notch__content dock-menu">
+      {mode && <Segmented label={COPY.modeLabel} options={MODE_OPTIONS} value={mode} onSelect={onModeChange} />}
       <Segmented label={COPY.position} options={DOCK_OPTIONS} value={prefs.dock} onSelect={(dock) => onChange({ dock })} />
       {prefs.dock !== "top" && (
         <>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StateSignal } from "../../lib/types";
-import { applyOutcome, confidenceBand, escalate, nextStoredLevel, overlayFor, relax } from "./policy";
+import { applyOutcome, clampToMode, confidenceBand, escalate, nextStoredLevel, overlayFor, relax, startLevel } from "./policy";
+import { skillRecord } from "./test-fixtures";
 import { becameTrue, evaluateSignal, nameMatches } from "./signals";
 import { DATA_SELECTED, HOME_SELECTED, INSERT_BOUNDS, guideAction } from "./test-fixtures";
 
@@ -51,6 +52,32 @@ describe("assistance ladder", () => {
     expect(first).toMatchObject({ status: "learning", success_count: 1, failure_count: 1, confidence: 0.5, last_assistance_level: "demonstrate" });
     const mastered = applyOutcome({ ...first, last_assistance_level: "observe" }, "s.a", { completed: true, mistakes: 0, level: "observe", escalated: false }, "t2");
     expect(mastered).toMatchObject({ status: "mastered", last_assistance_level: "independent", last_seen_at: "t2" });
+  });
+});
+
+describe("learning modes", () => {
+  it("teach mode starts every new step as a challenge, never with the answer", () => {
+    expect(startLevel("teach", null)).toBe("hint");
+    expect(startLevel("teach", skillRecord("guide"))).toBe("hint");
+    expect(startLevel("teach", skillRecord("observe"))).toBe("observe");
+  });
+
+  it("help mode stays quiet until asked", () => {
+    expect(startLevel("help", null)).toBe("observe");
+    expect(startLevel("help", skillRecord("independent"))).toBe("independent");
+  });
+
+  it("agent mode guides every step, fully for a brand-new skill", () => {
+    expect(startLevel("agent", null)).toBe("demonstrate");
+    expect(startLevel("agent", skillRecord("independent"))).toBe("guide");
+    expect(startLevel("agent", skillRecord("demonstrate"))).toBe("demonstrate");
+  });
+
+  it("switching modes mid-step moves the current help level into the new mode's range", () => {
+    expect(clampToMode("teach", "demonstrate")).toBe("hint");
+    expect(clampToMode("help", "guide")).toBe("observe");
+    expect(clampToMode("agent", "observe")).toBe("guide");
+    expect(clampToMode("agent", "demonstrate")).toBe("demonstrate");
   });
 });
 
