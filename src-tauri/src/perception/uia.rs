@@ -4,14 +4,15 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use uiautomation::core::UICacheRequest;
-use uiautomation::types::{ControlType, Handle, ToggleState, TreeScope, UIProperty};
-use uiautomation::variants::Value;
+use uiautomation::types::{ControlType, Handle, PropertyConditionFlags, ToggleState, TreeScope, UIProperty};
+use uiautomation::variants::{Value, Variant};
 use uiautomation::{UIAutomation, UIElement, UITreeWalker};
 use windows::Win32::Foundation::HWND;
 
 use super::foreground;
 use super::model::{normalize_role, ElementDto, RectDto};
 use super::press::{self, PressRequest, Seen, SeenElement};
+use super::wanted::{already_read, unmatched, wanted_names};
 
 pub const MAX_ELEMENTS: usize = 1500;
 pub const MAX_DEPTH: usize = 40;
@@ -20,6 +21,11 @@ pub const MAX_DOCUMENT_ELEMENTS: usize = 250;
 pub const MAX_DOCUMENT_DEPTH: usize = 25;
 /// A read must not hold up the learner's next step: past this, what was read so far is returned.
 pub const WALK_BUDGET: Duration = Duration::from_millis(400);
+/// After a walk cut short, the time for searching out the wanted controls it didn't read, all names together.
+/// A dialog that just opened, a shell view or a big ribbon can be slow to walk at first.
+pub const SEARCH_BUDGET: Duration = Duration::from_millis(400);
+/// UI Automation answers "nothing there" with an empty success, which the crate reports as an error of code 0.
+const NOTHING_FOUND: i32 = 0;
 const UIA_CONFIDENCE: f64 = 0.95;
 /// Spreadsheet cells can hold tens of thousands of nodes and are never teaching targets at this level.
 const PRUNED: [ControlType; 3] = [ControlType::DataGrid, ControlType::DataItem, ControlType::Table];
@@ -171,6 +177,43 @@ pub fn outside_region(region: Option<&RectDto>, bounds: Option<&RectDto>) -> boo
     }
 }
 
+/// What a walk reads of an element on its way down (see `Walk::visit` and `Walk::descend`).
+#[derive(Debug, Clone)]
+pub struct Waypoint {
+    pub control_type: ControlType,
+    pub name: String,
+    pub class: String,
+    pub offscreen: bool,
+    pub bounds: Option<RectDto>,
+}
+
+/// Where a walk would have reported a searched-out control.
+#[derive(Debug, PartialEq)]
+pub struct Reached {
+    pub container: Option<String>,
+}
+
+/// Replays the walk's rules down a searched-out control's ancestors, the window first: where the walk
+/// would have reported the control, or None when the walk never reports it there (outside the asked-about
+/// region, under an offscreen subtree, or among the cells, file-row details and document text it skips).
+pub fn reach(path: &[Waypoint], region: Option<&RectDto>, text_documents: bool) -> Option<Reached> {
+    let mut scope = Scope::App;
+    let mut container: Option<String> = None;
+    for waypoint in path {
+        let size = waypoint.bounds.map(|b| (b.width as i32, b.height as i32));
+        let (_, descends) = walk_decision(waypoint.offscreen, size, &waypoint.class);
+        if outside_region(region, waypoint.bounds.as_ref()) || !descends {
+            return None;
+        }
+        container = container_for(waypoint.control_type, &waypoint.class, &waypoint.name, container.as_deref());
+        scope = match descent(waypoint.control_type, &waypoint.name, scope, text_documents) {
+            Descent::Skip => return None,
+            Descent::Now(next) | Descent::Later(next) => next,
+        };
+    }
+    Some(Reached { container })
+}
+
 /// Owns a UI Automation client; must live on one MTA thread.
 pub struct UiaReader {
     automation: UIAutomation,
@@ -178,6 +221,8 @@ pub struct UiaReader {
     cache: UICacheRequest,
     /// The same properties for all of an element's children, fetched in one cross-process call.
     children_cache: UICacheRequest,
+    /// The walk's properties plus the runtime id, which picks the window out among a found control's ancestors.
+    search_cache: UICacheRequest,
     /// The latest read's elements, for Agent · Do it for me to press one of them.
     seen: RefCell<Option<Seen>>,
 }
@@ -195,12 +240,46 @@ pub struct WalkStats {
     pub elapsed_ms: u128,
 }
 
+impl WalkStats {
+    /// Whether the walk may have missed a control a search can find: its budget or element cap cut it short,
+    /// or controls went away under it. A complete walk met every control a search would be allowed to add.
+    pub fn incomplete(&self, reported: usize) -> bool {
+        self.cut_by_budget || self.lost > 0 || reported >= MAX_ELEMENTS
+    }
+}
+
+/// How a read's search went, for the log: counts only, never names, which can be the learner's own content.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SearchStats {
+    /// Wanted names the walk hadn't read.
+    pub missing: usize,
+    /// Of those, the ones searched for before the search's budget ran out.
+    pub searched: usize,
+    /// Controls the search added to the read.
+    pub found: usize,
+    pub elapsed_ms: u128,
+}
+
+/// One read of a window: its elements by id, and how its walk and search went.
+pub struct Read {
+    pub elements: Vec<ElementDto>,
+    pub handles: ReadElements,
+    pub walk: WalkStats,
+    pub search: SearchStats,
+}
+
 fn cache_request(automation: &UIAutomation, scope: TreeScope) -> Result<UICacheRequest, String> {
     let cache = automation.create_cache_request().map_err(err)?;
     for property in CACHED {
         cache.add_property(property).map_err(err)?;
     }
     cache.set_tree_scope(scope).map_err(err)?;
+    Ok(cache)
+}
+
+fn search_cache_request(automation: &UIAutomation) -> Result<UICacheRequest, String> {
+    let cache = cache_request(automation, TreeScope::Element)?;
+    cache.add_property(UIProperty::RuntimeId).map_err(err)?;
     Ok(cache)
 }
 
@@ -211,28 +290,37 @@ impl UiaReader {
         // A new cache request's tree filter is the control view, matching the walker.
         let cache = cache_request(&automation, TreeScope::Element)?;
         let children_cache = cache_request(&automation, TreeScope::Children)?;
-        Ok(Self { automation, walker, cache, children_cache, seen: RefCell::new(None) })
+        let search_cache = search_cache_request(&automation)?;
+        Ok(Self { automation, walker, cache, children_cache, search_cache, seen: RefCell::new(None) })
     }
 
-    /// Reads the window's controls; logs when the time budget cut the read short.
-    pub fn read(&self, hwnd: isize, region: Option<RectDto>) -> Result<(Vec<ElementDto>, ReadElements), String> {
-        let (elements, handles, stats) = self.read_with_stats(hwnd, region, WALK_BUDGET)?;
-        if stats.cut_by_budget {
-            eprintln!("UIA read stopped at its {} ms budget: {} elements from {} visited", WALK_BUDGET.as_millis(), elements.len(), stats.visited);
+    /// Reads the window's controls. `want` names controls (the current lesson step's) to search out if the walk
+    /// is cut short before reading them. Logs when the walk's budget cut it short, and what a search found.
+    pub fn read(&self, hwnd: isize, region: Option<RectDto>, want: &[String]) -> Result<(Vec<ElementDto>, ReadElements), String> {
+        let read = self.read_with_stats(hwnd, region, want, WALK_BUDGET)?;
+        if read.walk.cut_by_budget {
+            let walked = read.elements.len() - read.search.found;
+            log::info!("UIA read stopped at its {} ms budget: {walked} elements from {} visited", WALK_BUDGET.as_millis(), read.walk.visited);
         }
-        Ok((elements, handles))
+        if read.search.missing > 0 {
+            let SearchStats { missing, searched, found, elapsed_ms } = read.search;
+            log::info!("UIA search found {found} of {missing} wanted controls the walk missed, searching {searched} in {elapsed_ms} ms (budget {} ms)", SEARCH_BUDGET.as_millis());
+        }
+        Ok((read.elements, read.handles))
     }
 
-    /// Depth-first walk of the window's control view, one batched request per parent.
-    pub fn read_with_stats(&self, hwnd: isize, region: Option<RectDto>, budget: Duration) -> Result<(Vec<ElementDto>, ReadElements, WalkStats), String> {
+    /// Depth-first walk of the window's control view, one batched request per parent; when the walk is cut
+    /// short, a search for the `want`ed names it didn't read.
+    pub fn read_with_stats(&self, hwnd: isize, region: Option<RectDto>, want: &[String], budget: Duration) -> Result<Read, String> {
         let started = Instant::now();
         let root = self.automation.element_from_handle(Handle::from(hwnd)).map_err(err)?;
         let root = root.build_updated_cache(&self.cache).map_err(err)?;
         let mut walk = Walk::new(self, region, text_documents(hwnd), started + budget);
-        walk.stack.push(Node { element: root, depth: 0, scope: Scope::App, container: None });
+        walk.stack.push(Node { element: root.clone(), depth: 0, scope: Scope::App, container: None });
         walk.run();
         walk.stats.elapsed_ms = started.elapsed().as_millis();
-        Ok((walk.out, walk.handles, walk.stats))
+        let search = if walk.stats.incomplete(walk.out.len()) { walk.search_out(&root, &wanted_names(want), SEARCH_BUDGET) } else { SearchStats::default() };
+        Ok(Read { elements: walk.out, handles: walk.handles, walk: walk.stats, search })
     }
 
     /// Replaces the elements a press may target with this read's.
@@ -252,13 +340,80 @@ impl UiaReader {
         // A leaf's cached children are a null array, which the crate reports as an error: no children.
         Some(updated.get_cached_children().unwrap_or_default())
     }
+
+    /// The first on-screen control below `root` named `name` (in any case): one UI Automation search instead of
+    /// a walk, cached like a walked control.
+    fn find_on_screen(&self, root: &UIElement, name: &str) -> uiautomation::Result<Option<UIElement>> {
+        let named = self.automation.create_property_condition(UIProperty::Name, Variant::from(name), Some(PropertyConditionFlags::IgnoreCase))?;
+        let on_screen = self.automation.create_property_condition(UIProperty::IsOffscreen, Variant::from(false), None)?;
+        let condition = self.automation.create_and_condition(named, on_screen)?;
+        found(root.find_first_build_cache(TreeScope::Descendants, &condition, &self.search_cache))
+    }
+
+    /// `hit`'s ancestors as a walk meets them, the window first; None when the window isn't among the first
+    /// MAX_DEPTH of them (the walk goes no deeper) or isn't an ancestor at all (the window changed meanwhile).
+    fn ancestry(&self, hit: &UIElement, window_id: &[i32]) -> uiautomation::Result<Option<Vec<Waypoint>>> {
+        let mut path = Vec::new();
+        let mut current = hit.clone();
+        while path.len() < MAX_DEPTH {
+            let Some(parent) = found(self.walker.get_parent_build_cache(&current, &self.search_cache))? else {
+                return Ok(None);
+            };
+            path.push(Waypoint::of(&parent));
+            if cached_runtime_id(&parent).as_deref() == Some(window_id) {
+                path.reverse();
+                return Ok(Some(path));
+            }
+            current = parent;
+        }
+        Ok(None)
+    }
+}
+
+/// A lookup's element, or None when UI Automation found nothing there.
+fn found(result: uiautomation::Result<UIElement>) -> uiautomation::Result<Option<UIElement>> {
+    match result {
+        Ok(element) => Ok(Some(element)),
+        Err(error) if error.code() == NOTHING_FOUND => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+fn cached_runtime_id(element: &UIElement) -> Option<Vec<i32>> {
+    match element.get_cached_property_value(UIProperty::RuntimeId).ok()?.get_value().ok()? {
+        Value::ArrayI4(id) => Some(id),
+        _ => None,
+    }
+}
+
+/// The window's runtime id, to pick it out among a found control's ancestors; None (logged) when it's gone.
+fn window_id(root: &UIElement) -> Option<Vec<i32>> {
+    match root.get_runtime_id() {
+        Ok(id) => Some(id),
+        Err(error) => {
+            log::warn!("couldn't identify the window to search it for the step's controls: {error}");
+            None
+        }
+    }
+}
+
+impl Waypoint {
+    fn of(element: &UIElement) -> Self {
+        Self {
+            control_type: element.get_cached_control_type().unwrap_or(ControlType::Custom),
+            name: element.get_cached_name().unwrap_or_default(),
+            class: element.get_cached_classname().unwrap_or_default(),
+            offscreen: element.is_cached_offscreen().unwrap_or(true),
+            bounds: element.get_cached_bounding_rectangle().ok().map(|r| rect_dto(&r)),
+        }
+    }
 }
 
 fn text_documents(hwnd: isize) -> bool {
     match foreground::exe_stem(HWND(hwnd as *mut _)) {
         Ok(stem) => has_text_documents(&stem),
         Err(error) => {
-            eprintln!("couldn't read the app's process name, so its documents are walked: {error}");
+            log::warn!("couldn't read the app's process name, so its documents are walked: {error}");
             false
         }
     }
@@ -342,12 +497,17 @@ impl<'a> Walk<'a> {
         if self.region.map_or(false, |region| !region.intersects(&dto.bounds)) {
             return;
         }
-        let pid = node.element.get_cached_process_id().ok().and_then(|pid| u32::try_from(pid).ok());
-        self.handles.insert(dto.id.clone(), SeenElement { element: node.element.clone(), bounds: dto.bounds, pid });
-        self.out.push(dto);
+        self.keep(&node.element, dto);
         if in_page {
             self.page_reported += 1;
         }
+    }
+
+    /// Adds an element to the read, with its handle so Agent · Do it for me can press it.
+    fn keep(&mut self, element: &UIElement, dto: ElementDto) {
+        let pid = element.get_cached_process_id().ok().and_then(|pid| u32::try_from(pid).ok());
+        self.handles.insert(dto.id.clone(), SeenElement { element: element.clone(), bounds: dto.bounds, pid });
+        self.out.push(dto);
     }
 
     fn descend(&mut self, node: Node, class: &str) {
@@ -370,6 +530,66 @@ impl<'a> Walk<'a> {
         // Reverse so the first child is popped first (document order).
         let nodes = children.into_iter().rev().map(|element| Node { element, depth, scope, container: container.clone() });
         self.stack.extend(nodes);
+    }
+}
+
+/// After a walk cut short: searching out the wanted controls it didn't read.
+impl Walk<'_> {
+    /// Searches the window for each `wanted` name the walk didn't read, adding the first on-screen control of
+    /// that name the walk would have reported had it had the time. No new search starts after `budget`.
+    fn search_out(&mut self, root: &UIElement, wanted: &[String], budget: Duration) -> SearchStats {
+        let started = Instant::now();
+        let missing = unmatched(wanted, &self.out);
+        let mut stats = SearchStats { missing: missing.len(), ..SearchStats::default() };
+        let window = if missing.is_empty() { None } else { window_id(root) };
+        if let Some(window) = window {
+            for name in missing {
+                if started.elapsed() >= budget {
+                    break;
+                }
+                stats.searched += 1;
+                stats.found += usize::from(self.search_one(root, &window, name));
+            }
+        }
+        stats.elapsed_ms = started.elapsed().as_millis();
+        stats
+    }
+
+    /// Adds the first on-screen control named `name` when the walk would have reported it where it is.
+    fn search_one(&mut self, root: &UIElement, window: &[i32], name: &str) -> bool {
+        let hit = match self.reader.find_on_screen(root, name) {
+            Ok(Some(hit)) => hit,
+            Ok(None) => return false,
+            Err(error) => {
+                log::warn!("UIA search for one of the step's controls failed: {error}");
+                return false;
+            }
+        };
+        let path = match self.reader.ancestry(&hit, window) {
+            Ok(Some(path)) => path,
+            Ok(None) => return false,
+            Err(error) => {
+                log::warn!("couldn't read where a found control sits in the window: {error}");
+                return false;
+            }
+        };
+        let Some(reached) = reach(&path, self.region.as_ref(), self.text_documents) else { return false };
+        self.add_found(&hit, reached.container)
+    }
+
+    /// The found control, built like a walked one, unless it is offscreen, outside the region or already read.
+    fn add_found(&mut self, hit: &UIElement, container: Option<String>) -> bool {
+        if hit.is_cached_offscreen().unwrap_or(true) {
+            return false;
+        }
+        self.sequence += 1;
+        let Some(dto) = describe(hit, self.sequence, container.as_deref()) else { return false };
+        let outside = self.region.map_or(false, |region| !region.intersects(&dto.bounds));
+        if outside || already_read(&self.out, &dto) {
+            return false;
+        }
+        self.keep(hit, dto);
+        true
     }
 }
 
@@ -564,7 +784,9 @@ mod tests {
     }
 
     /// Live check on this PC: `HODEUM_UIA_TITLE=<part of a window title> cargo test --lib live_read -- --ignored --nocapture`.
-    /// HODEUM_UIA_GREP limits the printed lines and HODEUM_UIA_BUDGET_MS overrides the time budget.
+    /// HODEUM_UIA_GREP limits the printed lines and HODEUM_UIA_BUDGET_MS overrides the walk's time budget.
+    /// HODEUM_UIA_WANT (comma-separated: "File name:,Save") names controls to search out when the walk is cut
+    /// short; a budget of 1 ms cuts it short.
     #[test]
     #[ignore]
     fn live_read_window_by_title() {
@@ -573,19 +795,20 @@ mod tests {
         let _ = unsafe { windows::Win32::UI::WindowsAndMessaging::SetProcessDPIAware() };
         let title = std::env::var("HODEUM_UIA_TITLE").expect("set HODEUM_UIA_TITLE");
         let grep = std::env::var("HODEUM_UIA_GREP").ok().map(|g| g.to_lowercase());
+        let want: Vec<String> = std::env::var("HODEUM_UIA_WANT").map(|names| names.split(',').map(str::to_string).collect()).unwrap_or_default();
         let reader = UiaReader::new().expect("UI Automation");
         let hwnd = window_titled(&reader.automation, &title).expect("no window with that title");
         let budget = std::env::var("HODEUM_UIA_BUDGET_MS").ok().and_then(|ms| ms.parse().ok()).map_or(WALK_BUDGET, Duration::from_millis);
-        let (elements, handles, stats) = reader.read_with_stats(hwnd, None, budget).expect("read");
-        for e in &elements {
-            let pid = handles.get(&e.id).and_then(|h| h.pid);
+        let read = reader.read_with_stats(hwnd, None, &want, budget).expect("read");
+        for e in &read.elements {
+            let pid = read.handles.get(&e.id).and_then(|h| h.pid);
             let b = e.bounds;
-            let line = format!("[{}] '{}' checked={:?} selected={:?} container={:?} focused={:?} pid={pid:?} at={},{},{}x{}", e.role, e.name, e.checked, e.selected, e.container, e.focused, b.x, b.y, b.width, b.height);
+            let line = format!("{} [{}] '{}' checked={:?} selected={:?} container={:?} focused={:?} pid={pid:?} at={},{},{}x{}", e.id, e.role, e.name, e.checked, e.selected, e.container, e.focused, b.x, b.y, b.width, b.height);
             if grep.as_ref().map_or(true, |g| line.to_lowercase().contains(g)) {
                 println!("{line}");
             }
         }
-        println!("== hwnd={hwnd} {} reported, {stats:?}", elements.len());
+        println!("== hwnd={hwnd} {} reported, {:?}, {:?}", read.elements.len(), read.walk, read.search);
     }
 
     /// Live check of Agent clicks in a Store app, whose controls live in another process than the frame:
@@ -600,13 +823,69 @@ mod tests {
         let target = std::env::var("HODEUM_UIA_PRESS").expect("set HODEUM_UIA_PRESS");
         let reader = UiaReader::new().expect("UI Automation");
         let hwnd = window_titled(&reader.automation, &title).expect("no window with that title");
-        let (elements, handles) = reader.read(hwnd, None).expect("read");
+        let (elements, handles) = reader.read(hwnd, None, &[]).expect("read");
         let element = elements.iter().find(|e| e.name == target).expect("no control with that name");
         let frame_pid = foreground::window_pid(HWND(hwnd as *mut _));
         println!("frame pid {frame_pid}, control pid {:?}", handles.get(&element.id).and_then(|h| h.pid));
         reader.remember(Seen { at: READ_AT, pid: frame_pid, elements: handles });
         let request = PressRequest { element_id: element.id.clone(), name: target, observed_at: READ_AT, button: press::PressButton::Left };
         reader.press(&request, READ_AT).expect("press");
+    }
+
+    const SCREEN: RectDto = RectDto { x: 0.0, y: 0.0, width: 1280.0, height: 800.0 };
+
+    fn waypoint(control_type: ControlType, name: &str, class: &str) -> Waypoint {
+        Waypoint { control_type, name: name.into(), class: class.into(), offscreen: false, bounds: Some(SCREEN) }
+    }
+
+    fn container_at(path: &[Waypoint]) -> Option<String> {
+        reach(path, None, false).expect("reached").container
+    }
+
+    #[test]
+    fn a_searched_out_control_sits_where_the_walk_would_have_put_it() {
+        let dialog = [waypoint(ControlType::Window, "Save As", "#32770"), waypoint(ControlType::Pane, "", "DUIViewWndClassName"), waypoint(ControlType::ComboBox, "File name:", "AppControlHost")];
+        assert_eq!(reach(&dialog, None, false), Some(Reached { container: None }));
+        assert_eq!(container_at(&[waypoint(ControlType::Window, "Untitled - Notepad", "Notepad"), waypoint(ControlType::TitleBar, "", "")]).as_deref(), Some("title bar"));
+        assert_eq!(container_at(&[waypoint(ControlType::Window, "Settings", ""), waypoint(ControlType::Group, "Choose your mode", "")]).as_deref(), Some("Choose your mode"));
+        assert_eq!(container_at(&[waypoint(ControlType::Window, "YouTube - Brave", "Chrome_WidgetWin_1"), waypoint(ControlType::Document, "YouTube", "")]).as_deref(), Some("page"));
+    }
+
+    #[test]
+    fn never_adds_what_the_walk_skips_on_purpose() {
+        let window = waypoint(ControlType::Window, "Book1 - Excel", "XLMAIN");
+        // A column heading named like a field ("Region") inside the sheet's grid.
+        assert_eq!(reach(&[window.clone(), waypoint(ControlType::DataGrid, "Grid", "")], None, false), None);
+        // A file row's details in Explorer, and Word's or Excel's document body.
+        assert_eq!(reach(&[window.clone(), waypoint(ControlType::List, "Items View", ""), waypoint(ControlType::ListItem, "beach.zip", "")], None, false), None);
+        assert_eq!(reach(&[window, waypoint(ControlType::Document, "Book1", "")], None, true), None);
+    }
+
+    #[test]
+    fn never_adds_a_control_under_a_hidden_subtree_but_finds_open_menus() {
+        let window = waypoint(ControlType::Window, "Untitled - Notepad", "Notepad");
+        let hidden = Waypoint { offscreen: true, bounds: Some(RectDto { x: 0.0, y: 0.0, width: 400.0, height: 300.0 }), ..waypoint(ControlType::Pane, "", "") };
+        assert_eq!(reach(&[window.clone(), hidden], None, false), None);
+        let popup_host = Waypoint { offscreen: true, bounds: Some(RectDto { x: 0.0, y: 0.0, width: 1.0, height: 1.0 }), ..waypoint(ControlType::Window, "", "Popup") };
+        assert!(reach(&[window, popup_host, waypoint(ControlType::Menu, "File", "")], None, false).is_some());
+    }
+
+    #[test]
+    fn keeps_a_searched_out_control_to_the_asked_about_region() {
+        let region = RectDto { x: 0.0, y: 0.0, width: 100.0, height: 100.0 };
+        let window = waypoint(ControlType::Window, "Untitled - Notepad", "Notepad");
+        let far = Waypoint { bounds: Some(RectDto { x: 600.0, y: 600.0, width: 200.0, height: 100.0 }), ..waypoint(ControlType::Pane, "", "") };
+        assert_eq!(reach(&[window.clone(), far], Some(&region), false), None);
+        assert!(reach(&[window], Some(&region), false).is_some());
+    }
+
+    #[test]
+    fn only_a_walk_cut_short_can_have_missed_a_control() {
+        let complete = WalkStats { visited: 79, lost: 0, cut_by_budget: false, elapsed_ms: 120 };
+        assert!(!complete.incomplete(79));
+        assert!(WalkStats { cut_by_budget: true, ..complete }.incomplete(16));
+        assert!(WalkStats { lost: 1, ..complete }.incomplete(78));
+        assert!(complete.incomplete(MAX_ELEMENTS));
     }
 
     #[test]

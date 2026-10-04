@@ -27,13 +27,21 @@ export class NativePerception implements PerceptionAdapter {
   private rerun = false;
   /** Input reported since the last read started; attached to the next read. */
   private pending: LearnerInput[] = [];
+  /** The current step's controls, for the reads after the learner's actions. */
+  private wanted: string[] = [];
 
   constructor(private readonly bridge: NativeBridge) {
     this.stopListening = bridge.listen(LEARNER_ACTION_EVENT, (payload) => this.onLearnerInput(payload));
   }
 
-  observe(region?: Rect): Promise<ScreenObservation> {
-    return this.bridge.invoke<ScreenObservation>("observe", { region: region ?? null });
+  /** The native side searches out any `want`ed control its time-boxed walk didn't reach. */
+  observe(region?: Rect, want: string[] = []): Promise<ScreenObservation> {
+    const args = want.length > 0 ? { region: region ?? null, want } : { region: region ?? null };
+    return this.bridge.invoke<ScreenObservation>("observe", args);
+  }
+
+  setWanted(names: string[]): void {
+    this.wanted = [...names];
   }
 
   async focusApp(app: string): Promise<boolean> {
@@ -109,7 +117,7 @@ export class NativePerception implements PerceptionAdapter {
     this.inFlight = true;
     const inputs = this.pending;
     this.pending = [];
-    this.observe()
+    this.observe(undefined, this.wanted)
       .then(
         (observation) => this.handlers.forEach((handler) => handler(inputs.length > 0 ? { ...observation, inputs } : observation)),
         (error) => console.error("Couldn't read the screen after the learner's action", error),

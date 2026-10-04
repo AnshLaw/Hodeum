@@ -71,7 +71,8 @@ export function activeChannels(state: ActivityState): ActivityChannel[] {
 export function withScreenActivity(perception: PerceptionAdapter, activity: ActivityTracker): PerceptionAdapter {
   const { shellTargets } = perception;
   return {
-    observe: (region?: Rect): Promise<ScreenObservation> => activity.track("screen", () => perception.observe(region)),
+    observe: (region?: Rect, want?: string[]): Promise<ScreenObservation> => activity.track("screen", () => perception.observe(region, want)),
+    setWanted: perception.setWanted?.bind(perception),
     focusApp: perception.focusApp?.bind(perception),
     launchApp: perception.launchApp?.bind(perception),
     onAppSwitched: perception.onAppSwitched?.bind(perception),

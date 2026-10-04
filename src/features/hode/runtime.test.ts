@@ -10,8 +10,8 @@ import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
 import { ExcelScene } from "../../test-support/scenes/excel";
 import { TASK_PACKS, matchGoal } from "../../task-packs";
 import type { HodeMode } from "../../lib/types";
-import { STUCK_MS, type HodeEvent } from "./model";
-import { HodeRuntime, NATIVE_SWITCH_GRACE_MS } from "./runtime";
+import { PREVIEW_MS, STUCK_MS, type HodeEvent } from "./model";
+import { HodeRuntime, NATIVE_SWITCH_GRACE_MS, PRESS_SETTLE_MS } from "./runtime";
 
 const GOAL = "Teach me how to make a pivot table in Excel";
 const FULL_HODE = ["tab:Insert", "ribbon:PivotTable", "dialog:ok", "field:Region", "field:Sales"];
@@ -234,6 +234,54 @@ describe("HodeRuntime end to end", () => {
     h.runtime.dispatch({ type: "DISMISS" });
     await settle();
     expect(h.state().phase).toBe("guiding");
+  });
+});
+
+describe("the controls a lesson step needs a screen read to find", () => {
+  const PIVOT_STEP = ["PivotTable", "PivotTable from table or range", "Create PivotTable"];
+
+  it("asks each read of a lesson for the current step's controls", async () => {
+    const h = setup();
+    const observe = vi.spyOn(h.perception, "observe");
+    await h.start();
+    expect(observe).toHaveBeenCalledWith(undefined, ["Insert"]);
+  });
+
+  it("tells perception the step's controls for the reads after the learner's own actions, until the lesson ends", async () => {
+    const h = setup();
+    const setWanted = vi.fn();
+    Object.assign(h.perception, { setWanted });
+    await h.start("teach");
+    expect(setWanted).toHaveBeenLastCalledWith(["Insert"]);
+    await h.act("tab:Insert");
+    expect(h.state().stepIndex).toBe(1);
+    expect(setWanted).toHaveBeenLastCalledWith(PIVOT_STEP);
+    const told = setWanted.mock.calls.length;
+    await h.act("nothing-here");
+    expect(setWanted).toHaveBeenCalledTimes(told);
+    h.runtime.dispatch({ type: "END_HODE" });
+    expect(setWanted).toHaveBeenLastCalledWith([]);
+  });
+
+  it("reads the screen after Hodey's own press with the step's controls", async () => {
+    vi.useFakeTimers();
+    const h = setup();
+    const observe = vi.spyOn(h.perception, "observe");
+    h.runtime.dispatch({ type: "START_HODE" });
+    h.runtime.dispatch({ type: "GOAL_SUBMITTED", goal: GOAL, pack: matchGoal(GOAL, TASK_PACKS), mode: "agent", agentStyle: "execute" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.state().phase).toBe("acting");
+    const before = observe.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(PREVIEW_MS + PRESS_SETTLE_MS);
+    expect(observe.mock.calls[before]).toEqual([undefined, ["Insert"]]);
+  });
+
+  it("asks for nothing outside a lesson", async () => {
+    const h = setup();
+    const observe = vi.spyOn(h.perception, "observe");
+    h.runtime.dispatch({ type: "VOICE_QUESTION", question: "what is the insert tab?" });
+    await settle();
+    expect(observe).toHaveBeenCalledWith(undefined, []);
   });
 });
 
