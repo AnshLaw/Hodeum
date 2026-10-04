@@ -7,7 +7,7 @@ import { createHowToLookup } from "../../providers/web/lookup";
 import { spokenReference } from "../../providers/web/reference";
 import type { WebSearch } from "../../providers/web/types";
 import { ExcelScene } from "../../test-support/scenes/excel";
-import { TASK_PACKS } from "../../task-packs";
+import { TASK_PACKS, matchGoal } from "../../task-packs";
 import { HodeRuntime } from "../hode/runtime";
 import { routeUtterance } from "./route";
 
@@ -17,6 +17,7 @@ import { routeUtterance } from "./route";
  */
 
 const SETTLE_TICKS = 100;
+const LESSON = "make a pivot table";
 /** The personal details said below. None of them may reach the search service. */
 const PERSONAL = /jane|doe|example|acme|intranet|payroll|salaries|xlsx|anshr|users/i;
 
@@ -42,7 +43,13 @@ function setup() {
     routeUtterance(runtime.getState(), text, TASK_PACKS, false).forEach((event) => runtime.dispatch(event));
     await settle();
   };
-  return { sent, say };
+  /** Idle, a how-to request is planned into a Hode; during one, a spoken question is answered from the screen first. */
+  const inHode = async () => {
+    runtime.dispatch({ type: "START_HODE" });
+    runtime.dispatch({ type: "GOAL_SUBMITTED", goal: LESSON, pack: matchGoal(LESSON, TASK_PACKS), openAllowed: false });
+    await settle();
+  };
+  return { sent, say, inHode };
 }
 
 describe("a spoken question taken to the web", () => {
@@ -55,7 +62,8 @@ describe("a spoken question taken to the web", () => {
   });
 
   it("nor when Hodey looks it up on its own because the screen couldn't answer", async () => {
-    const { sent, say } = setup();
+    const { sent, say, inHode } = setup();
+    await inHode();
     await say(String.raw`How do I attach C:\Users\anshr\Q3-salaries.xlsx to a message on www.acme-intranet.com/payroll?`);
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatch(/^how to attach to a message on/);
