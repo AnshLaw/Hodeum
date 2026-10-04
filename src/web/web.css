@@ -1,0 +1,135 @@
+/* Web dashboard: the desktop app's shell in a browser tab, with a PC picker in the rail. */
+html:has(> body.hweb-page),
+body.hweb-page,
+body.hweb-page #root {
+  height: 100%;
+  margin: 0;
+  background: #0a0a0b;
+}
+
+:root[data-theme="light"] body.hweb-page {
+  background: #f6f6f7;
+}
+
+.hweb-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 14px;
+  font-weight: 600;
+}
+
+.hweb-pc {
+  display: grid;
+  gap: 6px;
+  margin: 0 4px 10px;
+  font-size: 12px;
+}
+
+.hweb-pc .field {
+  width: 100%;
+}
+
+.hweb-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 4px;
+  font-size: 12px;
+}
+
+.hweb-user .hmuted {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hweb-notices {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.hweb-notices:empty {
+  display: none;
+}
+
+.hweb-notice {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--happ-line);
+  border-radius: 10px;
+  background: var(--happ-card);
+}
+
+.hweb-notice[data-tone="pending"] {
+  border-color: color-mix(in srgb, var(--hd-accent) 35%, transparent);
+}
+
+.hweb-notice[data-tone="done"] {
+  border-color: color-mix(in srgb, var(--hd-ok) 45%, transparent);
+}
+
+.hweb-notice[data-tone="error"] {
+  border-color: rgb(255 107 107 / 0.45);
+}
+
+.hweb-gate {
+  display: grid;
+  max-width: 30rem;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 0 16px;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  font-family: var(--hd-font);
+  color: var(--hd-text);
+  text-align: center;
+}
+
+.hweb-gate h1 {
+  margin: 0;
+  font-family: var(--hd-font-display);
+  font-size: 26px;
+}
+
+.hweb-gate p {
+  margin: 0;
+}
+
+.hweb-gate__fine {
+  font-size: 12px;
+  color: var(--hd-text-3);
+}
+
+/* Phones: the rail becomes a top bar and pages scroll as one column. */
+@media (max-width: 760px) {
+  .hweb .happ__body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .hweb-rail {
+    width: auto;
+    flex-flow: row wrap;
+    align-items: center;
+    border-right: 0;
+    border-bottom: 1px solid var(--happ-line);
+  }
+
+  .hweb-rail .happ__rail-spacer {
+    display: none;
+  }
+
+  .hweb-pc,
+  .hweb-user {
+    flex-basis: 100%;
+  }
+
+  .hweb .happ__main {
+    overflow: visible;
+    padding: 20px 16px 32px;
+  }
+}

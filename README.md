@@ -122,6 +122,10 @@ cd src-tauri; cargo test --lib   # Rust geometry, hit-test, dock, app-bar, perce
 
 No cloud API keys are needed. Copy `.env.example` to `.env.local` only when you explicitly enable the optional providers.
 
+### Accounts, sync and the web dashboard (optional)
+
+Sign in with Google (Settings › Account) to sync skills, Hodes, settings and chats to Supabase, then use the web dashboard (`/web.html`) to see your progress and start a Hode on your PC. Signed out, everything stays local. Setup: [`docs/accounts-setup.md`](./docs/accounts-setup.md).
+
 ## Layout
 
 ```text
@@ -133,6 +137,10 @@ src/features/dock/   dock + visibility preferences and rules
 src/components/      notch + sidebar, Hodey's face, overlay (+ Point & Ask), shared UI
 src/app/             desktop app: pages, services boundary, unfold transition
 src/data/            learning history, stats, settings, SQLite + memory stores
+src/features/account/ Google sign-in (notch-owned), account status over the bus
+src/features/sync/   sync engine (pull/merge/push), web command channel, Supabase adapter
+src/web/             web dashboard (web.html): desktop pages over the account + PC picker
+supabase/migrations/ Postgres schema, RLS and Realtime for accounts
 src/stage/           browser practice stage and scripted mock apps
 src-tauri/src/       windows, hit-test, docking + app bar, tray, perception (UIA, input hook, capture), app window, chat context, SQLite
 src-tauri/migrations/ SQLite schema, shared with the TypeScript store tests

@@ -9,6 +9,7 @@ import { createLocalVoice, showMicDot, showStandbyDot } from "../providers/speec
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
 import { TauriShell } from "../lib/tauri-shell";
 import { Notch } from "../components/notch/Notch";
+import { connectAccount } from "../features/account/connect";
 import { connectHodeBridge } from "../features/hode/bridge";
 import { connectVoice, withoutEcho } from "../features/voice/connect";
 import type { HodePhase } from "../features/hode/model";
@@ -101,6 +102,7 @@ async function boot(): Promise<void> {
     packs: TASK_PACKS,
     openAllowed: () => vision.current().state === "ready",
   });
+  connectAccount({ bus, settings, activity, invoke, listen: (event, handler) => subscribeTauri(event, handler) }).catch((error) => console.error("Accounts didn't start; Hodeum stays local", error));
   mount(<Notch runtime={runtime} bus={bus} shell={new TauriShell()} packs={TASK_PACKS} bootNotice={notice} vision={vision} activity={activity} speech={withoutEcho(voice.speech, () => runtime.hodeySaying())} script={() => script} />);
 }
 

@@ -4,6 +4,7 @@ import { MODE_COPY } from "../../lib/modes";
 import { HODE_MODES } from "../../lib/types";
 import type { VisionStatus } from "../../providers/vision/types";
 import type { AppServices, VoicePreview } from "../services";
+import { AccountSettings } from "./settings/AccountSettings";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { Row } from "./settings/controls";
 import { OnScreenSettings } from "./settings/OnScreenSettings";
@@ -68,14 +69,6 @@ function AboutSettings({ vision, webSearch }: { vision?: VisionStatus; webSearch
           </span>
         </Row>
       </section>
-      <section className="hcard">
-        <h2>Account</h2>
-        <Row label="Sign in with Google" detail="Signing in syncs your skills, Hodes, settings and chats to your account so the web app and your other PCs see them. Coming next.">
-          <button type="button" className="btn" disabled>
-            Sign in
-          </button>
-        </Row>
-      </section>
     </>
   );
 }
@@ -109,6 +102,7 @@ export function SettingsPage({ services }: { services: AppServices }) {
           )
         }
       />
+      <AccountSettings bus={services.bus} />
     </div>
   );
 }

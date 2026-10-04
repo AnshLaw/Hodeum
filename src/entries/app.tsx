@@ -9,6 +9,7 @@ import { MemorySettingsStore } from "../data/settings";
 import { openDatabase } from "../data/sql";
 import { SqliteChatStore, SqliteLearningStore, SqliteSettingsStore } from "../data/sqlite-stores";
 import { invoke } from "@tauri-apps/api/core";
+import { trackDeletions } from "../features/sync/deletions";
 import { connectAppearance } from "../lib/appearance";
 import { createLocalVoice, voicePreview } from "../providers/speech/local-voice";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
@@ -92,6 +93,7 @@ async function boot(): Promise<void> {
   const bus = new TauriBus();
   const vision = new TauriVisionStatus();
   const stores = await openStores();
+  trackDeletions(stores.learning, stores.chats, bus);
   connectAppearance(stores.settings, bus, document.documentElement);
   const base: Omit<AppServices, "window"> = {
     ...stores,

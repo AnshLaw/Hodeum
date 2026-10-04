@@ -18,6 +18,8 @@ export default defineConfig({
         app: resolve(root, "app.html"),
         notch: resolve(root, "notch.html"),
         overlay: resolve(root, "overlay.html"),
+        // The web dashboard; deploy dist/web.html and its assets to any static host.
+        web: resolve(root, "web.html"),
       },
     },
   },

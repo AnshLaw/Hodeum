@@ -1,3 +1,4 @@
+mod account;
 mod app_focus;
 mod app_window;
 mod chat_context;
@@ -68,7 +69,10 @@ pub fn run() {
             voice::tts_speak,
             voice::tts_stop,
             voice::tts_prepare,
-            hodey_key::set_hodey_key
+            hodey_key::set_hodey_key,
+            account::auth_listen,
+            account::open_url,
+            account::device_name
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())

@@ -1,4 +1,5 @@
 import type { ActivityChannel } from "./activity";
+import type { AccountStatus } from "../features/account/types";
 import type { DockPrefs } from "../features/dock/dock";
 import type { LearnerAnnotation, OverlayPrimitive } from "./types";
 
@@ -27,6 +28,16 @@ export interface BusEvents {
   "dock:prefs-request": Empty;
   /** Ask the notch to move or restyle Hodey, e.g. from the app's settings. */
   "dock:change": Partial<DockPrefs>;
+  /** Sign-in and sync state, broadcast by the notch (which owns the account) whenever it changes or is asked. */
+  "account:status": AccountStatus;
+  "account:status-request": Empty;
+  "account:sign-in": Empty;
+  /** Stop waiting for the browser (the learner closed the tab). */
+  "account:cancel": Empty;
+  "account:sign-out": Empty;
+  "account:pause": { paused: boolean };
+  /** A row was deleted locally; sync deletes it in the cloud too instead of pulling it back. */
+  "sync:deleted": { table: "skills" | "chats"; id: string };
 }
 
 export interface HodeSummary {

@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import type { HodeSummary } from "../lib/bus";
 import { HodeumMark } from "../components/shared/icons";
+import { railNote } from "../features/account/copy";
+import { useAccount } from "../features/account/use-account";
 import { useLiveHode } from "./hooks";
 import { ChatIcon, CloseWindowIcon, GearIcon, HodesIcon, HomeIcon, MaximizeIcon, MinimizeIcon, PathIcon } from "./icons";
 import { ChatPage } from "./pages/ChatPage";
@@ -57,7 +59,7 @@ function LivePill({ live, onOpen }: { live?: HodeSummary; onOpen: () => void }) 
   );
 }
 
-function Rail({ page, onSelect, live }: { page: Page; onSelect: (page: Page) => void; live?: HodeSummary }) {
+function Rail({ page, onSelect, live, note }: { page: Page; onSelect: (page: Page) => void; live?: HodeSummary; note: string }) {
   return (
     <nav className="happ__rail" aria-label="Hodeum">
       {NAV.map((item) => (
@@ -68,7 +70,7 @@ function Rail({ page, onSelect, live }: { page: Page; onSelect: (page: Page) => 
       ))}
       <span className="happ__rail-spacer" />
       <LivePill live={live} onOpen={() => onSelect("home")} />
-      <p className="happ__local">Everything stays on this PC</p>
+      <p className="happ__local">{note}</p>
     </nav>
   );
 }
@@ -77,11 +79,12 @@ function Rail({ page, onSelect, live }: { page: Page; onSelect: (page: Page) => 
 export function HodeumApp({ services }: { services: AppServices }) {
   const [page, setPage] = useState<Page>("home");
   const live = useLiveHode(services.bus);
+  const account = useAccount(services.bus);
   return (
     <div className="happ">
       <TitleBar services={services} />
       <div className="happ__body">
-        <Rail page={page} onSelect={setPage} live={live} />
+        <Rail page={page} onSelect={setPage} live={live} note={railNote(account)} />
         <main className="happ__main" key={page}>
           {page === "home" && <HomePage services={services} live={live} onNavigate={setPage} />}
           {page === "hodes" && <HodesPage services={services} />}
