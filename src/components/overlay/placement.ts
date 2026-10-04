@@ -219,6 +219,27 @@ export function labelPosition(request: LabelRequest): Point {
   return { x, y };
 }
 
+/** The numbered disc on a highlight that's one of several lit at once. */
+export const BADGE_RADIUS_PX = 10;
+/** Up and left of the ring's corner by this much, the disc just clears the ring's rounded corner. */
+const BADGE_CORNER_OFFSET_PX = 5;
+
+/**
+ * Centre of a highlight's numbered disc: just outside the ring's top-left corner, kept whole on screen
+ * (over the ring's corner when the control sits at the screen's edge).
+ */
+export function badgeCenter(ring: Rect, viewport: Size): Point {
+  const near = BADGE_RADIUS_PX + VIEWPORT_MARGIN_PX;
+  const clamp = (v: number, extent: number) => Math.min(Math.max(v, near), Math.max(extent - near, near));
+  return { x: clamp(ring.x - BADGE_CORNER_OFFSET_PX, viewport.width), y: clamp(ring.y - BADGE_CORNER_OFFSET_PX, viewport.height) };
+}
+
+/** What a numbered disc covers, so a label can keep clear of it. */
+export function badgeBounds(ring: Rect, viewport: Size): Rect {
+  const { x, y } = badgeCenter(ring, viewport);
+  return { x: x - BADGE_RADIUS_PX, y: y - BADGE_RADIUS_PX, width: BADGE_RADIUS_PX * 2, height: BADGE_RADIUS_PX * 2 };
+}
+
 /** Per-axis scale that grows `ring` by the same `spread` on every side, so a pulse stays concentric. */
 export function pulseScale(ring: Rect, spread: number): Point {
   if (ring.width <= 0 || ring.height <= 0) throw new Error("A pulse needs a ring with a positive size");
