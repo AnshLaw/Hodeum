@@ -1,13 +1,16 @@
 import type { Accent, Appearance, HodeyColor, SettingsStore, Theme } from "../data/settings";
 import type { Bus } from "./bus";
 
-/** Guidance accent: highlights, primary buttons, the scan line and the orb ring. */
-const ACCENT_TOKENS: Record<Accent, { accent: string; hover: string; ink: string }> = {
-  amber: { accent: "#ffb224", hover: "#ffc457", ink: "#1f1300" },
-  mint: { accent: "#3dd68c", hover: "#62e3a4", ink: "#00210f" },
-  sky: { accent: "#4cb8ff", hover: "#73c8ff", ink: "#001d33" },
-  rose: { accent: "#ff6b8a", hover: "#ff8ea6", ink: "#33000b" },
-  violet: { accent: "#a78bfa", hover: "#bba5fb", ink: "#170838" },
+/**
+ * Guidance accent: highlights, primary buttons, the scan line and the orb ring. `beam` is its companion
+ * hue, which the highlight beam and the orb ring blend into, so each accent gets its own spectrum.
+ */
+const ACCENT_TOKENS: Record<Accent, { accent: string; hover: string; ink: string; beam: string }> = {
+  amber: { accent: "#ffb224", hover: "#ffc457", ink: "#1f1300", beam: "#ff5fa2" },
+  mint: { accent: "#3dd68c", hover: "#62e3a4", ink: "#00210f", beam: "#4cb8ff" },
+  sky: { accent: "#4cb8ff", hover: "#73c8ff", ink: "#001d33", beam: "#a78bfa" },
+  rose: { accent: "#ff6b8a", hover: "#ff8ea6", ink: "#33000b", beam: "#b48cff" },
+  violet: { accent: "#a78bfa", hover: "#bba5fb", ink: "#170838", beam: "#4cb8ff" },
 };
 
 const HODEY_TOKENS: Record<HodeyColor, { skin: string; shade: string; ink: string }> = {
@@ -29,7 +32,7 @@ export function hodeyVars(color: HodeyColor): Record<string, string> {
 
 export function appearanceVars(appearance: Appearance): Record<string, string> {
   const accent = ACCENT_TOKENS[appearance.accent];
-  return { "--hd-accent": accent.accent, "--hd-accent-hover": accent.hover, "--hd-accent-ink": accent.ink, ...hodeyVars(appearance.hodeyColor) };
+  return { "--hd-accent": accent.accent, "--hd-accent-hover": accent.hover, "--hd-accent-ink": accent.ink, "--hd-beam": accent.beam, ...hodeyVars(appearance.hodeyColor) };
 }
 
 export function resolveTheme(theme: Theme, systemDark: boolean): "dark" | "light" {

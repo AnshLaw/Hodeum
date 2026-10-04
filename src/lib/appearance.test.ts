@@ -9,6 +9,13 @@ describe("appearance", () => {
     expect(vars["--hd-hodey-skin"]).toBe("#b49cff");
   });
 
+  it("pairs each accent with a companion hue for the highlight beam", () => {
+    const sky = appearanceVars({ ...DEFAULT_SETTINGS.appearance, accent: "sky" });
+    const amber = appearanceVars({ ...DEFAULT_SETTINGS.appearance, accent: "amber" });
+    expect(sky["--hd-beam"]).toBe("#a78bfa");
+    expect(amber["--hd-beam"]).not.toBe(amber["--hd-accent"]);
+  });
+
   it("follows the system theme only when asked to", () => {
     expect(resolveTheme("system", true)).toBe("dark");
     expect(resolveTheme("system", false)).toBe("light");
