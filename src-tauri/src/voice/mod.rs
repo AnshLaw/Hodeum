@@ -12,6 +12,7 @@ pub mod gpu_asr;
 pub mod listen;
 pub mod mic;
 pub mod models;
+pub mod playhead;
 pub mod refine;
 pub mod segment;
 pub mod speak;

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TTSProvider } from "../interfaces";
+import type { SpokenSegment, TTSProvider } from "../interfaces";
 import { ActivityTracker } from "../../lib/activity";
 import { showStandbyDot } from "./local-voice";
 import { spoken } from "../../lib/spoken";
+import { fakeSegmentedVoice } from "../../test-support/fake-voice";
 import { NativeSpeechInput, NativeTTSProvider, NativeVoiceStatus, RoutedTTS, frequentLines, voiceChoice, type VoiceBridge, type VoiceStatus } from "./native-voice";
 
 const READY: VoiceStatus = {
@@ -182,6 +183,106 @@ describe("NativeTTSProvider", () => {
   });
 });
 
+describe("NativeTTSProvider segments", () => {
+  /** The id the provider gave its latest line (`tts_speak`). */
+  const lastSpeakId = (invoke: ReturnType<typeof fakeBridge>["invoke"]) =>
+    (invoke.mock.calls.filter(([command]) => command === "tts_speak").at(-1)?.[1] as { id: string }).id;
+
+  function listening() {
+    const { bridge, fire, invoke } = fakeBridge();
+    const tts = new NativeTTSProvider(bridge);
+    const heard: SpokenSegment[] = [];
+    const off = tts.onSegment((segment) => heard.push(segment));
+    return { tts, fire, invoke, heard, off };
+  }
+
+  it("reports each part of the line it's saying as it starts, and nothing of anyone else's", async () => {
+    const { tts, fire, invoke, heard } = listening();
+    const speaking = tts.speak(words("Nice work so far, now click Insert."), new AbortController().signal);
+    await settle();
+    const id = lastSpeakId(invoke);
+    fire("tts:segment", { id, index: 0, text: "Nice work so far," });
+    fire("tts:segment", { id: "the-app-windows-preview", index: 0, text: "Hi, I'm Hodey." });
+    fire("tts:segment", { id, index: 1, text: "now click Insert." });
+    fire("tts:done", { id, interrupted: false, error: null });
+    await speaking;
+    fire("tts:segment", { id, index: 2, text: "after the line ended" });
+    expect(heard).toEqual([
+      { index: 0, text: "Nice work so far," },
+      { index: 1, text: "now click Insert." },
+    ]);
+  });
+
+  it("drops the rest of a line the learner talked over", async () => {
+    const { tts, fire, invoke, heard } = listening();
+    const controller = new AbortController();
+    const speaking = tts.speak(words("A long explanation. With two parts."), controller.signal);
+    await settle();
+    const id = lastSpeakId(invoke);
+    fire("tts:segment", { id, index: 0, text: "A long explanation." });
+    controller.abort();
+    fire("tts:segment", { id, index: 1, text: "With two parts." });
+    await speaking;
+    expect(heard).toEqual([{ index: 0, text: "A long explanation." }]);
+  });
+
+  it("drops every line's segments once stopped, and follows the next line", async () => {
+    const { tts, fire, invoke, heard } = listening();
+    const first = tts.speak(words("First line."), new AbortController().signal);
+    await settle();
+    const stopped = lastSpeakId(invoke);
+    await tts.stop();
+    fire("tts:segment", { id: stopped, index: 0, text: "First line." });
+    fire("tts:done", { id: stopped, interrupted: true, error: null });
+    await first;
+    const second = tts.speak(words("Second line."), new AbortController().signal);
+    await settle();
+    const id = lastSpeakId(invoke);
+    fire("tts:segment", { id, index: 0, text: "Second line." });
+    fire("tts:done", { id, interrupted: false, error: null });
+    await second;
+    expect(heard).toEqual([{ index: 0, text: "Second line." }]);
+  });
+
+  it("keeps following the next line when an earlier line's signal aborts after it finished", async () => {
+    const { tts, fire, invoke, heard } = listening();
+    const earlier = new AbortController();
+    const first = tts.speak(words("First line."), earlier.signal);
+    await settle();
+    fire("tts:done", { id: lastSpeakId(invoke), interrupted: false, error: null });
+    await first;
+    const second = tts.speak(words("Second line."), new AbortController().signal);
+    await settle();
+    earlier.abort();
+    const id = lastSpeakId(invoke);
+    fire("tts:segment", { id, index: 0, text: "Second line." });
+    fire("tts:done", { id, interrupted: false, error: null });
+    await second;
+    expect(heard).toEqual([{ index: 0, text: "Second line." }]);
+    expect(invoke).not.toHaveBeenCalledWith("tts_stop");
+  });
+
+  it("drops the segments of a line that failed", async () => {
+    const { tts, fire, invoke, heard } = listening();
+    const speaking = tts.speak(words("Click Insert."), new AbortController().signal);
+    await settle();
+    const id = lastSpeakId(invoke);
+    fire("tts:done", { id, interrupted: false, error: "The voice couldn't say that." });
+    await expect(speaking).rejects.toThrow("couldn't say that");
+    fire("tts:segment", { id, index: 0, text: "Click Insert." });
+    expect(heard).toEqual([]);
+  });
+
+  it("stops reporting once unsubscribed", async () => {
+    const { tts, fire, invoke, heard, off } = listening();
+    tts.speak(words("Click Insert."), new AbortController().signal).catch(() => undefined);
+    await settle();
+    off();
+    fire("tts:segment", { id: lastSpeakId(invoke), index: 0, text: "Click Insert." });
+    expect(heard).toEqual([]);
+  });
+});
+
 describe("RoutedTTS", () => {
   const fake = (fail = false): TTSProvider & { said: string[] } => {
     const said: string[] = [];
@@ -214,6 +315,33 @@ describe("RoutedTTS", () => {
     await new RoutedTTS(fake(true), windows, () => true).speak(words("hello"), new AbortController().signal);
     expect(windows.said).toEqual(["hello"]);
     errorLog.mockRestore();
+  });
+
+  it("passes on the natural voice's segments while it says a line, and none while a Windows voice speaks", async () => {
+    const natural = fakeSegmentedVoice();
+    const windows = fake();
+    let ready = true;
+    const tts = new RoutedTTS(natural.voice, windows, () => ready);
+    const heard: SpokenSegment[] = [];
+    tts.onSegment((segment) => heard.push(segment));
+    const first = tts.speak(words("one"), new AbortController().signal);
+    await settle();
+    natural.report({ index: 0, text: "one" });
+    natural.finish();
+    await first;
+    ready = false;
+    const second = tts.speak(words("two"), new AbortController().signal);
+    natural.report({ index: 0, text: "not what's being said" });
+    await second;
+    expect(windows.said).toEqual(["two"]);
+    expect(heard).toEqual([{ index: 0, text: "one" }]);
+  });
+
+  it("has no segments when its natural voice can't tell them", () => {
+    const tts = new RoutedTTS(fake(), fake(), () => true);
+    const off = tts.onSegment(() => undefined);
+    expect(off).toBeTypeOf("function");
+    off();
   });
 });
 
