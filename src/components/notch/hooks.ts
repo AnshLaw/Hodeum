@@ -6,7 +6,8 @@ import type { HodeRuntime } from "../../features/hode/runtime";
 import { coversTarget, guidanceFootprint } from "./footprint";
 import type { NotchControl } from "./notch-view";
 
-const SUCCESS_DISPLAY_MS = 2600;
+/** Long enough to read what moved and the next suggestion; hovering holds it longer. */
+const SUCCESS_DISPLAY_MS = 5000;
 
 /**
  * Keeps the native hit-test in sync with the surface as it animates, so only it captures clicks.

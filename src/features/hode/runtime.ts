@@ -186,7 +186,8 @@ export class HodeRuntime {
     this.pendingWrite = this.pendingWrite
       .then(() => this.deps.skills.recordOutcome(skillId, outcome))
       .then(
-        () => undefined,
+        // Skill views (the notch's success card, the app's learning page) refresh from the saved record.
+        () => this.deps.bus.emit("data:changed", {}),
         (error) => console.error("Saving skill progress failed", error),
       );
   }

@@ -33,22 +33,6 @@ export function computeStats(hodes: HodeRecord[], skills: SkillRecord[], now: Da
   };
 }
 
-export interface SkillGroup {
-  /** "excel", "windows", … */
-  app: string;
-  skills: SkillRecord[];
-}
-
-/** Skills grouped by their app prefix, most-practised app first. */
-export function groupSkills(skills: SkillRecord[]): SkillGroup[] {
-  const groups = new Map<string, SkillRecord[]>();
-  for (const skill of skills) {
-    const app = skill.skill_id.split(".")[0];
-    groups.set(app, [...(groups.get(app) ?? []), skill]);
-  }
-  return [...groups].map(([app, list]) => ({ app, skills: list.sort((a, b) => a.skill_id.localeCompare(b.skill_id)) })).sort((a, b) => b.skills.length - a.skills.length);
-}
-
 /** 0–1 progress toward mastery, from the help level Hodey currently gives. */
 export function masteryOf(skill: SkillRecord): number {
   const LEVEL_PROGRESS = { demonstrate: 0.1, guide: 0.3, hint: 0.55, observe: 0.8, independent: 1 } as const;

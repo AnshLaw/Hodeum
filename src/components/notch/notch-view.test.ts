@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { COPY } from "../../lib/copy";
 import { initialState, type HodeState } from "../../features/hode/model";
 import { PACK, guideAction } from "../../features/hode/test-fixtures";
-import { islandSize, notchView, providerBadge, skillLabel, stepItems } from "./notch-view";
+import { NOTCH_WIDTHS, isExpanded, islandSize, notchView, providerBadge, skillLabel, stepItems } from "./notch-view";
 
 const guiding = (overrides: Partial<HodeState> = {}): HodeState => ({
   ...initialState,
@@ -125,6 +125,22 @@ describe("phone island", () => {
 
   it("still lets the menu take over", () => {
     expect(islandSize(notchView(initialState), { ...context, menuOpen: true })).toBe("lesson");
+  });
+});
+
+describe("skills island", () => {
+  const context = { settled: true, hovered: false, menuOpen: false, peek: false, listening: false, phone: false, skills: true };
+
+  it("opens to the skills layout, wider than a guidance card, over any Hode", () => {
+    expect(islandSize(notchView(initialState), context)).toBe("skills");
+    expect(islandSize(notchView(guiding()), { ...context, peek: true })).toBe("skills");
+    expect(NOTCH_WIDTHS.skills).toBeGreaterThan(NOTCH_WIDTHS.guidance);
+    expect(isExpanded({ ...notchView(initialState), size: "skills" })).toBe(true);
+  });
+
+  it("gives way to the menu and covers the phone mirror", () => {
+    expect(islandSize(notchView(initialState), { ...context, menuOpen: true })).toBe("lesson");
+    expect(islandSize(notchView(initialState), { ...context, phone: true })).toBe("skills");
   });
 });
 

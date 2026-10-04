@@ -101,6 +101,16 @@ describe("HodeRuntime end to end", () => {
     expect(second.overlays.at(-1)).toBe("clear");
   });
 
+  it("tells views once a step's skill progress is saved", async () => {
+    const skills = new MemorySkillStore();
+    const h = setup(undefined, skills);
+    const saved: number[] = [];
+    h.bus.on("data:changed", () => saved.push(skills.all().length));
+    await h.start();
+    await h.act("tab:Insert");
+    expect(saved).toEqual([1]);
+  });
+
   it("falls back to the local planner when the first provider fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const h = setup([failing, new TaskPackReasoningProvider()]);

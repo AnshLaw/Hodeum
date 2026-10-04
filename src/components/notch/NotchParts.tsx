@@ -222,7 +222,8 @@ export function NotchBar(props: BarProps) {
   );
 }
 
-export function NotchContent({ view, expanded, fallbackDetail, onControl }: { view: NotchView; expanded: boolean; fallbackDetail?: string; onControl: OnControl }) {
+/** `extra` replaces the plain skill chips, e.g. the success card's skill progress. */
+export function NotchContent({ view, expanded, fallbackDetail, onControl, extra }: { view: NotchView; expanded: boolean; fallbackDetail?: string; onControl: OnControl; extra?: ReactNode }) {
   const detail = view.detail ?? (view.mode === "idle" ? fallbackDetail : undefined);
   if (!expanded) return detail ? <p className="notch__subline">{detail}</p> : null;
   return (
@@ -237,7 +238,7 @@ export function NotchContent({ view, expanded, fallbackDetail, onControl }: { vi
           {detail}
         </p>
       )}
-      {view.skills && <SkillChips skills={view.skills} />}
+      {extra ?? (view.skills && <SkillChips skills={view.skills} />)}
       {view.steps && <StepList steps={view.steps} />}
       {view.controls.length > 0 && <ControlButtons controls={view.controls} hintLabel={view.hintLabel} onControl={onControl} spread />}
     </div>
