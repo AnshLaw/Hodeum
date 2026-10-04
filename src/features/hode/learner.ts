@@ -234,7 +234,8 @@ function revealArea(s: HodeState, stuck?: StuckSignal): Transition | undefined {
  * matters, or a hint request) instead of re-deciding and repeating itself while they look around.
  */
 export function onStuckTimeout(s: HodeState): Transition {
-  if (s.phase !== "guiding" || s.toppedOut) return noop(s);
+  // In another app, the learner isn't hesitating over the step.
+  if (s.phase !== "guiding" || s.toppedOut || s.away === true) return noop(s);
   const area = revealArea(s);
   if (area) return area;
   return requestReason(raiseHelp({ ...s, toppedOut: s.level === MOST_HELP }, { countsAsMistake: false }));
@@ -297,13 +298,31 @@ export function onLookAgain(s: HodeState): Transition {
  * it's worth a fresh look (the learner may have opened the app the goal is in). A lesson ignores it: its
  * steps are checked on the learner's next action, and a glance elsewhere isn't a step.
  */
-export function onAppSwitched(s: HodeState): Transition {
+export function onAppSwitched(s: HodeState, e: EventOf<"APP_SWITCHED">): Transition {
+  if (e.away === true) return steppedAway(s);
+  if (e.away === false && s.away === true) return cameBack(s);
   if (s.phase !== "guiding") return noop(s);
   // The ring on the taskbar's search box has done its job once another window comes forward.
   if (s.waitingForApp) return withLeadingEffects(onLookAgain(s), [{ type: "clearOverlay" }]);
   if (!s.open) return noop(s);
   // A fresh look, but not an action of the learner's: a glance at another app never counts a step as done.
   return { state: { ...s, phase: "observing", reobserved: false, toppedOut: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
+}
+
+/** Phases of a running Hode the learner can step away from. */
+const AWAY_PHASES: HodeState["phase"][] = ["guiding", "reasoning", "observing", "answering"];
+
+/** In another app, the Hode's window still open behind it: the step and its card stay, quietly, with no stuck timer. */
+function steppedAway(s: HodeState): Transition {
+  if (s.away === true || !AWAY_PHASES.includes(s.phase)) return noop(s);
+  return { state: { ...s, away: true }, effects: [CANCEL_TIMER] };
+}
+
+/** Back in the Hode's window: a fresh look at it (what changed while they were away), then the step carries on. */
+function cameBack(s: HodeState): Transition {
+  const back: HodeState = { ...s, away: false };
+  if (s.phase !== "guiding") return { state: back, effects: [] };
+  return { state: { ...back, phase: "observing", reobserved: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
 }
 
 /** Lesson phases a step can be skipped from (a question being answered isn't one). */

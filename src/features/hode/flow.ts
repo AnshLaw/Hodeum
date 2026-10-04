@@ -68,8 +68,10 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
     const level = OPEN_START[mode];
     return { state: { ...s, goal, app: e.app, openingApp, mode, agentStyle, open: true, level, notice: undefined, phase: "observing" }, effects: [...focus, { type: "observe" }] };
   }
-  const { noPack } = spoken(s.language);
-  if (!e.pack) return { state: { ...s, goal, notice: noPack }, effects: [{ type: "say", text: noPack }] };
+  const words = spoken(s.language);
+  // Nothing to plan it with yet: say the vision model is loading, rather than that there's no lesson for it.
+  const nothing = e.visionStarting ? words.visionLoading : words.noPack;
+  if (!e.pack) return { state: { ...s, goal, notice: nothing }, effects: [{ type: "say", text: nothing }] };
   // Bring the pack's app forward first, so Hodey reads Excel rather than whatever had focus.
   const pack = localizePack(e.pack, s.language);
   // Teach opens with the idea: what the learner is about to make, and that they do the clicking.
