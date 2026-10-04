@@ -32,6 +32,8 @@ const POLL: Duration = Duration::from_millis(250);
 /// Large enough for any RTP packet on loopback.
 const MAX_PACKET: usize = 65_536;
 const KEY_FLAG: u8 = 1;
+/// Room for a whole mirrored-screen keyframe burst (hundreds of KB) while the pump is busy.
+const RECEIVE_BUFFER_BYTES: i32 = 4 * 1024 * 1024;
 
 /// `-a` no audio; `-nohold` lets a new iPhone take over; `-vrtp` sends video to us instead of a window.
 pub fn receiver_args(port: u16) -> Vec<String> {
@@ -75,6 +77,31 @@ impl Airplay {
             Err(_) => true,
         }
     }
+}
+
+fn set_receive_buffer(socket: &UdpSocket, bytes: i32) -> Result<(), String> {
+    use std::os::windows::io::AsRawSocket;
+    use windows::Win32::Networking::WinSock::{setsockopt, SOCKET, SOL_SOCKET, SO_RCVBUF};
+    // SAFETY: the socket handle is valid for this call and the option value outlives it.
+    let rc = unsafe { setsockopt(SOCKET(socket.as_raw_socket() as usize), SOL_SOCKET, SO_RCVBUF, Some(&bytes.to_ne_bytes())) };
+    if rc != 0 {
+        return Err(format!("couldn't enlarge the AirPlay video buffer: {}", std::io::Error::last_os_error()));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn receive_buffer(socket: &UdpSocket) -> Result<i32, String> {
+    use std::os::windows::io::AsRawSocket;
+    use windows::Win32::Networking::WinSock::{getsockopt, SOCKET, SOL_SOCKET, SO_RCVBUF};
+    let mut value = 0i32;
+    let mut size = std::mem::size_of::<i32>() as i32;
+    // SAFETY: `value` and `size` are live, correctly sized out-parameters for SO_RCVBUF.
+    let rc = unsafe { getsockopt(SOCKET(socket.as_raw_socket() as usize), SOL_SOCKET, SO_RCVBUF, windows::core::PSTR((&mut value as *mut i32).cast()), &mut size) };
+    if rc != 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    Ok(value)
 }
 
 /// Status for the notch, mirrored by `ReceiverMessage` in src/features/phone/airplay-source.ts.
@@ -153,6 +180,10 @@ pub fn airplay_start(app: AppHandle, state: State<'_, Airplay>, on_frame: Channe
     let exe = receiver_path(&root).ok_or(AIRPLAY_MISSING)?;
     let socket = UdpSocket::bind(("127.0.0.1", 0)).map_err(|e| format!("couldn't open a local port for AirPlay video: {e}"))?;
     socket.set_read_timeout(Some(POLL)).map_err(|e| e.to_string())?;
+    // Not fatal: with the default buffer AirPlay still works, it just recovers from bursts more slowly.
+    if let Err(error) = set_receive_buffer(&socket, RECEIVE_BUFFER_BYTES) {
+        eprintln!("{error}");
+    }
     let port = socket.local_addr().map_err(|e| e.to_string())?.port();
     let child = spawn_receiver(&root, &exe, port)?;
     state.job.bind(&child, "the AirPlay receiver")?;
@@ -191,6 +222,13 @@ mod tests {
         std::fs::write(&exe, b"").unwrap();
         assert_eq!(receiver_path(&root).as_deref(), Some(exe.as_path()));
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn video_socket_buffers_a_whole_keyframe_burst() {
+        let socket = UdpSocket::bind(("127.0.0.1", 0)).unwrap();
+        set_receive_buffer(&socket, RECEIVE_BUFFER_BYTES).unwrap();
+        assert!(receive_buffer(&socket).unwrap() >= RECEIVE_BUFFER_BYTES);
     }
 
     #[test]
