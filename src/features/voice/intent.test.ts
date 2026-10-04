@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appQuery, asksAboutScreen, classify, type Intent } from "./intent";
+import { appQuery, asksAboutScreen, classify, withoutHodeysName, type Intent } from "./intent";
 
 /** The 30 cases the idle-loop investigation validated, plus the Hinglish and Hindi ones. */
 const CASES: [string, Intent][] = [
@@ -137,6 +137,18 @@ describe("asksAboutScreen", () => {
       "let me show you something",
     ];
     for (const said of chatter) expect(asksAboutScreen(said), said).toBe(false);
+  });
+});
+
+describe("withoutHodeysName", () => {
+  it("drops Hodey's name wherever it falls, as speech recognition writes it", () => {
+    expect(withoutHodeysName("the classic one please Hodey")).toBe("the classic one please");
+    expect(withoutHodeysName("the second one hodi")).toBe("the second one");
+    expect(withoutHodeysName("दूसरा वाला होडी")).toBe("दूसरा वाला");
+  });
+
+  it("leaves words that only contain it", () => {
+    expect(withoutHodeysName("nobody told me")).toBe("nobody told me");
   });
 });
 

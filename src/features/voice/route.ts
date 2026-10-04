@@ -2,15 +2,13 @@ import type { InstalledApp, TaskPack } from "../../lib/types";
 import { withoutAddresses } from "../../providers/web/scrub";
 import { goalEvent, goalEvents } from "../hode/bridge";
 import type { HodeEvent, HodeState } from "../hode/model";
-import { appChoiceEvent, idleOpenAppEvent, openAppEvent } from "../hode/open-app";
-import { asksAboutScreen, classify, isAcknowledgement, type Intent } from "./intent";
+import { appChoiceEvent, askAgainEvent, idleOpenAppEvent, openAppEvent } from "../hode/open-app";
+import { HODEY_NAME, asksAboutScreen, classify, isAcknowledgement, type Intent } from "./intent";
 
 export { isAcknowledgement } from "./intent";
 
-/** Hodey's name as speech recognition writes it: "body", "howdy", "hodie", and (measured) "holdy", "hudi", "hodee". */
-const NAME = String.raw`(?:hode?y|hod(?:ee|[iy]e?)|hoadie|howdy|body|hold[iy]e?|hu?d[iy])`;
 /** Said before a command or question; dropped before matching. The greeting may run into the name ("heyhodi"). */
-const WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*)?${NAME}\b[,!.]?\s*`, "i");
+const WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*)?${HODEY_NAME}\b[,!.]?\s*`, "i");
 const POLITE = /\b(?:please|thanks|thank you|can you|could you)\b/gi;
 /** Utterances shorter than this (after cleanup) are noise: "um", "uh". */
 const MIN_CHARS = 3;
@@ -44,7 +42,7 @@ const COMMANDS: [RegExp, HodeEvent][] = [
 
 /** Hands-free is stricter: the room is always heard, so a mishearing ("body", "howdy") counts only
  *  after a greeting, and Hodey's name alone only in its real spellings. Includes Hindi script ("हे होडी"). */
-const HANDS_FREE_WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*${NAME}|hode?y|hod(?:ee|[iy]e?)|hoadie|(?:(?:हे|हाय|ओके)[ ,]*)?होडी)(?=[\s,!.?]|$)[,!.?]?\s*`, "i");
+const HANDS_FREE_WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*${HODEY_NAME}|hode?y|hod(?:ee|[iy]e?)|hoadie|(?:(?:हे|हाय|ओके)[ ,]*)?होडी)(?=[\s,!.?]|$)[,!.?]?\s*`, "i");
 
 /** The same controls in Hindi and Hinglish, as Hindi speech recognition writes them (in Devanagari). */
 const HINDI_COMMANDS: [string, HodeEvent][] = [
@@ -212,7 +210,8 @@ function askOrStart(text: string, intent: Intent, packs: TaskPack[], openAllowed
 
 /**
  * Idle: a task, a pack's own words or a how-to request starts a Hode; a greeting or mic check gets a reply, noise and
- * fragments nothing. A reply to "Did you mean Outlook or Outlook (classic)?" that picks one opens it.
+ * fragments nothing. A reply to "Did you mean Outlook or Outlook (classic)?" that picks one opens it, and one
+ * that tries to but can't be told apart ("normal Outlook") hears the question again.
  */
 function routeIdle(s: HodeState, text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[], visionStarting: boolean): HodeEvent[] {
   const open = appChoiceEvent(s, text, apps) ?? idleOpenAppEvent(text, apps, openAllowed);
@@ -221,7 +220,8 @@ function routeIdle(s: HodeState, text: string, packs: TaskPack[], openAllowed: b
   const intent = classify(text, { isCommand, isApp: () => false });
   if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];
   if (intent === "noise" || intent === "ack" || intent === "control" || tooShort(text)) return [];
-  return askOrStart(text, intent, packs, openAllowed, visionStarting, apps);
+  const again = intent === "unclear" ? askAgainEvent(s, text, apps) : undefined;
+  return again ? [again] : askOrStart(text, intent, packs, openAllowed, visionStarting, apps);
 }
 
 /**

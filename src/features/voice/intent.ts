@@ -22,6 +22,11 @@ const MIN_TASK_WORDS = 2;
 /** An app's name is at most this many words; longer is a task about the app ("open a new tab in Brave"). */
 const MAX_APP_NAME_WORDS = 4;
 
+/** Hodey's name as speech recognition writes it: "body", "howdy", "hodie", and (measured) "holdy", "hudi", "hodee". */
+export const HODEY_NAME = String.raw`(?:hode?y|hod(?:ee|[iy]e?)|hoadie|howdy|body|hold[iy]e?|hu?d[iy])`;
+/** That name as a word of its own, anywhere in what was said, Hindi script too ("होडी"). */
+const NAME_WORD = new RegExp(String.raw`(?<![\p{L}\p{M}\p{N}'])(?:${HODEY_NAME}|होडी)(?![\p{L}\p{M}\p{N}'])`, "giu");
+
 /** Thanks and okays: they close an answer, and with nothing running they need no reply at all. */
 const ACK_WORDS = new Set(["ok", "okay", "great", "perfect", "nice", "cool", "awesome", "alright", "understood", "thanks", "thank", "got"]);
 const ACK_FILLER = new Set(["you", "it", "so", "much", "a", "lot", "all", "right", "that", "very"]);
@@ -123,6 +128,11 @@ function isGreeting(words: string[], greeting: RegExp): boolean {
 export function asksAboutScreen(text: string): boolean {
   const words = normalize(text);
   return ASK_EN.test(words) || ASK_HI.test(words) || ON_SCREEN.test(words);
+}
+
+/** What was said without Hodey's name in it, wherever it falls ("the classic one please Hodey"). */
+export function withoutHodeysName(text: string): string {
+  return text.replace(NAME_WORD, " ").replace(/\s+/g, " ").trim();
 }
 
 function isTask(text: string, words: string[]): boolean {

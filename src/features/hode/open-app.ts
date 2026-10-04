@@ -1,7 +1,7 @@
 import { spoken } from "../../lib/spoken";
 import type { InstalledApp } from "../../lib/types";
-import { pickOption, resolveApp } from "../apps/resolve";
-import { appQuery } from "../voice/intent";
+import { mentionsOption, pickOption, resolveApp } from "../apps/resolve";
+import { appQuery, withoutHodeysName } from "../voice/intent";
 import { noop, type EventOf, type HodeEffect, type HodeEvent, type HodeState, type Transition } from "./model";
 
 /** APP_OPEN_FAILED reasons that aren't Windows failing to open it. */
@@ -46,15 +46,28 @@ export function idleOpenAppEvent(text: string, apps: InstalledApp[], openAllowed
 }
 
 /**
- * A reply to "Did you mean Outlook or Outlook (classic)?" that picks one, by name ("Outlook classic", "classic wala")
- * or by place ("the second one", "doosra"), opens it. Undefined when nothing was asked or the reply picks neither.
+ * A reply to "Did you mean Outlook or Outlook (classic)?" that picks one, by name ("Outlook classic", "classic wala"),
+ * by place ("the second one", "doosra") or as the new or old one ("naya wala"), opens it; Hodey's name in it doesn't
+ * matter. Undefined when nothing was asked or the reply picks neither.
  */
 export function appChoiceEvent(s: HodeState, text: string, apps: InstalledApp[]): HodeEvent | undefined {
   if (!s.appChoice) return undefined;
-  const picked = pickOption(text, s.appChoice);
+  const picked = pickOption(withoutHodeysName(text), s.appChoice);
   const name = picked === undefined ? undefined : s.appChoice[picked];
   const app = apps.find((candidate) => candidate.name === name);
   return app ? { type: "OPEN_APP", app, said: text } : undefined;
+}
+
+/**
+ * A reply that tries to pick but can't be told apart ("normal Outlook", "the third one"): the same question again,
+ * rather than a guess or a look at the screen. Undefined when nothing was asked or the reply is about something else.
+ */
+export function askAgainEvent(s: HodeState, text: string, apps: InstalledApp[]): HodeEvent | undefined {
+  const options = s.appChoice;
+  if (!options?.length || !mentionsOption(withoutHodeysName(text), options)) return undefined;
+  // The catalog may have changed since: the question needs only the names.
+  const app = apps.find((candidate) => candidate.name === options[0]) ?? { id: "", name: options[0], kind: "desktop" as const };
+  return { type: "APP_OPEN_FAILED", app, reason: APP_AMBIGUOUS, options };
 }
 
 /**

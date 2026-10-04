@@ -3,7 +3,7 @@ import { spoken } from "../../lib/spoken";
 import type { InstalledApp } from "../../lib/types";
 import catalog from "../apps/__fixtures__/start-apps.json";
 import { initialState, type HodeState } from "./model";
-import { APP_AMBIGUOUS, APP_NOT_FOUND, appChoiceEvent, idleOpenAppEvent, openAppEvent } from "./open-app";
+import { APP_AMBIGUOUS, APP_NOT_FOUND, appChoiceEvent, askAgainEvent, idleOpenAppEvent, openAppEvent } from "./open-app";
 import { step } from "./reducer";
 import { PACK, guideAction } from "./test-fixtures";
 
@@ -125,10 +125,34 @@ describe("choosing between the apps Hodey asked about", () => {
     expect(appChoiceEvent(asked, "the first", APPS)).toMatchObject({ type: "OPEN_APP", app: { name: "Outlook" } });
   });
 
+  it("pays no attention to Hodey's name in the reply", () => {
+    expect(appChoiceEvent(asked, "the classic one please, Hodey!", APPS)).toMatchObject({ type: "OPEN_APP", app: { name: "Outlook (classic)" }, said: "the classic one please, Hodey!" });
+    expect(appChoiceEvent(asked, "दूसरा वाला होडी", APPS)).toMatchObject({ type: "OPEN_APP", app: { name: "Outlook (classic)" } });
+  });
+
   it("is no choice when nothing was asked, the reply picks neither, or the app is gone", () => {
     expect(appChoiceEvent(initialState, "the second one", APPS)).toBeUndefined();
     expect(appChoiceEvent(asked, "the third one", APPS)).toBeUndefined();
     expect(appChoiceEvent(asked, "the second one", APPS.filter((app) => app.name !== "Outlook (classic)"))).toBeUndefined();
+  });
+
+  it("asks again when a reply tries to pick but can't be told apart, keeping the same apps", () => {
+    const again = askAgainEvent(asked, "normal outlook hodey", APPS);
+    expect(again).toEqual({ type: "APP_OPEN_FAILED", app: APPS.find((app) => app.name === "Outlook"), reason: APP_AMBIGUOUS, options: OUTLOOKS });
+    const t = step(asked, again!);
+    expect(t.state).toEqual(asked);
+    expect(t.effects).toEqual([{ type: "say", text: en.appWhich(OUTLOOKS) }]);
+    expect(askAgainEvent(asked, "the third one", APPS)).toMatchObject({ type: "APP_OPEN_FAILED", options: OUTLOOKS });
+  });
+
+  it("asks nothing again when nothing was asked or the reply is about something else", () => {
+    expect(askAgainEvent(initialState, "normal outlook", APPS)).toBeUndefined();
+    expect(askAgainEvent(asked, "great job hodey", APPS)).toBeUndefined();
+    expect(askAgainEvent(asked, "thunderbird", APPS)).toBeUndefined();
+  });
+
+  it("asks again by name when an offered app has gone from the catalog", () => {
+    expect(askAgainEvent(asked, "normal outlook", [])).toEqual({ type: "APP_OPEN_FAILED", app: { id: "", name: "Outlook", kind: "desktop" }, reason: APP_AMBIGUOUS, options: OUTLOOKS });
   });
 });
 

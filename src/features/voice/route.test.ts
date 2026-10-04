@@ -357,14 +357,35 @@ describe("answering \"Did you mean Outlook or Outlook (classic)?\"", () => {
     expect(routeApps(asked, "the first")).toMatchObject(opened("Outlook"));
     expect(routeApps(asked, "doosra wala")).toMatchObject(opened("Outlook (classic)"));
     expect(routeApps(asked, "पहला वाला")).toMatchObject(opened("Outlook"));
+    expect(routeApps(asked, "the first outlook")).toMatchObject(opened("Outlook"));
   });
 
-  it("leaves the question as it was when the reply picks neither", () => {
-    for (const said of ["the third one", "thunderbird"]) {
+  it("opens the new one or the old one, in English, Hinglish or Hindi", () => {
+    for (const said of ["naya wala", "नया वाला", "the new outlook", "new outlook", "the new one"]) {
+      expect(routeApps(asked, said), said).toMatchObject(opened("Outlook"));
+    }
+    for (const said of ["purana wala", "पुराना वाला", "the classic version", "the old one"]) {
+      expect(routeApps(asked, said), said).toMatchObject(opened("Outlook (classic)"));
+    }
+  });
+
+  it("pays no attention to Hodey's name in the reply", () => {
+    expect(routeApps(asked, "the classic one please hodey")).toMatchObject(opened("Outlook (classic)"));
+    expect(routeApps(asked, "the second one, Hodey")).toMatchObject(opened("Outlook (classic)"));
+  });
+
+  it("asks again, instead of asking about the screen, when the reply tries to pick but can't be told apart", () => {
+    for (const said of ["normal outlook", "the third one", "the new classic one"]) {
       const events = routeApps(asked, said);
-      expect(types(events), said).not.toContain("OPEN_APP");
+      expect(events, said).toEqual([{ type: "APP_OPEN_FAILED", app: expect.objectContaining({ name: "Outlook" }), reason: "ambiguous", options: ["Outlook", "Outlook (classic)"] }]);
       expect(events.reduce((s, e) => step(s, e).state, asked), said).toEqual(asked);
     }
+  });
+
+  it("leaves the question as it was when the reply is about something else", () => {
+    expect(routeApps(asked, "thunderbird")).toEqual([]);
+    expect(routeApps(asked, "great job hodey")).toEqual([]);
+    expect(routeApps(asked, "what is outlook")).toEqual([{ type: "VOICE_QUESTION", question: "what is outlook" }]);
   });
 });
 

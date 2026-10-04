@@ -190,10 +190,16 @@ const PLACES = new Map<string, number>(
 );
 /** "Number one": "one" alone is too common a word to be a place. */
 const NUMBER_ONE = /\b(?:number|option) one\b/g;
-/** Words around a pick that don't say which: "the classic one", "doosra wala", "open the first please". */
+/** Words around a pick that don't say which: "the classic one", "doosra wala", "open the first please", "the classic version". */
 const PICK_FILLER = new Set(
-  "the one option number no yes yeah ok okay i mean meant want that this it is open launch start please wala wali wale vala vali vale haan han ji wo woh ye yeh वाला वाली वाले हाँ हां जी वो वह ये यह".split(" "),
+  "the one option number version no yes yeah ok okay i mean meant want that this it is open launch start please wala wali wale vala vali vale haan han ji wo woh ye yeh वाला वाली वाले हाँ हां जी वो वह ये यह".split(" "),
 );
+/** What marks an offered app as the old kind of it: "Outlook (classic)", "Windows Media Player Legacy". */
+const OLD_MARKS = new Set(["classic", "legacy", "old"]);
+/** "The old one", "purana wala", "पुराना वाला": the offered app of the old kind. */
+const OLD_WORDS = new Set([...OLD_MARKS, "older", "purana", "purani", "purane", "पुराना", "पुरानी", "पुराने"]);
+/** "The new one", "naya wala", "नया वाला": the offered app that isn't. ("Nai" is left out: it's also "no".) */
+const NEW_WORDS = new Set(["new", "newer", "newest", "latest", "naya", "nayi", "naye", "नया", "नई", "नए", "नये", "नयी"]);
 
 function placeOf(word: string, count: number): number | undefined {
   const place = PLACES.get(word);
@@ -202,24 +208,53 @@ function placeOf(word: string, count: number): number | undefined {
   return index < count ? index : undefined;
 }
 
+/** A reply's words that could say which: without filler, and "number one" as "first". */
+const pickWords = (reply: string) => wordsOf(variantName(reply).replace(NUMBER_ONE, "first")).filter((word) => !PICK_FILLER.has(word));
+
+const namesOf = (options: string[]) => options.map((option) => wordsOf(variantName(option)));
+
 /** The one option the words name in full, else the one option holding every word ("classic"). */
-function namedOption(words: string[], options: string[]): number | undefined {
-  const names = options.map((option) => wordsOf(variantName(option)));
+function namedOption(words: string[], names: string[][]): number | undefined {
   const exact = names.flatMap((name, i) => (sameWords(name, words) ? [i] : []));
   if (exact.length === 1) return exact[0];
   const holding = names.flatMap((name, i) => (words.every((word) => name.includes(word)) ? [i] : []));
   return holding.length === 1 ? holding[0] : undefined;
 }
 
+/** The option at the place named ("the second one"), when any other words fit it too ("the first Outlook"). */
+function placedOption(words: string[], names: string[][]): number | undefined {
+  const places = words.filter((word) => PLACES.has(word));
+  const index = places.length === 1 ? placeOf(places[0], names.length) : undefined;
+  if (index === undefined) return undefined;
+  return words.every((word) => word === places[0] || names[index].includes(word)) ? index : undefined;
+}
+
+/** "The new one" or "the old one", when just one offered app is of that kind and any other words fit it too. */
+function agedOption(words: string[], names: string[][]): number | undefined {
+  const old = words.some((word) => OLD_WORDS.has(word));
+  if (old === words.some((word) => NEW_WORDS.has(word))) return undefined;
+  const kind = names.flatMap((name, i) => (name.some((word) => OLD_MARKS.has(word)) === old ? [i] : []));
+  if (kind.length !== 1) return undefined;
+  const rest = words.filter((word) => !OLD_WORDS.has(word) && !NEW_WORDS.has(word));
+  return rest.every((word) => names[kind[0]].includes(word)) ? kind[0] : undefined;
+}
+
 /**
- * Which of the offered apps a reply picks, as its index: by place ("the second one", "doosra wala", "दूसरा")
- * or by name ("Outlook classic", "classic wala"). Undefined when it picks none of them.
+ * Which of the offered apps a reply picks, as its index: by name ("Outlook classic", "classic wala"), by place
+ * ("the second one", "doosra wala", "दूसरा"), or as the new or old one ("naya wala", "the old one").
+ * Undefined when it picks none of them, or the words disagree ("the first classic").
  */
 export function pickOption(reply: string, options: string[]): number | undefined {
-  const words = wordsOf(variantName(reply).replace(NUMBER_ONE, "first")).filter((word) => !PICK_FILLER.has(word));
+  const words = pickWords(reply);
   if (words.length === 0) return undefined;
-  const place = words.length === 1 ? placeOf(words[0], options.length) : undefined;
-  return place ?? namedOption(words, options);
+  const names = namesOf(options);
+  return namedOption(words, names) ?? placedOption(words, names) ?? agedOption(words, names);
+}
+
+/** Whether a reply tries to pick one, even when it can't be told which: "normal Outlook", "the third one". */
+export function mentionsOption(reply: string, options: string[]): boolean {
+  const names = new Set(namesOf(options).flat());
+  return pickWords(reply).some((word) => PLACES.has(word) || OLD_WORDS.has(word) || NEW_WORDS.has(word) || names.has(word));
 }
 
 /** Hodeum lists itself in the Start menu; a goal about Hodeum is never about an app to go and open. */

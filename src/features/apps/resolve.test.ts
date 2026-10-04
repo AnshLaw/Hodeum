@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { InstalledApp } from "../../lib/types";
 import catalog from "./__fixtures__/start-apps.json";
-import { appNamedIn, knownAppId, pickOption, resolveApp } from "./resolve";
+import { appNamedIn, knownAppId, mentionsOption, pickOption, resolveApp } from "./resolve";
 
 /**
  * A trimmed copy of `list_apps` on the dev PC, desktop apps' window names included, traps too (WSL Settings,
@@ -93,9 +93,44 @@ describe("pickOption", () => {
     }
   });
 
+  it("picks by place and name together, when they agree", () => {
+    expect(pickOption("the first outlook", OUTLOOKS)).toBe(0);
+    expect(pickOption("second outlook", OUTLOOKS)).toBe(1);
+    expect(pickOption("the second classic one", OUTLOOKS)).toBe(1);
+    expect(pickOption("the first classic", OUTLOOKS)).toBeUndefined();
+  });
+
+  it("picks the new or the old one when only one offered app is the old kind", () => {
+    for (const said of ["the new one", "new outlook", "the new outlook app", "naya wala", "nayi wali", "नया वाला", "नई वाली", "the latest one"]) {
+      expect(pickOption(said, OUTLOOKS), said).toBe(0);
+    }
+    for (const said of ["the old one", "old outlook", "the classic version", "purana wala", "purani wali", "पुराना वाला", "पुरानी वाली", "the legacy one"]) {
+      expect(pickOption(said, OUTLOOKS), said).toBe(1);
+    }
+    expect(pickOption("the old one", ["Media Player", "Windows Media Player Legacy"])).toBe(1);
+    expect(pickOption("the new one", ["Paint", "Paint 3D"])).toBeUndefined();
+    expect(pickOption("the new classic one", OUTLOOKS)).toBeUndefined();
+  });
+
   it("picks nothing when the reply names neither, or a place past the end", () => {
-    for (const said of ["the third one", "teesra", "thunderbird", "the new one", "yes", "never mind", "open excel"]) {
+    for (const said of ["the third one", "teesra", "thunderbird", "normal outlook", "yes", "never mind", "open excel"]) {
       expect(pickOption(said, OUTLOOKS), said).toBeUndefined();
+    }
+  });
+});
+
+describe("mentionsOption", () => {
+  const OUTLOOKS = ["Outlook", "Outlook (classic)"];
+
+  it("is a reply that tries to pick: a place, the new or old one, or a word of an offered app's name", () => {
+    for (const said of ["normal outlook", "the third one", "the new classic one", "teesra wala", "classic"]) {
+      expect(mentionsOption(said, OUTLOOKS), said).toBe(true);
+    }
+  });
+
+  it("isn't a reply about something else", () => {
+    for (const said of ["thunderbird", "great job", "never mind", "the one", "open excel"]) {
+      expect(mentionsOption(said, OUTLOOKS), said).toBe(false);
     }
   });
 });
