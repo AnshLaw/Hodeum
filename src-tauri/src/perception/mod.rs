@@ -4,6 +4,7 @@ pub mod input_hook;
 pub mod model;
 mod press;
 mod uia;
+mod wanted;
 pub mod window_watch;
 
 use std::sync::atomic::AtomicIsize;
@@ -30,7 +31,8 @@ type Observed = (Observation, Option<PxRect>);
 
 /// Work for the UI Automation thread: read the learner's app, or click a control in it.
 enum Job {
-    Observe { region: Option<RectDto>, reply: mpsc::Sender<Result<Observed, String>> },
+    /// `want`: names of the controls the current lesson step needs, searched out if the walk misses them.
+    Observe { region: Option<RectDto>, want: Vec<String>, reply: mpsc::Sender<Result<Observed, String>> },
     Press { request: PressRequest, reply: mpsc::Sender<Result<(), String>> },
 }
 
@@ -79,8 +81,8 @@ fn worker(jobs: mpsc::Receiver<Job>, last_external: Arc<AtomicIsize>) {
         let reader = reader.as_ref().map_err(Clone::clone);
         // The caller may have given up (window closed); dropping the result is correct then.
         match job {
-            Job::Observe { region, reply } => {
-                let _ = reply.send(reader.and_then(|r| observe_once(r, &last_external, region)));
+            Job::Observe { region, want, reply } => {
+                let _ = reply.send(reader.and_then(|r| observe_once(r, &last_external, region, &want)));
             }
             Job::Press { request, reply } => {
                 let _ = reply.send(reader.and_then(|r| r.press(&request, now_ms())));
@@ -93,13 +95,13 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
-fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<RectDto>) -> Result<Observed, String> {
+fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<RectDto>, want: &[String]) -> Result<Observed, String> {
     let started = Instant::now();
     let hwnd = foreground::target_window(last_external)?;
-    let (elements, handles) = reader.read(hwnd.0 as isize, region)?;
+    let (elements, handles) = reader.read(hwnd.0 as isize, region, want)?;
     let elapsed = started.elapsed().as_millis();
     if elapsed > SLOW_SNAPSHOT_MS {
-        eprintln!("UIA snapshot took {elapsed} ms for {} elements", elements.len());
+        log::info!("UIA snapshot took {elapsed} ms for {} elements", elements.len());
     }
     let identity = identify_window(hwnd);
     let at = now_ms();
@@ -110,14 +112,16 @@ fn observe_once(reader: &UiaReader, last_external: &AtomicIsize, region: Option<
     Ok((observation, foreground::monitor_rect(hwnd)))
 }
 
+/// Reads the learner's app. `want`: the current lesson step's control names (at most `wanted::MAX_WANTED`),
+/// searched out when the time-boxed walk misses them, as it can in a dialog that has only just opened.
 #[tauri::command]
-pub async fn observe(app: AppHandle, region: Option<RectDto>, state: State<'_, Perception>) -> Result<Observation, String> {
+pub async fn observe(app: AppHandle, region: Option<RectDto>, want: Option<Vec<String>>, state: State<'_, Perception>) -> Result<Observation, String> {
     let (reply, result) = mpsc::channel();
     state
         .jobs
         .lock()
         .map_err(|e| e.to_string())?
-        .send(Job::Observe { region, reply })
+        .send(Job::Observe { region, want: want.unwrap_or_default(), reply })
         .map_err(|_| "The screen reader stopped.".to_string())?;
     let (observation, monitor) = tauri::async_runtime::spawn_blocking(move || result.recv().map_err(|_| "The screen reader stopped.".to_string())?)
         .await
