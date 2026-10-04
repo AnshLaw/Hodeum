@@ -18,8 +18,11 @@ export interface RuntimeDeps {
   tts: TTSProvider;
   /** Learning memory recalled at the start of a pack Hode; nudges each skill's starting level. */
   memory?: Pick<MemoryProvider, "getRelevantMemory">;
-  /** Reference steps for a spoken question (offline help, then the web if the learner allows it), as a <web> block. */
-  reference?: (question: string, app: string | undefined, signal: AbortSignal) => Promise<string | undefined>;
+  /**
+   * Reference steps for a spoken question, as a <web> block: the offline help, and the web only when `web`
+   * (the learner asked to look it up) and Settings allows it.
+   */
+  reference?: (question: string, app: string | undefined, signal: AbortSignal, options: { web: boolean }) => Promise<string | undefined>;
 }
 
 async function* once(text: string): AsyncIterable<string> {
@@ -295,12 +298,15 @@ export class HodeRuntime {
       );
   }
 
-  /** A spoken question (not Point & Ask) gets reference steps first; a failed lookup is answered without them. */
+  /**
+   * A spoken question (not Point & Ask) gets the offline help's steps first, and the web's only when the
+   * context says to look it up; a failed lookup is answered without them.
+   */
   private async withReference(context: TeachingContext, signal: AbortSignal): Promise<TeachingContext> {
     const question = context.utterance;
     if (!this.deps.reference || !question || context.focusRegion?.intent === "ask") return context;
     try {
-      const reference = await this.deps.reference(question, context.observation.app, signal);
+      const reference = await this.deps.reference(question, context.observation.app, signal, { web: context.lookUp === true });
       return reference ? { ...context, reference } : context;
     } catch (error) {
       if (!signal.aborted) console.error("Looking up the question failed; Hodey answers from the screen", error);

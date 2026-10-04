@@ -88,4 +88,13 @@ describe("lookupHowTo", () => {
     const lookup = createHowToLookup({ webEnabled: () => false });
     expect((await lookup("turn on dark mode"))?.provider).toBe(LOCAL_HELP_PROVIDER);
   });
+
+  it("leaves the web out of a call that doesn't ask for it, offline help included", async () => {
+    const search = vi.fn(async () => FOUND);
+    const lookup = createHowToLookup({ web: { search }, webEnabled: () => true });
+    expect(await lookup("how do I sort this column?", "Excel", signal(), false)).toBeUndefined();
+    expect((await lookup("turn on dark mode", "Settings", signal(), false))?.provider).toBe(LOCAL_HELP_PROVIDER);
+    expect(search).not.toHaveBeenCalled();
+    expect(await lookup("how do I sort this column?", "Excel", signal(), true)).toEqual(FOUND);
+  });
 });

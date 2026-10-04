@@ -253,6 +253,8 @@ export interface TeachingContext {
   focusedControl?: string;
   /** Reference steps found for a spoken question (offline help or the web), as one <web> block of data. */
   reference?: string;
+  /** The learner asked to look it up, or a screen-first answer came back unsure: this question may search the web. */
+  lookUp?: boolean;
 }
 
 /** A control by what it is (never by a screen read's id, which changes between reads). */

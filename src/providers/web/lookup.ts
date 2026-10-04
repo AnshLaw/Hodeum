@@ -77,7 +77,8 @@ export async function lookupHowTo(question: string, appName: string | undefined,
   return searchWeb(deps.web, query, signal, deps.onProgress);
 }
 
-/** `lookupHowTo` bound to its dependencies, for the runtime to hold. */
+/** `lookupHowTo` bound to its dependencies, for the runtime to hold. `web: false` keeps a call to the offline help. */
 export function createHowToLookup(deps: LookupDeps) {
-  return (question: string, appName?: string, signal: AbortSignal = new AbortController().signal) => lookupHowTo(question, appName, signal, deps);
+  return (question: string, appName?: string, signal: AbortSignal = new AbortController().signal, web = true) =>
+    lookupHowTo(question, appName, signal, web ? deps : { ...deps, webEnabled: false });
 }

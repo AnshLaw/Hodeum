@@ -312,12 +312,13 @@ describe("looking it up for a spoken question", () => {
     const recording: ReasoningProvider = { id: "local", reason: async (context) => (seen.push(context.reference), { kind: "answer", speech: "Here.", skill: "general", assistanceLevel: "guide" }), healthCheck: async () => true };
     const scene = new ExcelScene();
     const lookups: string[] = [];
-    const reference = async (question: string) => (lookups.push(question), "Reference for x:\n<web>\n[1] Steps\n</web>");
+    // The web only when the learner asked to look it up (`lookUp`); the offline help always.
+    const reference = async (question: string, _app: string | undefined, _signal: AbortSignal, { web }: { web: boolean }) => (lookups.push(`${question} web=${web}`), "Reference for x:\n<web>\n[1] Steps\n</web>");
     const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
     const runtime = new HodeRuntime({ perception: new MockPerception(() => scene), reasoners: [recording], skills: new MemorySkillStore(), bus: new LocalBus(), tts, reference });
     runtime.dispatch({ type: "VOICE_QUESTION", question: "how do I make a pivot table?" });
     await settle();
-    expect(lookups).toEqual(["how do I make a pivot table?"]);
+    expect(lookups).toEqual(["how do I make a pivot table? web=false"]);
     expect(seen.at(-1)).toContain("<web>");
   });
 

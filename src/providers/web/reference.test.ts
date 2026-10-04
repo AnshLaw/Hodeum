@@ -4,8 +4,10 @@ import type { WebSearch } from "./types";
 
 const FOUND: WebSearch = { query: "how to make a pivot table excel", results: [{ title: "Create a PivotTable", url: "https://support.microsoft.com/pivot", snippet: "Select a cell, then Insert > PivotTable." }] };
 
+const WEB = { web: true };
+
 /** A lookup that waits until its signal is aborted, then rejects with the reason. */
-function hanging(): (question: string, app: string | undefined, signal: AbortSignal) => Promise<WebSearch | undefined> {
+function hanging(): (question: string, app: string | undefined, signal: AbortSignal, web: boolean) => Promise<WebSearch | undefined> {
   return (_question, _app, signal) => new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
 }
 
@@ -21,19 +23,27 @@ function stopButton() {
 describe("spokenReference", () => {
   it("turns what was found into one <web> block of data", async () => {
     const reference = spokenReference(async () => FOUND, stopButton().onStop);
-    const text = await reference("how do I make a pivot table", "Excel", new AbortController().signal);
+    const text = await reference("how do I make a pivot table", "Excel", new AbortController().signal, WEB);
     expect(text).toContain("<web>");
     expect(text).toContain("[1] Create a PivotTable");
   });
 
   it("is undefined when nothing was found", async () => {
     const reference = spokenReference(async () => ({ query: "q", results: [] }), stopButton().onStop);
-    expect(await reference("q", undefined, new AbortController().signal)).toBeUndefined();
+    expect(await reference("q", undefined, new AbortController().signal, WEB)).toBeUndefined();
+  });
+
+  it("passes on whether this question may use the web", async () => {
+    const asked: boolean[] = [];
+    const reference = spokenReference(async (_question, _app, _signal, web) => (asked.push(web), FOUND), stopButton().onStop);
+    await reference("q", undefined, new AbortController().signal, { web: false });
+    await reference("q", undefined, new AbortController().signal, WEB);
+    expect(asked).toEqual([false, true]);
   });
 
   it("skips the web when the learner presses Stop, without failing the question", async () => {
     const stop = stopButton();
-    const pending = spokenReference(hanging(), stop.onStop)("how do I zip files", undefined, new AbortController().signal);
+    const pending = spokenReference(hanging(), stop.onStop)("how do I zip files", undefined, new AbortController().signal, WEB);
     stop.press();
     await expect(pending).resolves.toBeUndefined();
     expect(stop.listening()).toBe(0);
@@ -41,7 +51,7 @@ describe("spokenReference", () => {
 
   it("still rejects when the question itself is cancelled", async () => {
     const request = new AbortController();
-    const pending = spokenReference(hanging(), stopButton().onStop)("how do I zip files", undefined, request.signal);
+    const pending = spokenReference(hanging(), stopButton().onStop)("how do I zip files", undefined, request.signal, WEB);
     request.abort(new Error("newer request"));
     await expect(pending).rejects.toThrow("newer request");
   });
