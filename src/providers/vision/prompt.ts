@@ -2,6 +2,7 @@ import { center, containsPoint, intersects } from "../../lib/coords";
 import type { ReplyLanguage } from "../../lib/language";
 import type { Rect, TeachingContext, UiElement } from "../../lib/types";
 import { nameMatches } from "../../features/hode/signals";
+import { describeActions } from "../../features/hode/change";
 import { BOX_SCALE } from "./schema";
 import type { CapturedFrame } from "./types";
 
@@ -104,6 +105,11 @@ function taskLines(context: TeachingContext, frame: CapturedFrame): string[] {
   if (context.step) lines.push(`Current step: ${context.step.objective}. Expected labels: ${context.step.target.names.join(", ")}.`);
   lines.push(`How much help to give: ${context.assistanceLevel} (demonstrate = explicit, hint = a nudge without naming the control).`);
   if (context.correction) lines.push(`The learner just made a mistake: ${context.correction}`);
+  const recent = context.recentActions ?? [];
+  if (recent.length > 0) {
+    lines.push("The learner's last actions (oldest first) and what each changed:");
+    lines.push(...describeActions(recent, (ref) => `${untrusted(ref.role)} <screen>${untrusted(ref.name)}</screen>`));
+  }
   const region = context.focusRegion;
   if (region?.intent === "ask") {
     const box = toImageBox(region.shape.bounds, frame.rect).join(", ");

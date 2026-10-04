@@ -105,6 +105,12 @@ export interface HodeState {
   ack?: string;
   /** The last acknowledgement used, so the next one is a different phrase. */
   lastAck?: string;
+  /** The running request reached a slow reasoner (vision model or cloud); cheap local re-checks never set it. */
+  thinking?: boolean;
+  /** Re-pointing after the target came into view or moved: an unchanged instruction isn't said again. */
+  repointing?: boolean;
+  /** The stuck timer already explained and reset this step at the most help; it now waits for the learner. */
+  toppedOut?: boolean;
 }
 
 export const initialState: HodeState = {
@@ -150,6 +156,8 @@ export type HodeEvent =
   | { type: "SHOW_ALL_STEPS" }
   | { type: "OBSERVED"; observation: ScreenObservation }
   | { type: "ACTION_READY"; requestId: number; action: TeachingAction; failures: string[] }
+  /** Request `requestId` reached a slow reasoner (vision model or cloud): now Hodey is really thinking. */
+  | { type: "THINKING"; requestId: number }
   | { type: "LEARNER_ACTED"; observation: ScreenObservation }
   | { type: "STUCK_TIMEOUT" }
   /** The learner said they can't find it ("where?", "I don't see it", "कहाँ है"). */
@@ -205,6 +213,15 @@ export function currentStep(state: HodeState): TaskStep | undefined {
 
 export function withLeadingEffects(transition: Transition, effects: HodeEffect[]): Transition {
   return { state: transition.state, effects: [...effects, ...transition.effects] };
+}
+
+/**
+ * Reasoning that's only a quick local re-check of guidance already shown (no vision model or cloud
+ * working, no question asked): the guidance stays up instead of Hodey visibly "thinking".
+ */
+export function rechecking(s: HodeState): boolean {
+  const asking = s.spokenQuestion !== undefined || s.question !== undefined;
+  return s.phase === "reasoning" && s.thinking !== true && !asking && s.action !== undefined && s.action.kind !== "answer";
 }
 
 export function pinFor(state: HodeState): Rect | undefined {

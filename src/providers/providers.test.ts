@@ -123,6 +123,15 @@ describe("reasonWithFallback", () => {
     expect(routed.action.kind).toBe("guide");
   });
 
+  it("passes the thinking hook to every provider it tries", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const seen: unknown[] = [];
+    const spy: ReasoningProvider = { id: "spy", reason: async (_context, hooks) => (seen.push(hooks), Promise.reject(new Error("no"))), healthCheck: async () => true };
+    const hooks = { onThinking: vi.fn() };
+    await reasonWithFallback([spy, reasoner], ctx(), hooks);
+    expect(seen).toEqual([hooks]);
+  });
+
   it("throws when every provider fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     await expect(reasonWithFallback([failing], ctx())).rejects.toThrow(/All reasoning providers failed — gemini: quota/);

@@ -45,6 +45,14 @@ describe("vision prompt", () => {
     expect(user.content[1].text).toContain('kind "answer"');
   });
 
+  it("tells the local model what the learner's last actions changed", () => {
+    const recentActions: TeachingContext["recentActions"] = [
+      { inputs: ["click"], clicked: { role: "tab item", name: "Data" }, change: { windowChanged: false, appeared: [], disappeared: [], selected: [{ role: "tab item", name: "Data" }], deselected: [], moved: [] }, verdict: "off_track" },
+    ];
+    const [, user] = buildMessages(ctx({ recentActions }), [], FRAME) as [unknown, { content: { type: string; text?: string }[] }];
+    expect(user.content[1].text).toContain('click on tab item <screen>Data</screen>: selected tab item <screen>Data</screen>');
+  });
+
   it("sends the screenshot and a numbered control list", () => {
     const [, user] = buildMessages(ctx(), selectCandidates(ctx()), FRAME) as [unknown, { content: { type: string; text?: string }[] }];
     expect(user.content[0].type).toBe("image_url");
@@ -129,6 +137,16 @@ describe("LocalReasoningProvider", () => {
     await expect(local.reason(ctx())).resolves.toMatchObject({ speech: "vision" });
     const asking = new LocalReasoningProvider(stub(action("answer", "pack answer")), stub(action("answer", "vision answer")), () => true);
     await expect(asking.reason(ctx({ focusRegion: annotation("ask", INSERT_BOUNDS, "?") }))).resolves.toMatchObject({ speech: "vision answer" });
+  });
+
+  it("says it's thinking only when the vision model actually runs", async () => {
+    const onThinking = vi.fn();
+    await new LocalReasoningProvider(stub(action("guide", "planner")), stub(action("guide")), () => true).reason(ctx(), { onThinking });
+    expect(onThinking).not.toHaveBeenCalled();
+    await new LocalReasoningProvider(stub(action("clarify")), stub(action("guide", "vision")), () => false).reason(ctx(), { onThinking });
+    expect(onThinking).not.toHaveBeenCalled();
+    await new LocalReasoningProvider(stub(action("clarify")), stub(action("guide", "vision")), () => true).reason(ctx(), { onThinking });
+    expect(onThinking).toHaveBeenCalledTimes(1);
   });
 
   it("falls back to the planner when vision fails or isn't ready", async () => {

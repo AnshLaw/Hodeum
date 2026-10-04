@@ -1,4 +1,4 @@
-import { onGoalSubmitted, onSkillLoaded, onStartHode } from "./flow";
+import { onGoalSubmitted, onSkillLoaded, onStartHode, onThinking } from "./flow";
 import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
 import { onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onStuckTimeout } from "./learner";
 import type { EventOf, HodeEvent, HodeState, Transition } from "./model";
@@ -27,6 +27,7 @@ const handlers: Handlers = {
   SKILL_LOADED: onSkillLoaded,
   OBSERVED: onObservedStep,
   ACTION_READY: onActionReadyActing,
+  THINKING: onThinking,
   HODEY_ACTED: onHodeyActed,
   PERFORM_FAILED: onPerformFailed,
   LEARNER_ACTED: onLearnerActed,

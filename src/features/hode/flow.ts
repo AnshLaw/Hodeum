@@ -13,6 +13,7 @@ import {
   type HodeState,
   type Transition,
 } from "./model";
+import { summarizeActions } from "./change";
 import { neighboursOf } from "./neighbours";
 import { confidenceBand, nudgeStartLevel, overlayFor } from "./policy";
 
@@ -83,6 +84,8 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       actedWhilePreparing: false,
       handedBack: false,
       hodeyTries: 0,
+      repointing: false,
+      toppedOut: false,
     },
     effects: [{ type: "loadSkill", skillId: step.skill }],
   };
@@ -117,6 +120,7 @@ function contextFor(s: HodeState, observation: ScreenObservation): TeachingConte
     openGoal: s.open,
     lastInstruction: s.open ? s.action?.speech : undefined,
     language: s.language,
+    recentActions: summarizeActions(s.stepActions, currentStep(s)),
   };
 }
 
@@ -124,9 +128,15 @@ export function requestReason(s: HodeState): Transition {
   if (!s.observation) return { state: { ...s, phase: "observing" }, effects: [{ type: "observe" }] };
   const requestId = s.requestId + 1;
   return {
-    state: { ...s, phase: "reasoning", requestId },
+    state: { ...s, phase: "reasoning", requestId, thinking: false },
     effects: [{ type: "reason", requestId, context: contextFor(s, s.observation) }],
   };
+}
+
+/** The running request reached the vision model or the cloud; a stale request's news is dropped. */
+export function onThinking(s: HodeState, e: EventOf<"THINKING">): Transition {
+  if (s.phase !== "reasoning" || e.requestId !== s.requestId || s.thinking) return noop(s);
+  return { state: { ...s, thinking: true }, effects: [] };
 }
 
 export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transition {
@@ -166,8 +176,8 @@ export function withWhy(s: HodeState, action: TeachingAction): TeachingAction {
 
 /** What to say for this guidance: the previous step's acknowledgement first, then the instruction. */
 function lineFor(s: HodeState, action: TeachingAction): string {
-  // On the phone every scroll re-locates the target; saying the same sentence again would nag.
-  const repeat = s.pack?.surface === "phone" && action.speech === s.action?.speech;
+  // Re-pointing (a scroll, the target coming into view) moves the highlight; saying the same sentence again would nag.
+  const repeat = (s.pack?.surface === "phone" || s.repointing === true) && action.speech === s.action?.speech;
   const instruction = repeat ? "" : action.speech;
   return [s.pendingAck ?? "", instruction].filter((part) => part !== "").join(" ");
 }
@@ -180,7 +190,7 @@ export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
   if (line !== "") effects.push({ type: "say", text: line });
   effects.push({ type: "startStuckTimer", ms: STUCK_MS });
   const ack = s.pendingAck ?? s.ack;
-  return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false, pendingAck: undefined, ack }, effects };
+  return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false, pendingAck: undefined, ack, repointing: false }, effects };
 }
 
 function finishOpenHode(s: HodeState, action: TeachingAction): Transition {

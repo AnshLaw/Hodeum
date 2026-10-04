@@ -172,6 +172,39 @@ export interface TeachingContext {
   lastInstruction?: string;
   /** What to reply in; English when absent. */
   language?: ReplyLanguage;
+  /** The learner's last few actions this step, oldest first: what they did and what it changed. */
+  recentActions?: ActionSummary[];
+}
+
+/** A control by what it is (never by a screen read's id, which changes between reads). */
+export interface ControlRef {
+  role: string;
+  name: string;
+}
+
+/** What differs between two screen reads of the learner's app. */
+export interface ScreenChange {
+  /** Another app or window title. */
+  windowChanged: boolean;
+  appeared: ControlRef[];
+  disappeared: ControlRef[];
+  selected: ControlRef[];
+  deselected: ControlRef[];
+  moved: ControlRef[];
+}
+
+/**
+ * How a learner action bears on the current step: nothing changed, only noise (hover, status text),
+ * progress (the step's target came into view or moved), or off track (anything else that matters).
+ */
+export type ActionVerdict = "unchanged" | "noise" | "progress" | "off_track";
+
+export interface ActionSummary {
+  inputs: LearnerInput["kind"][];
+  /** The control the last click landed on, if any. */
+  clicked?: ControlRef;
+  change: ScreenChange;
+  verdict: ActionVerdict;
 }
 
 export type SkillStatus = "new" | "learning" | "mastered";

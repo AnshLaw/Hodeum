@@ -89,6 +89,37 @@ describe("HodeRuntime end to end", () => {
     expect(h.spoken.at(-1)).toBe(COPY.hodeCompleteSpeech);
   });
 
+  it("shows Hodey thinking only while a slow reasoner works on the current request", async () => {
+    let finish: () => void = () => undefined;
+    const planner = new TaskPackReasoningProvider();
+    const slow: ReasoningProvider = {
+      id: "local-qwen3-vl",
+      reason: (context, hooks) => {
+        hooks?.onThinking?.();
+        return new Promise((resolve) => (finish = () => resolve(planner.reason(context))));
+      },
+      healthCheck: async () => true,
+    };
+    const h = setup([slow]);
+    await h.start();
+    expect(h.state()).toMatchObject({ phase: "reasoning", thinking: true });
+    finish();
+    await settle();
+    expect(h.state()).toMatchObject({ phase: "guiding" });
+  });
+
+  it("an action that changes nothing on screen leaves guidance alone: no reasoning, no speech", async () => {
+    const reason = vi.fn((context) => new TaskPackReasoningProvider().reason(context));
+    const h = setup([{ id: "local", reason, healthCheck: async () => true }]);
+    await h.start();
+    const calls = reason.mock.calls.length;
+    const said = h.spoken.length;
+    await h.act("nothing-here");
+    expect(reason.mock.calls.length).toBe(calls);
+    expect(h.spoken.length).toBe(said);
+    expect(h.state()).toMatchObject({ phase: "guiding", wrongActions: 0 });
+  });
+
   it("gives less help on a repeated skill in the next Hode", async () => {
     const skills = new MemorySkillStore();
     const first = setup(undefined, skills);

@@ -1,10 +1,11 @@
 import { DEFAULT_GEMINI_MODEL } from "../../data/settings";
 import type { ActionTarget, StateSignal, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
-import type { ReasoningProvider } from "../interfaces";
+import type { ReasoningHooks, ReasoningProvider } from "../interfaces";
 import { LANGUAGE_LINES, selectCandidates, untrusted } from "../vision/prompt";
 import { validateReply, type VisionReply } from "../vision/schema";
 import { CloudSkipped } from "./gated";
-import { cloudName } from "./redact";
+import { describeActions, type ControlLabel } from "../../features/hode/change";
+import { CONTENT_PLACEHOLDER as HIDDEN, cloudName } from "./redact";
 
 export { CONTENT_PLACEHOLDER } from "./redact";
 import type { KeyPresence } from "./keys";
@@ -68,6 +69,21 @@ function stepLines(context: TeachingContext): string[] {
   return lines;
 }
 
+/** Interface controls by their scrubbed labels; content (file names, typed text) is never named, only counted. */
+function cloudLabel(step: TeachingContext["step"]): ControlLabel {
+  return (ref) => {
+    const name = cloudName(ref, step);
+    return name === HIDDEN ? undefined : `${untrusted(ref.role)} <screen>${name}</screen>`;
+  };
+}
+
+/** What the learner's last few actions changed, so Gemini can tell a near miss from being lost. */
+function recentLines(context: TeachingContext): string[] {
+  const actions = context.recentActions ?? [];
+  if (actions.length === 0) return [];
+  return ["The learner's last actions on this step (oldest first) and what each changed:", ...describeActions(actions, cloudLabel(context.step))];
+}
+
 /** Gemini only ever gets lesson Hodes (open goals stay local), so there's always a planned next step. */
 function instructionLines(context: TeachingContext): string[] {
   const lines = ['Tell the learner the next thing to do with kind "guide".'];
@@ -89,7 +105,7 @@ function controlList(candidates: UiElement[], step: TeachingContext["step"]): st
 
 /** Text-only request: the lesson step, the skill level and the listed controls with content hidden. Never the learner's words. */
 export function buildGeminiRequest(context: TeachingContext, candidates: UiElement[]): GeminiRequest {
-  const prompt = [...stepLines(context), ...instructionLines(context), "", "Controls:", controlList(candidates, context.step) || "(none found)"].join("\n");
+  const prompt = [...stepLines(context), ...recentLines(context), ...instructionLines(context), "", "Controls:", controlList(candidates, context.step) || "(none found)"].join("\n");
   return { system: SYSTEM_PROMPT, prompt };
 }
 
@@ -126,12 +142,13 @@ export class GeminiReasoningProvider implements ReasoningProvider {
     return { request: buildGeminiRequest(context, candidates), candidates };
   }
 
-  async reason(context: TeachingContext): Promise<TeachingAction> {
+  async reason(context: TeachingContext, hooks?: ReasoningHooks): Promise<TeachingAction> {
     // Answering needs the learner's words, which never leave the PC: the local model takes it.
     if (context.utterance || context.focusRegion?.intent === "ask") throw new CloudSkipped("gemini", "learner questions stay on this PC");
     // An open goal has no lesson: its only description is the learner's own words.
     if (context.openGoal || !context.pack) throw new CloudSkipped("gemini", "open-ended goals stay on this PC");
     const { request, candidates } = this.request(context);
+    hooks?.onThinking?.();
     const raw = await this.bridge.invoke<unknown>("gemini_reason", { request, model: this.model });
     return toGeminiAction(validateReply(raw, "Gemini"), candidates, context);
   }

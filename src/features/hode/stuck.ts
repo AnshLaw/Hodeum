@@ -50,14 +50,21 @@ function lastClick(observation: ScreenObservation): Point | undefined {
   return clicks.at(-1)?.at;
 }
 
-/** The control a click landed on, if it isn't (inside) the step's target. Undefined for empty space. */
-function wrongControl(action: StepAction, step: TaskStep): UiElement | undefined {
+/** The control (not a container) the action's last click landed on, on the screen it was made on. Undefined for empty space. */
+export function clickedControl(action: StepAction): UiElement | undefined {
   const at = lastClick(action.after);
   if (!at) return undefined;
   const screen = action.before ?? action.after;
-  if (targets(step, screen).some((t) => containsPoint(t.bounds, at))) return undefined;
   const hit = screen.elements.filter((e) => containsPoint(e.bounds, at)).sort((a, b) => area(a.bounds) - area(b.bounds))[0];
   return hit && !CONTAINER_ROLES.has(hit.role.toLowerCase()) ? hit : undefined;
+}
+
+/** The control a click landed on, if it isn't (inside) the step's target. Undefined for empty space. */
+export function wrongControl(action: StepAction, step: TaskStep): UiElement | undefined {
+  const at = lastClick(action.after);
+  if (!at) return undefined;
+  if (targets(step, action.before ?? action.after).some((t) => containsPoint(t.bounds, at))) return undefined;
+  return clickedControl(action);
 }
 
 function repeatedClick(history: StepAction[], step: TaskStep): StuckSignal | undefined {

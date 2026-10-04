@@ -17,6 +17,13 @@ describe("hodeyMood", () => {
     expect(hodeyMood(at({ phase: "reasoning" }), false)).toBe("thinking");
   });
 
+  it("only thinks when a vision model or the cloud is working, not for a quick local re-check", () => {
+    const action = guideAction();
+    expect(hodeyMood(at({ phase: "reasoning", action }), false)).toBe("guiding");
+    expect(hodeyMood(at({ phase: "reasoning", action, thinking: true }), false)).toBe("thinking");
+    expect(hodeyMood(at({ phase: "reasoning", action, spokenQuestion: "what is this" }), false)).toBe("thinking");
+  });
+
   it("guides, watches when you work unaided, and reacts to a mistake", () => {
     expect(hodeyMood(at({ phase: "guiding", action: guideAction() }), false)).toBe("guiding");
     expect(hodeyMood(at({ phase: "guiding", level: "observe", action: guideAction() }), false)).toBe("watching");

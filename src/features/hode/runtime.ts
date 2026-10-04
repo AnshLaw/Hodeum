@@ -208,7 +208,8 @@ export class HodeRuntime {
   }
 
   private reason(requestId: number, context: TeachingContext): void {
-    reasonWithFallback(this.deps.reasoners, context).then(
+    const hooks = { onThinking: () => this.dispatch({ type: "THINKING", requestId }) };
+    reasonWithFallback(this.deps.reasoners, context, hooks).then(
       ({ action, failures }) => this.dispatch({ type: "ACTION_READY", requestId, action, failures }),
       (error) => this.fail("Hodey couldn't work out the next step", error, requestId),
     );

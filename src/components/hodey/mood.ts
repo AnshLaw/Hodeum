@@ -1,4 +1,4 @@
-import { type HodeState } from "../../features/hode/model";
+import { rechecking, type HodeState } from "../../features/hode/model";
 
 /** What Hodey's face is doing. Each mood is an animated expression in `HodeyFace`. */
 export type HodeyMood =
@@ -64,7 +64,7 @@ export function hodeyMood(s: HodeState, hovered: boolean): HodeyMood {
     case "observing":
       return "looking";
     case "reasoning":
-      return "thinking";
+      return rechecking(s) ? guidingMood(s) : "thinking";
     case "guiding":
       return guidingMood(s);
     case "answering":

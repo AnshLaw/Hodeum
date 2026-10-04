@@ -1,5 +1,6 @@
 import { spoken } from "../../lib/spoken";
-import { ASSISTANCE_LEVELS, type ScreenObservation, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
+import { ASSISTANCE_LEVELS, type ActionVerdict, type ScreenObservation, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
+import { assessAction, mattered } from "./change";
 import { beginStep, inWrongApp, onObserved, requestReason, waitForApp } from "./flow";
 import { takeOver } from "./execute";
 import {
@@ -86,11 +87,21 @@ function afterSurprise(s: HodeState, surprise: string): Transition {
   return withLeadingEffects(requestReason({ ...s, surprise: undefined }), [CANCEL_TIMER]);
 }
 
-/** The action didn't finish the step and wasn't a known mistake: stuck, or just one more try. */
-function onUnfinishedAction(s: HodeState, step: TaskStep, wasReasoning: boolean): Transition {
+/** Nothing that matters changed: guidance (or the reasoning in flight) still fits the screen. */
+const quiet = (s: HodeState): Transition => ({ state: s, effects: [] });
+
+/** The target came into view or moved: point at it again, without counting a wrong action. */
+function repoint(s: HodeState): Transition {
+  return withLeadingEffects(requestReason({ ...s, repointing: true }), [CANCEL_TIMER]);
+}
+
+/** The action didn't finish the step and wasn't a known mistake: stuck, re-point, nothing, or one more try. */
+function onUnfinishedAction(s: HodeState, step: TaskStep, wasReasoning: boolean, verdict: ActionVerdict): Transition {
   if (s.surprise) return afterSurprise(s, s.surprise);
   const signal = detectStuck(s.stepActions, step, s.pack);
   if (signal) return onStuckSignal(s, step, signal);
+  if (verdict === "progress") return repoint(s);
+  if (!mattered(verdict)) return quiet(s);
   const wrongActions = s.wrongActions + 1;
   if (wrongActions >= MAX_WRONG_ACTIONS) {
     return withLeadingEffects(requestReason(escalateState(s, { countsAsMistake: true })), [CANCEL_TIMER]);
@@ -131,10 +142,12 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
   return withLeadingEffects(beginStep(acknowledged, nextIndex), done);
 }
 
-/** Open-ended Hodes have no success signal to check, so every learner action asks the model what's next. */
+/** Open-ended Hodes have no success signal to check, so every action that changed something asks the model what's next. */
 function onOpenAction(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
   if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
-  return withLeadingEffects(requestReason({ ...s, observation: e.observation, waitingForApp: undefined }), [CANCEL_TIMER]);
+  const next: HodeState = { ...s, observation: e.observation, waitingForApp: undefined };
+  if (!s.waitingForApp && !mattered(assessAction({ before: s.observation, after: e.observation }))) return quiet(next);
+  return withLeadingEffects(requestReason(next), [CANCEL_TIMER]);
 }
 
 /** A lesson step being prepared (skill loading, screen being read), not a question being answered. */
@@ -165,8 +178,12 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
   if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
   if (s.waitingForApp) return requestReason({ ...s, observation: e.observation, waitingForApp: undefined });
   const previous = s.observation;
-  const stepActions = remember(s.stepActions, { before: previous, after: e.observation });
-  const next: HodeState = { ...s, observation: e.observation, stepActions, ack: undefined };
+  const action = { before: previous, after: e.observation };
+  const verdict = assessAction(action, step);
+  const stepActions = remember(s.stepActions, action);
+  // Something that matters happened: the stuck timer's reset at the most help may be given again.
+  const toppedOut = s.toppedOut === true && !mattered(verdict);
+  const next: HodeState = { ...s, observation: e.observation, stepActions, ack: undefined, toppedOut };
   if (evaluateSignal(step.success, e.observation)) return completeStep(next, step);
   const mistake = step.mistakes.find((m) => becameTrue(m.signal, previous, e.observation));
   if (mistake) {
@@ -175,13 +192,19 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
   }
   // On the phone, screen changes are mostly navigation (scrolling, going back), not mistakes; known
   // mistakes are caught above and hesitation by the stuck timer. Re-locate so the highlight follows.
-  if (s.pack?.surface === "phone") return withLeadingEffects(requestReason(next), [CANCEL_TIMER]);
-  return onUnfinishedAction(next, step, s.phase === "reasoning");
+  if (s.pack?.surface === "phone") return mattered(verdict) ? repoint(next) : quiet(next);
+  return onUnfinishedAction(next, step, s.phase === "reasoning", verdict);
 }
 
+/**
+ * Hesitation raises help one rung per timeout. At the most help the step is explained and reset once;
+ * after that Hodey waits for the learner (an action that matters, or a hint request) instead of
+ * re-deciding and repeating itself every few seconds while they look around.
+ */
 export function onStuckTimeout(s: HodeState): Transition {
-  if (s.phase !== "guiding") return noop(s);
-  return requestReason(raiseHelp(s, { countsAsMistake: false }));
+  if (s.phase !== "guiding" || s.toppedOut) return noop(s);
+  const toppedOut = s.level === MOST_HELP && currentStep(s) !== undefined;
+  return requestReason(raiseHelp({ ...s, toppedOut }, { countsAsMistake: false }));
 }
 
 export function onHintRequested(s: HodeState): Transition {

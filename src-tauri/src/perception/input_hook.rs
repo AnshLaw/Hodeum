@@ -16,7 +16,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     XBUTTON1,
 };
 #[cfg(test)]
-use windows::Win32::UI::WindowsAndMessaging::XBUTTON2;
+use windows::Win32::UI::WindowsAndMessaging::{WM_LBUTTONDOWN, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, XBUTTON2};
 
 use super::foreground::{root_window, window_pid};
 
@@ -231,6 +231,14 @@ mod tests {
         assert_eq!(mouse_input(WM_RBUTTONUP, 0, at), Some(LearnerInput::Click { at, button: MouseButton::Right }));
         assert_eq!(mouse_input(WM_XBUTTONUP, XBUTTON1, at), Some(LearnerInput::Back));
         assert_eq!(mouse_input(WM_XBUTTONUP, XBUTTON2, at), None);
+    }
+
+    #[test]
+    fn pointer_movement_wheel_and_button_presses_are_never_learner_actions() {
+        let at = PointDto { x: 10.0, y: 20.0 };
+        for message in [WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_MOUSEHWHEEL, WM_LBUTTONDOWN, WM_RBUTTONDOWN] {
+            assert_eq!(mouse_input(message, 0, at), None, "message {message:#x}");
+        }
     }
 
     #[test]
