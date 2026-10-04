@@ -96,6 +96,21 @@ export const ExpandIcon = () => (
   </svg>
 );
 
+export const ListIcon = () => (
+  <svg {...BASE}>
+    <path d="M6 4.5h7M6 8h7M6 11.5h7" />
+    <circle cx="3" cy="4.5" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="3" cy="8" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="3" cy="11.5" r="0.9" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const SendIcon = () => (
+  <svg {...BASE}>
+    <path d="M8 13V3.5M3.8 7.5 8 3.3l4.2 4.2" />
+  </svg>
+);
+
 export function IconButton({ label, onClick, children, pressed, danger }: { label: string; onClick: () => void; children: ReactNode; pressed?: boolean; danger?: boolean }) {
   return (
     <button type="button" className={danger ? "icon-btn icon-btn--danger" : "icon-btn"} aria-label={label} title={label} aria-pressed={pressed} onClick={onClick}>
