@@ -301,6 +301,7 @@ export function onLookAgain(s: HodeState): Transition {
 export function onAppSwitched(s: HodeState, e: EventOf<"APP_SWITCHED">): Transition {
   if (e.away === true) return steppedAway(s);
   if (e.away === false && s.away === true) return cameBack(s);
+  if (s.phase === "idle" || s.phase === "goal_entry") return settledNotice(s);
   if (s.phase !== "guiding") return noop(s);
   // The ring on the taskbar's search box has done its job once another window comes forward.
   if (s.waitingForApp) return withLeadingEffects(onLookAgain(s), [{ type: "clearOverlay" }]);
@@ -313,6 +314,16 @@ export function onAppSwitched(s: HodeState, e: EventOf<"APP_SWITCHED">): Transit
 export function onPointerRested(s: HodeState): Transition {
   if (s.phase !== "guiding" || s.action?.kind !== "clarify" || s.waitingForApp !== undefined || s.away === true) return noop(s);
   return { state: { ...s, phase: "observing", reobserved: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
+}
+
+/**
+ * With no Hode running, a notice answers the learner's last words ("Opening Settings…"): once another window
+ * comes forward it's done, and left up it would greet them at the next hover. A question still waiting for an
+ * answer (which Outlook?) stays.
+ */
+function settledNotice(s: HodeState): Transition {
+  if (s.notice === undefined || s.appChoice !== undefined) return noop(s);
+  return { state: { ...s, notice: undefined }, effects: [] };
 }
 
 /** Phases of a running Hode the learner can step away from. */
