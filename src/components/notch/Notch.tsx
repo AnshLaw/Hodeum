@@ -18,7 +18,8 @@ import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
-import { EXPANDED_SIZES, NOTCH_WIDTHS, inScript, islandSize, notchView, stepItems, type NotchSize, type NotchView } from "./notch-view";
+import { EXPANDED_SIZES, NOTCH_WIDTHS, inScript, islandSize, notchView, stepItems, voiceNotice, type NotchSize, type NotchView } from "./notch-view";
+import type { NativeVoiceStatus } from "../../providers/speech/native-voice";
 import { HodeyFace } from "../hodey/HodeyFace";
 import { hodeyMood, type HodeyMood } from "../hodey/mood";
 import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
@@ -38,6 +39,8 @@ export interface NotchProps {
   packs: TaskPack[];
   /** Shown while idle when something degraded at boot (e.g. the skill database). */
   bootNotice?: string;
+  /** Hodey's local voice engine, to say when the natural voice is missing. */
+  voiceStatus?: Pick<NativeVoiceStatus, "current" | "subscribe">;
   /** The local vision model's status (desktop app only). */
   vision?: VisionStatusSource;
   activity: ActivityTracker;
@@ -211,9 +214,17 @@ function useNotchActions(speech: SpeechInput, shell: NativeShell, surfaceRef: Re
 }
 
 /** Hodey's surface: a top-centre notch or a side sidebar, draggable between them, with auto-hide. */
-export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity: tracker, speech, script, phone, skills: skillSource }: NotchProps) {
+/** The natural voice's install state: "missing" means Hodey speaks with the Windows voice. */
+function useTtsState(source?: Pick<NativeVoiceStatus, "current" | "subscribe">) {
+  const [tts, setTts] = useState(source?.current()?.tts);
+  useEffect(() => source?.subscribe((status) => setTts(status.tts)), [source]);
+  return tts;
+}
+
+export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vision, activity: tracker, speech, script, phone, skills: skillSource }: NotchProps) {
   const state = useHodeState(runtime);
   const visionStatus = useVisionStatus(vision);
+  const notice = bootNotice ?? voiceNotice(useTtsState(voiceStatus));
   const show = script?.() === "roman" ? romanize : (text: string) => text;
   const view = inScript(notchView(state), show);
   const surfaceRef = useRef<HTMLElement>(null);
@@ -245,7 +256,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, vision, activity
     dock,
     packs,
     shell,
-    bootNotice,
+    bootNotice: notice,
     vision: visionStatus,
     onControl,
     onToggleMute: () => {

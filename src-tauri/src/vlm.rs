@@ -75,10 +75,11 @@ impl Vlm {
     }
 }
 
-/// Where `models/` and `runtime/` live: the repository root this build was compiled from.
-/// Deliberately not overridable by environment variables, so nothing can redirect which server binary runs.
+/// Where `models/` and `runtime/` live: the checkout this build was compiled from, or for a git
+/// worktree without its own models, the main checkout's (resolved by build.rs, see ai_root.rs).
+/// Fixed at build time and not overridable at runtime, so nothing can redirect which server binary runs.
 pub fn local_ai_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+    PathBuf::from(env!("HODEUM_LOCAL_AI_ROOT"))
 }
 
 /// A fresh 128-bit secret per launch (RandomState is seeded from OS randomness).

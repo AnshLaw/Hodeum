@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { COPY } from "../../lib/copy";
 import { initialState, type HodeState } from "../../features/hode/model";
 import { PACK, guideAction } from "../../features/hode/test-fixtures";
-import { NOTCH_WIDTHS, isExpanded, islandSize, notchView, providerBadge, skillLabel, stepItems } from "./notch-view";
+import { NOTCH_WIDTHS, isExpanded, islandSize, notchView, providerBadge, skillLabel, stepItems, voiceNotice } from "./notch-view";
 
 const guiding = (overrides: Partial<HodeState> = {}): HodeState => ({
   ...initialState,
@@ -148,5 +148,14 @@ describe("providerBadge", () => {
   it("says Local unless a cloud provider may receive context", () => {
     expect(providerBadge(false)).toEqual({ label: COPY.local, title: COPY.localTitle, variant: "local" });
     expect(providerBadge(true)).toEqual({ label: COPY.enhanced, title: COPY.enhancedTitle, variant: "enhanced" });
+  });
+});
+
+describe("voiceNotice", () => {
+  it("says so when Hodey's natural voice isn't installed, instead of quietly sounding robotic", () => {
+    expect(voiceNotice("missing")).toBe(COPY.naturalVoiceMissing);
+    expect(voiceNotice("ready")).toBeUndefined();
+    expect(voiceNotice("loading")).toBeUndefined();
+    expect(voiceNotice(undefined)).toBeUndefined();
   });
 });
