@@ -1,6 +1,7 @@
 mod app_focus;
 mod app_window;
 mod chat_context;
+mod child_job;
 mod db;
 mod dock;
 mod hit_test;
@@ -54,6 +55,7 @@ pub fn run() {
         .manage(dock::DockState::default())
         .manage(surfaces::FocusReturn::default())
         .manage(vlm::Vlm::default())
+        .manage(phone::airplay::Airplay::default())
         .invoke_handler(tauri::generate_handler![
             surfaces::set_notch_hit_rect,
             surfaces::set_notch_activatable,
@@ -62,6 +64,8 @@ pub fn run() {
             perception::observe,
             perception::capture_active_window,
             phone::ocr_frame,
+            phone::airplay::airplay_start,
+            phone::airplay::airplay_stop,
             dock::set_dock,
             dock::set_notch_visible,
             dock::begin_notch_drag,
@@ -90,6 +94,9 @@ pub fn run() {
                 eprintln!("couldn't release the sidebar's screen space: {error}");
             }
             if let Err(error) = app.state::<vlm::Vlm>().stop() {
+                eprintln!("{error}");
+            }
+            if let Err(error) = app.state::<phone::airplay::Airplay>().stop() {
                 eprintln!("{error}");
             }
         }
