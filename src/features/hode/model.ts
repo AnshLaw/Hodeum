@@ -114,8 +114,10 @@ export interface HodeState {
   lastAck?: string;
   /** The running request reached a slow reasoner (vision model or cloud); cheap local re-checks never set it. */
   thinking?: boolean;
-  /** Re-pointing after the target came into view or moved: an unchanged instruction isn't said again. */
-  repointing?: boolean;
+  /** The instruction Hodey last said in this step: an unprompted re-plan that lands on it again only moves the highlight. */
+  instructionSaid?: string;
+  /** The learner asked for this guidance (a hint, "where?", look again, a new mode, coming back): it's said even if unchanged. */
+  prompted?: boolean;
   /** The stuck timer already explained and reset this step at the most help; it now waits for the learner. */
   toppedOut?: boolean;
 }

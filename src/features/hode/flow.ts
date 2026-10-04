@@ -89,7 +89,8 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       actedWhilePreparing: false,
       handedBack: false,
       hodeyTries: 0,
-      repointing: false,
+      instructionSaid: undefined,
+      prompted: false,
       toppedOut: false,
     },
     effects: [{ type: "loadSkill", skillId: step.skill }],
@@ -181,23 +182,27 @@ export function withWhy(s: HodeState, action: TeachingAction): TeachingAction {
   return { ...action, speech: `${action.speech} ${why}` };
 }
 
-/** What to say for this guidance: the previous step's acknowledgement first, then the instruction. */
-function lineFor(s: HodeState, action: TeachingAction): string {
-  // Re-pointing (a scroll, the target coming into view) moves the highlight; saying the same sentence again would nag.
-  const repeat = (s.pack?.surface === "phone" || s.repointing === true) && action.speech === s.action?.speech;
-  const instruction = repeat ? "" : action.speech;
-  return [s.pendingAck ?? "", instruction].filter((part) => part !== "").join(" ");
+/**
+ * What to say for this guidance: the previous step's acknowledgement first, then the instruction. A
+ * re-check after the learner's action, or a highlight following a scroll, only moves the highlight:
+ * saying an instruction they already heard again would nag. Asked for, it's said again.
+ */
+function lineFor(s: HodeState, action: TeachingAction): { line: string; instruction: string } {
+  const heard = s.prompted !== true && action.speech === s.instructionSaid;
+  const instruction = heard ? "" : action.speech;
+  return { line: [s.pendingAck ?? "", instruction].filter((part) => part !== "").join(" "), instruction };
 }
 
 export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
   const action = withWhy(s, shown);
   const primitives = overlayOf(s, action);
   const effects: HodeEffect[] = [primitives.length > 0 ? { type: "renderOverlay", primitives } : { type: "clearOverlay" }];
-  const line = lineFor(s, action);
+  const { line, instruction } = lineFor(s, action);
   if (line !== "") effects.push({ type: "say", text: line });
   effects.push({ type: "startStuckTimer", ms: STUCK_MS });
   const ack = s.pendingAck ?? s.ack;
-  return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false, pendingAck: undefined, ack, repointing: false }, effects };
+  const instructionSaid = instruction === "" ? s.instructionSaid : instruction;
+  return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false, pendingAck: undefined, ack, instructionSaid, prompted: false }, effects };
 }
 
 function finishOpenHode(s: HodeState, action: TeachingAction): Transition {

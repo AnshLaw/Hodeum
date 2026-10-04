@@ -81,7 +81,7 @@ export function onSetMode(s: HodeState, e: EventOf<"SET_MODE">): Transition {
 /** Guiding or about to press: plan the step again under the new mode (a pending press is dropped). */
 function replan(s: HodeState, changed: HodeState): Transition {
   if ((s.phase !== "guiding" && s.phase !== "acting") || !s.observation) return { state: changed, effects: [] };
-  return withStuckReset(requestReason(changed));
+  return withStuckReset(requestReason({ ...changed, prompted: true }));
 }
 
 /** "Do it for me" or "guide me": agent mode in that style. Asking Hodey to do it again clears a handed-back step. */

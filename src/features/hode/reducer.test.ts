@@ -357,7 +357,6 @@ describe("verifying learner actions", () => {
     expect(t.state).toMatchObject({ phase: "reasoning", wrongActions: 0, level: "guide", escalated: false });
     const same = step(t.state, { type: "ACTION_READY", requestId: t.state.requestId, action: guideAction({ speech: onPivotStep.action!.speech }), failures: [] });
     expect(types(same)).toEqual(["renderOverlay", "startStuckTimer"]);
-    expect(same.state.repointing).toBe(false);
   });
 
   it("finishes the Hode on the last step", () => {

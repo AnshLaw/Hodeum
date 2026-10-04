@@ -92,7 +92,7 @@ const quiet = (s: HodeState): Transition => ({ state: s, effects: [] });
 
 /** The target came into view or moved: point at it again, without counting a wrong action. */
 function repoint(s: HodeState): Transition {
-  return withLeadingEffects(requestReason({ ...s, repointing: true }), [CANCEL_TIMER]);
+  return withLeadingEffects(requestReason(s), [CANCEL_TIMER]);
 }
 
 /** The action didn't finish the step and wasn't a known mistake: stuck, re-point, nothing, or one more try. */
@@ -147,7 +147,8 @@ function onOpenAction(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
   if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
   const next: HodeState = { ...s, observation: e.observation, waitingForApp: undefined };
   if (!s.waitingForApp && !mattered(assessAction({ before: s.observation, after: e.observation }))) return quiet(next);
-  return withLeadingEffects(requestReason(next), [CANCEL_TIMER]);
+  // Something that matters happened (or they're back in the app): the stuck timer may climb the ladder again.
+  return withLeadingEffects(requestReason({ ...next, toppedOut: false, prompted: s.waitingForApp !== undefined }), [CANCEL_TIMER]);
 }
 
 /** A lesson step being prepared (skill loading, screen being read), not a question being answered. */
@@ -176,7 +177,8 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
   const step = currentStep(s);
   if ((s.phase !== "guiding" && s.phase !== "reasoning") || !step) return noop(s);
   if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
-  if (s.waitingForApp) return requestReason({ ...s, observation: e.observation, waitingForApp: undefined });
+  // Back in the app after Hodey asked them to switch: the step's instruction is said again.
+  if (s.waitingForApp) return requestReason({ ...s, observation: e.observation, waitingForApp: undefined, prompted: true });
   const previous = s.observation;
   const action = { before: previous, after: e.observation };
   const verdict = assessAction(action, step);
@@ -197,25 +199,24 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
 }
 
 /**
- * Hesitation raises help one rung per timeout. At the most help the step is explained and reset once;
- * after that Hodey waits for the learner (an action that matters, or a hint request) instead of
- * re-deciding and repeating itself every few seconds while they look around.
+ * Hesitation raises help one rung per timeout. At the most help a step is explained and reset once (an
+ * open-ended Hode gets one fresh look); after that Hodey waits for the learner (an action that
+ * matters, or a hint request) instead of re-deciding and repeating itself while they look around.
  */
 export function onStuckTimeout(s: HodeState): Transition {
   if (s.phase !== "guiding" || s.toppedOut) return noop(s);
-  const toppedOut = s.level === MOST_HELP && currentStep(s) !== undefined;
-  return requestReason(raiseHelp({ ...s, toppedOut }, { countsAsMistake: false }));
+  return requestReason(raiseHelp({ ...s, toppedOut: s.level === MOST_HELP }, { countsAsMistake: false }));
 }
 
 export function onHintRequested(s: HodeState): Transition {
   if (s.phase !== "guiding") return noop(s);
-  return withLeadingEffects(requestReason(raiseHelp(s, { countsAsMistake: false })), [CANCEL_TIMER]);
+  return withLeadingEffects(requestReason(raiseHelp({ ...s, prompted: true }, { countsAsMistake: false })), [CANCEL_TIMER]);
 }
 
 /** "Where?", "I don't see it": the same ladder as the stuck timer, never a pause. */
 export function onSaidStuck(s: HodeState): Transition {
   if (s.phase !== "guiding") return noop(s);
-  const raised = raiseHelp(s, { countsAsMistake: false, stuck: { kind: "said_stuck" } });
+  const raised = raiseHelp({ ...s, prompted: true }, { countsAsMistake: false, stuck: { kind: "said_stuck" } });
   return withLeadingEffects(requestReason(raised), [CANCEL_TIMER]);
 }
 
@@ -237,7 +238,7 @@ export function onRepeat(s: HodeState): Transition {
 export function onLookAgain(s: HodeState): Transition {
   if (s.phase !== "guiding" && s.phase !== "recovering") return noop(s);
   return {
-    state: { ...s, phase: "observing", reobserved: false, notice: undefined },
+    state: { ...s, phase: "observing", reobserved: false, notice: undefined, prompted: true },
     effects: [CANCEL_TIMER, { type: "observe" }],
   };
 }
