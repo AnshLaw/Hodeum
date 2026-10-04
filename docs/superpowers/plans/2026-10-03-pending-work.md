@@ -132,8 +132,10 @@ export class GeminiReasoningProvider implements ReasoningProvider { readonly id 
 
 **Files:** `src-tauri/src/voice/*` (a Whisper recognizer through `sherpa-onnx` offline Whisper, multilingual base int8), `scripts/setup-local-ai.ps1` (fetch the model), `src-tauri/src/voice/models.rs`.
 
-- [ ] Write a test first: `models.rs` finds the Whisper files. When Nemotron fails to load or errors at runtime, the engine switches to Whisper and the status `detail` names it.
-- [ ] Run `cargo test --lib`, then commit with `feat: Whisper (sherpa-onnx, int8, CPU) as the second speech engine when Nemotron is unavailable`.
+- [x] Write a test first: `models.rs` finds the Whisper files. When Nemotron fails to load or errors at runtime, the engine switches to Whisper and the status `detail` names it.
+- [x] Run `cargo test --lib`, then commit with `feat: Whisper (sherpa-onnx, int8, CPU) as the second speech engine when Nemotron is unavailable`.
+
+Done in `src-tauri/src/voice/asr.rs`. Deviation from PRD §13: the PRD names faster-whisper (Python, CTranslate2). Hodeum uses the same Whisper weights exported to int8 ONNX and run through sherpa-onnx, which is already linked for Nemotron, so no Python runtime is needed. The size is `WHISPER_SIZE = "base"` in `models.rs`; switch it to `small` if latency allows on the demo laptop. Whisper doesn't stream, so it shows no live partial text: each utterance is transcribed when the pause ends it. Base int8 transcribed a 7 s sample in about 1.2 s on the dev PC (`cargo test --lib -- --ignored whisper_backup --nocapture`).
 
 ### Workstream 7: Docs
 

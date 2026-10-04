@@ -1,4 +1,5 @@
-//! Microphone → 16 kHz mono → Silero VAD → NVIDIA Nemotron streaming ASR, on a worker thread.
+//! Microphone → 16 kHz mono → Silero VAD → NVIDIA Nemotron streaming ASR (or the Whisper backup,
+//! see asr.rs), on a worker thread.
 //! Audio and transcripts live only in memory: nothing is recorded or saved.
 
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
@@ -9,14 +10,12 @@ use std::time::{Duration, Instant};
 use rodio::cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rodio::cpal::{self, SampleFormat};
 use serde::Serialize;
-use sherpa_onnx::{
-    LinearResampler, OnlineRecognizer, OnlineRecognizerConfig, OnlineStream, OnlineTransducerModelConfig, SileroVadModelConfig, VadModelConfig,
-    VoiceActivityDetector,
-};
+use sherpa_onnx::{LinearResampler, SileroVadModelConfig, VadModelConfig, VoiceActivityDetector};
 use tauri::{AppHandle, Emitter};
 
 use super::echo_mic::{self, EchoCancelledMic};
-use super::models::{asr_files, voice_root, AsrFiles};
+use super::asr::{self, Asr, Nemotron, Whisper};
+use super::models::{asr_files, vad_file, voice_root, whisper_files};
 use super::segment::{downmix, Recognizer, Segmenter, Session, SpeechEvent};
 use super::standby::{self, Outcome};
 use super::{set_listening, set_status_detail};
@@ -30,8 +29,6 @@ const END_SILENCE_SECS: f32 = 0.9;
 const MIN_SPEECH_SECS: f32 = 0.25;
 const MAX_SPEECH_SECS: f32 = 20.0;
 const VAD_BUFFER_SECS: f32 = 30.0;
-/// CPU threads: leave the rest for the app and the vision model's host work.
-const ASR_THREADS: i32 = 2;
 /// Nemotron 3.5's per-stream language prompts that Hodey offers (from the model's own table):
 /// US English, British English, Hindi, and auto-detect for Hindi + English.
 pub const ASR_LANGUAGES: [&str; 4] = ["en", "en-GB", "hi", "auto"];
@@ -46,7 +43,7 @@ pub fn set_language(language: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn language() -> &'static str {
+pub(crate) fn language() -> &'static str {
     ASR_LANGUAGE.lock().map(|l| *l).unwrap_or(DEFAULT_LANGUAGE)
 }
 pub(crate) const AUDIO_POLL: Duration = Duration::from_millis(50);
@@ -60,6 +57,7 @@ const NOTHING_HEARD: &str = "I didn't catch anything. Tap the mic and try again.
 const MAX_HOLD: Duration = Duration::from_secs(60);
 /// Backstop for a conversation nobody ended: the frontend normally closes it after a few quiet seconds.
 const CONVERSATION_IDLE_LIMIT: Duration = Duration::from_secs(60);
+const SAY_AGAIN: &str = "Please say that again.";
 const MIC_SILENT: &str = "Your microphone is sending silence. Check it isn't muted, or pick another input in Windows sound settings.";
 
 pub const SPEECH_START_EVENT: &str = "voice:speech-start";
@@ -109,54 +107,19 @@ pub enum ListenCommand {
     Refresh,
 }
 
-/// NVIDIA Nemotron streaming transducer, one utterance per stream.
-pub(crate) struct Nemotron {
-    recognizer: OnlineRecognizer,
-    stream: Option<OnlineStream>,
-}
-
-impl Nemotron {
-    fn text(&self, stream: &OnlineStream) -> String {
-        while self.recognizer.is_ready(stream) {
-            self.recognizer.decode(stream);
-        }
-        self.recognizer.get_result(stream).map(|r| r.text).unwrap_or_default()
-    }
-}
-
-impl Recognizer for Nemotron {
-    fn start(&mut self) {
-        let stream = self.recognizer.create_stream();
-        stream.set_option("language", language());
-        self.stream = Some(stream);
-    }
-
-    fn feed(&mut self, samples: &[f32]) -> String {
-        let Some(stream) = &self.stream else { return String::new() };
-        stream.accept_waveform(SAMPLE_RATE, samples);
-        self.text(stream)
-    }
-
-    fn finish(&mut self) -> String {
-        let Some(stream) = self.stream.take() else { return String::new() };
-        stream.input_finished();
-        self.text(&stream)
-    }
-}
-
 pub(crate) struct Engines {
     pub(crate) vad: VoiceActivityDetector,
-    pub(crate) segmenter: Segmenter<Nemotron>,
+    pub(crate) segmenter: Segmenter<Asr>,
 }
 
 fn path(p: &std::path::Path) -> Option<String> {
     Some(p.to_string_lossy().into_owned())
 }
 
-pub(crate) fn load_engines(files: &AsrFiles) -> Result<Engines, String> {
+fn load_vad(model: &std::path::Path) -> Result<VoiceActivityDetector, String> {
     let vad_config = VadModelConfig {
         silero_vad: SileroVadModelConfig {
-            model: path(&files.vad),
+            model: path(model),
             threshold: VAD_THRESHOLD,
             min_silence_duration: END_SILENCE_SECS,
             min_speech_duration: MIN_SPEECH_SECS,
@@ -168,14 +131,38 @@ pub(crate) fn load_engines(files: &AsrFiles) -> Result<Engines, String> {
         provider: Some("cpu".into()),
         ..Default::default()
     };
-    let vad = VoiceActivityDetector::create(&vad_config, VAD_BUFFER_SECS).ok_or("Couldn't load the voice activity detector.")?;
-    let mut config = OnlineRecognizerConfig::default();
-    config.model_config.transducer = OnlineTransducerModelConfig { encoder: path(&files.encoder), decoder: path(&files.decoder), joiner: path(&files.joiner) };
-    config.model_config.tokens = path(&files.tokens);
-    config.model_config.num_threads = ASR_THREADS;
-    config.model_config.provider = Some("cpu".into());
-    let recognizer = OnlineRecognizer::create(&config).ok_or("Couldn't load the Nemotron speech model.")?;
-    Ok(Engines { vad, segmenter: Segmenter::new(Nemotron { recognizer, stream: None }) })
+    VoiceActivityDetector::create(&vad_config, VAD_BUFFER_SECS).ok_or_else(|| "Couldn't load the voice activity detector.".to_string())
+}
+
+/// Nemotron only, for the model tests.
+#[cfg(test)]
+pub(crate) fn load_engines(files: &super::models::AsrFiles) -> Result<Engines, String> {
+    Ok(Engines { vad: load_vad(&vad_file(&voice_root())?)?, segmenter: Segmenter::new(Nemotron::load(files)?) })
+}
+
+/// Whisper only, for the model tests.
+#[cfg(test)]
+pub(crate) fn load_whisper_engines(root: &std::path::Path) -> Result<Engines, String> {
+    Ok(Engines { vad: load_vad(&vad_file(root)?)?, segmenter: Segmenter::new(load_whisper(root)?) })
+}
+
+fn load_whisper(root: &std::path::Path) -> Result<Asr, String> {
+    whisper_files(root).and_then(Whisper::load)
+}
+
+/// The voice activity detector and the best speech engine that loads. Ok: the status detail too.
+pub(crate) fn load_any(root: &std::path::Path) -> Result<(Engines, Option<String>), String> {
+    let vad = load_vad(&vad_file(root)?)?;
+    let nemotron = || asr_files(root).and_then(|files| Nemotron::load(&files));
+    let (engine, detail) = asr::load_with_fallback(nemotron, || load_whisper(root))?;
+    Ok((Engines { vad, segmenter: Segmenter::new(engine) }, detail))
+}
+
+/// After a session: switches a failed Nemotron to Whisper and says so in the status line.
+fn recover(app: &AppHandle, engines: &mut Engines) {
+    if let Some(detail) = asr::switch_on_failure(engines.segmenter.recognizer_mut(), || load_whisper(&voice_root())) {
+        set_status_detail(app, Some(detail));
+    }
 }
 
 /// The default microphone, delivering mono f32 chunks at the device's own rate.
@@ -318,6 +305,9 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
                 }
                 let (out, done) = session.on_events(events);
                 emit_events(app, out);
+                if let Some(problem) = engines.segmenter.recognizer().failure() {
+                    return Err(format!("{problem} {SAY_AGAIN}"));
+                }
                 if done {
                     break;
                 }
@@ -353,9 +343,9 @@ pub fn emit_error(app: &AppHandle, message: &str) {
 
 fn load(app: &AppHandle) -> Option<Engines> {
     set_status_detail(app, Some("Loading Hodey's ears...".into()));
-    match asr_files(&voice_root()).and_then(|files| load_engines(&files)) {
-        Ok(engines) => {
-            set_status_detail(app, None);
+    match load_any(&voice_root()) {
+        Ok((engines, detail)) => {
+            set_status_detail(app, detail);
             Some(engines)
         }
         Err(reason) => {
@@ -384,6 +374,7 @@ pub fn worker(app: AppHandle, commands: Receiver<ListenCommand>, installed: bool
         loaded.segmenter.reset();
         loaded.vad.reset();
         set_listening(&app, false);
+        recover(&app, loaded);
     }
 }
 
@@ -394,6 +385,7 @@ fn next_command(app: &AppHandle, engines: &mut Option<Engines>, commands: &Recei
         match standby::standby(app, loaded, commands) {
             Ok(Outcome::Command(command)) => return Some(command),
             Ok(Outcome::Off) => {}
+            Ok(Outcome::EngineFailed) => recover(app, loaded),
             Ok(Outcome::Closed) => return None,
             Err(reason) => {
                 // Don't retry a broken mic in a loop: hands-free stays off until it's switched on again.
