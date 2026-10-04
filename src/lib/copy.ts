@@ -137,6 +137,7 @@ export const COPY = {
   repeat: "Say that again",
   lookAgain: "Look again",
   skipStep: "Skip step",
+  next: "Next",
   practiceAlone: "Practice on your own",
   quickCheck: "Quick check",
   openApp: "Open Hodeum",

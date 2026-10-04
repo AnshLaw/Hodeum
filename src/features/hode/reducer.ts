@@ -1,7 +1,7 @@
 import { onGoalSubmitted, onShellObserved, onStartHode, onThinking } from "./flow";
 import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
 import { onPracticeAgain, onReviewAnswered } from "./closing";
-import { onAppSwitched, onPointerRested, onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onShowMe, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
+import { onAppSwitched, onNextStep, onPointerRested, onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onShowMe, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
 import { noop, type EventOf, type HodeEvent, type HodeState, type Transition } from "./model";
 import { onAppOpenFailed, onOpenApp } from "./open-app";
 import { onChitchat } from "./chitchat";
@@ -48,6 +48,7 @@ const handlers: Handlers = {
   SHELL_OBSERVED: onShellObserved,
   LET_ME_TRY: onLetMeTry,
   SKIP_STEP: onSkipStep,
+  NEXT_STEP: onNextStep,
   REVIEW_ANSWERED: onReviewAnswered,
   PRACTICE_AGAIN: onPracticeAgain,
   ANNOTATE_START: onAnnotateStart,

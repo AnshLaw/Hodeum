@@ -27,12 +27,13 @@ const LABELS: Record<NotchControl, string> = {
   take_over: COPY.takeOver,
   stop_search: COPY.stop,
   skip: COPY.skipStep,
+  next: COPY.next,
   practice: COPY.practiceAlone,
 };
 /** Hodey's face in the notch bar, in CSS px. */
 /** Fits the bar with room for Hodey's z's and sound waves, so nothing is clipped. */
 const HODEY_BAR_SIZE = 34;
-const PRIMARY = new Set<NotchControl>(["start", "resume", "retry", "dismiss", "approve", "practice"]);
+const PRIMARY = new Set<NotchControl>(["start", "resume", "retry", "dismiss", "approve", "practice", "next"]);
 
 function iconFor(control: NotchControl): ReactNode {
   switch (control) {

@@ -45,7 +45,8 @@ describe("\"I did it\": Hodey checks the screen instead of only looking again", 
     const shown = play(looked.state, { type: "ACTION_READY", requestId: looked.state.requestId, action: guideAction({ assistanceLevel: "hint", speech: "Which tab adds things?" }), failures: [] });
     expect(shown.state).toMatchObject({ stepIndex: 0, phase: "guiding", offerSkip: true });
     const view = notchView(shown.state);
-    expect(view.controls).toContain("skip");
+    // Next moves past it.
+    expect(view.controls).toContain("next");
     expect(view.detail).toBe(EN.cantSeeItDone);
   });
 });

@@ -178,8 +178,10 @@ export function onObservedStep(s: HodeState, e: EventOf<"OBSERVED">): Transition
   const observation = newer(s.observation, e.observation);
   // Only a learner action (or their word that they did it) finishes a step here: a screen that already met the goal still gets taught.
   const acted = s.actedWhilePreparing === true || s.claimedDone === true;
-  if (acted && !inWrongApp(s, observation) && evaluateSignal(step.success, observation)) return completeStep({ ...s, observation, claimedDone: false }, step);
+  if (acted && !inWrongApp(s, observation) && evaluateSignal(step.success, observation)) return completeStep({ ...s, observation, claimedDone: false, movingOn: false }, step);
   if (!s.claimedDone) return onObserved(s, { ...e, observation });
+  // Next: the learner moves on even when the screen doesn't show the step done (it isn't counted as learned).
+  if (s.movingOn) return onSkipStep({ ...s, observation, claimedDone: false, movingOn: false });
   // They said they did it, but the screen doesn't show it: say so, and let them skip ahead.
   const missed: HodeState = { ...s, claimedDone: false, offerSkip: true, pendingNote: spoken(s.language).cantSeeItDone };
   return onObserved(missed, { ...e, observation });
@@ -343,6 +345,29 @@ function cameBack(s: HodeState): Transition {
   // credits what it did (an open goal's step is the model's to judge, and a glance away never counts).
   const credited = s.open ? {} : { actedWhilePreparing: true };
   return { state: { ...back, ...credited, phase: "observing", reobserved: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
+}
+
+/** Phases a Next can move on from: a step showing, or Hodey working out its help. */
+const NEXT_PHASES: HodeState["phase"][] = ["guiding", "reasoning"];
+
+/**
+ * "Next": the learner has done what Hodey asked and wants to move on. A lesson takes one fresh look, so a step
+ * that shows done is confirmed (and praised) as usual, and one that doesn't is moved past. An open goal counts
+ * the instruction done and asks the model for the step after it.
+ */
+export function onNextStep(s: HodeState): Transition {
+  const asking = s.spokenQuestion !== undefined || s.question !== undefined;
+  if (asking || !NEXT_PHASES.includes(s.phase) || !s.action) return noop(s);
+  const effects: HodeEffect[] = [{ type: "stopSpeech" }, CANCEL_TIMER, { type: "observe" }];
+  const looking: HodeState = { ...s, phase: "observing", reobserved: false };
+  if (s.open) return { state: { ...looking, openDone: withDone(s.openDone, s.instructionSaid ?? s.action.speech), actedSinceInstruction: false }, effects };
+  if (!currentStep(s)) return noop(s);
+  return { state: { ...looking, claimedDone: true, movingOn: true }, effects };
+}
+
+function withDone(done: string[] | undefined, instruction: string): string[] {
+  const list = done ?? [];
+  return instruction === "" || list.at(-1) === instruction ? list : [...list, instruction];
 }
 
 /** Lesson phases a step can be skipped from (a question being answered isn't one). */

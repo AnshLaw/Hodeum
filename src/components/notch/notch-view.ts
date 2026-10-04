@@ -30,6 +30,8 @@ export type NotchControl =
   | "stop_search"
   /** Past a step Hodey can't see done. */
   | "skip"
+  /** The learner has done what Hodey asked: confirm it if the screen shows it, and move on. */
+  | "next"
   /** The same Teach Hode again, with Hodey only watching. */
   | "practice";
 
@@ -109,8 +111,6 @@ function guidanceView(s: HodeState): NotchView {
   const speech = s.action?.speech ?? "";
   const showObjective = speech === "" || (silent && s.action?.kind === "guide");
   const prerequisites = s.stepIndex === 0 ? s.pack?.prerequisites.join(" ") : undefined;
-  // Hodey couldn't see the step done when the learner said it was, or they've had the most help: they may move on.
-  const skippable = s.offerSkip === true || s.toppedOut === true;
   const cantSee = s.offerSkip ? spoken(s.language).cantSeeItDone : undefined;
   return {
     mode: "guidance",
@@ -121,7 +121,8 @@ function guidanceView(s: HodeState): NotchView {
     detail: s.explanation ?? s.notice ?? cantSee ?? s.reason ?? prerequisites,
     progress: { current: s.stepIndex, total },
     busy: workingInBackground(s),
-    controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), ...(skippable ? (["skip"] as const) : []), "repeat", "look_again", ...(s.mode === "teach" ? (["all_steps"] as const) : []), "point", "pause", "end"],
+    // Next moves on from any step: it confirms one the screen shows done, and moves past one it doesn't.
+    controls: ["next", "hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "repeat", "look_again", ...(s.mode === "teach" ? (["all_steps"] as const) : []), "point", "pause", "end"],
     hintLabel: QUIET_LEVELS.has(s.level) ? COPY.needHint : COPY.hint,
     // Agent shows the whole flow; Teach only once the learner asks for All steps.
     steps: s.mode === "agent" || s.showAllSteps ? stepItems(s) : undefined,
@@ -181,7 +182,7 @@ function openGuidanceView(s: HodeState): NotchView {
     title: s.action?.speech ?? "",
     detail: s.notice,
     busy: workingInBackground(s),
-    controls: ["hint", "explain", "repeat", "look_again", "point", "pause", "end"],
+    controls: ["next", "hint", "explain", "repeat", "look_again", "point", "pause", "end"],
     hintLabel: COPY.needHint,
   };
 }

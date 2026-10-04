@@ -137,6 +137,7 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       areaShown: false,
       claimedDone: false,
       offerSkip: false,
+      movingOn: false,
       prompted: false,
       toppedOut: false,
     },

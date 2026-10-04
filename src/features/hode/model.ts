@@ -147,6 +147,8 @@ export interface HodeState {
   claimedDone?: boolean;
   /** Hodey couldn't see the step done when the learner said it was: Skip is offered for the rest of the step. */
   offerSkip?: boolean;
+  /** The learner pressed Next: the fresh look confirms the step if it shows done, and moves past it if not. */
+  movingOn?: boolean;
   /** The screen read in hand just finished the previous step: the next step starts from it if it shows its control. */
   freshRead?: boolean;
   /** Teach mode's closing question, once the Hode is done, and the answer the learner picked. */
@@ -255,6 +257,8 @@ export type HodeEvent =
   | { type: "LET_ME_TRY" }
   /** Past a step Hodey can't see done; nothing is learned or failed for it. */
   | { type: "SKIP_STEP" }
+  /** "Next": the learner has done what Hodey asked and wants to move on. */
+  | { type: "NEXT_STEP" }
   /** An answer to the closing question: tapped (`option`) or said (`said`). */
   | { type: "REVIEW_ANSWERED"; option?: number; said?: string }
   /** The same lesson again, with Hodey only watching. */
