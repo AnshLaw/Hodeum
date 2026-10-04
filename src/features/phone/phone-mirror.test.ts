@@ -25,6 +25,13 @@ class FakeSource implements PhoneSource {
 const surface: FrameSurface = { size: { width: 10, height: 20 }, draw() {}, grab: () => ({ png: "AAA", rect: { x: 0, y: 0, width: 10, height: 20 } }), thumbnail: () => new Uint8Array(4) };
 
 describe("PhoneMirror", () => {
+  it("takes phone highlights as frame pixels unless told how to map them", () => {
+    const bounds = { x: 5, y: 6, width: 7, height: 8 };
+    expect(new PhoneMirror(surface, (kind) => new FakeSource(kind)).toFrame(bounds)).toEqual(bounds);
+    const shifted = new PhoneMirror(surface, (kind) => new FakeSource(kind), (b) => ({ ...b, x: b.x - 5 }));
+    expect(shifted.toFrame(bounds)).toEqual({ ...bounds, x: 0 });
+  });
+
   it("opens a source, follows its status and reports live", async () => {
     const sources: FakeSource[] = [];
     const mirror = new PhoneMirror(surface, (kind) => sources[sources.push(new FakeSource(kind)) - 1]);

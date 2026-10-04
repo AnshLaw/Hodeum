@@ -17,6 +17,9 @@ import { ExcelScene } from "./scenes/excel";
 import { ExplorerScene } from "./scenes/explorer";
 import { PracticeCloudKeys } from "./practice-cloud-keys";
 import { IphoneScene } from "./scenes/iphone";
+import { FrameCanvas } from "../features/phone/frame-canvas";
+import { PhoneMirror } from "../features/phone/phone-mirror";
+import { StagePhoneSource, stageFrameRect } from "./stage-phone";
 
 export type StageAppId = "excel" | "explorer" | "iphone";
 
@@ -34,6 +37,8 @@ export interface StageEnvironment {
   speech: SpeechInput;
   /** The skill store the runtime saves to; the notch reads its skill graph from it. */
   learning: MemoryLearningStore;
+  /** "Show iPhone" in the notch mirrors the practice iPhone, so the enlarged notch can be rehearsed. */
+  phone: PhoneMirror;
   /** Services for the in-page Hodeum app; `window.close` is replaced by the stage. */
   appServices: (close: () => void) => AppServices;
   select(id: StageAppId): void;
@@ -67,6 +72,7 @@ export function createStageEnvironment(): StageEnvironment {
     activity,
     speech: new UnavailableSpeechInput(),
     learning,
+    phone: new PhoneMirror(new FrameCanvas(), () => new StagePhoneSource(apps.iphone), stageFrameRect),
     appServices: (close) => ({
       learning,
       chats,

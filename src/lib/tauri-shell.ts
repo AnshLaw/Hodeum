@@ -45,6 +45,10 @@ export class TauriShell implements NativeShell {
     return invoke<void>("set_notch_visible", { visible });
   }
 
+  setNotchTall(tall: boolean): Promise<void> {
+    return invoke<void>("set_notch_tall", { tall });
+  }
+
   openApp(from: Rect): Promise<void> {
     return invoke<void>("open_app_window", { from });
   }

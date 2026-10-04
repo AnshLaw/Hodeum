@@ -45,7 +45,7 @@ export interface SurfaceProps {
   onToggleMic: () => void;
   onOpenApp: () => void;
   bus: Bus;
-  /** The iPhone mirror (desktop app only; the stage has none). */
+  /** The iPhone mirror (the desktop app's, or the practice stage's mirror of its practice iPhone). */
   phone?: PhoneMirror;
   phoneOpen?: boolean;
   /** Shows or hides the iPhone mirror; absent where there is no mirror. */

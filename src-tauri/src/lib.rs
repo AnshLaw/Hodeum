@@ -70,6 +70,7 @@ pub fn run() {
             phone::airplay::airplay_stop,
             dock::set_dock,
             dock::set_notch_visible,
+            dock::set_notch_tall,
             dock::begin_notch_drag,
             vlm::vlm_status,
             app_window::open_app_window,

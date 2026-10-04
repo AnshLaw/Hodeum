@@ -68,7 +68,7 @@ interface DockMenuProps {
   onChange: (change: Partial<DockPrefs>) => void;
   onHide: () => void;
   phoneOpen?: boolean;
-  /** Absent where there is no iPhone mirror (the stage). */
+  /** Absent where there is no iPhone mirror. */
   onTogglePhone?: () => void;
   /** Opens "Your skills"; absent where no skill store is readable. */
   onShowSkills?: () => void;
