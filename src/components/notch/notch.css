@@ -536,14 +536,17 @@
 .notch.notch--tucked,
 .sidebar.sidebar--tucked {
   height: var(--tucked-size);
-  min-height: var(--tucked-size);
   border-radius: 50%;
   box-shadow:
     0 0 0 1px rgb(255 255 255 / 0.16),
     0 4px 14px rgb(0 0 0 / 0.32);
 }
 
-/* Folding away eases in like the busy orb; coming back out uses the opened size's timing. */
+/*
+ * Folding away eases in like the busy orb; coming back out uses the opened size's timing. The orb takes its full
+ * height at once, so it sinks at once too: the pill's top just moves past the screen edge, and its bottom edge never
+ * reaches lower than the pill's did, onto a cursor resting just below it (that would open it straight back up).
+ */
 .notch.notch--tucked {
   width: var(--notch-width);
   transform: translateY(calc(-1 * var(--tucked-sink)));
@@ -551,12 +554,13 @@
     width 360ms var(--hd-shrink),
     height 360ms var(--hd-shrink),
     border-radius 300ms var(--hd-shrink),
-    box-shadow 300ms var(--hd-shrink),
-    transform 360ms var(--hd-shrink);
+    box-shadow 300ms var(--hd-shrink);
 }
 
 .sidebar.sidebar--tucked {
   width: var(--tucked-size);
+  /* The tab's minimum height would hold the orb tall. */
+  min-height: 0;
 }
 
 .sidebar--left.sidebar--tucked {
@@ -579,17 +583,21 @@
   cursor: pointer;
 }
 
-/* The head sits left of and below its drawing's centre (room for z's and waves): centre it in what shows of the orb. */
-.notch .notch__orb--tucked > svg {
-  transform: translate(2px, 0);
+/*
+ * The head sits `--head-offset` left of and below its drawing's centre (room for z's and waves), and part of the orb
+ * is sunk into the edge: centre the head in what shows.
+ */
+.notch__orb.notch__orb--tucked > svg {
+  --head-offset: 2px;
+  transform: translate(var(--head-offset), calc(var(--tucked-sink) / 2 - var(--head-offset)));
 }
 
-.sidebar--left .notch__orb--tucked > svg {
-  transform: translate(4px, -2px);
+.sidebar--left .notch__orb.notch__orb--tucked > svg {
+  transform: translate(calc(var(--head-offset) + var(--tucked-sink) / 2), calc(-1 * var(--head-offset)));
 }
 
-.sidebar--right .notch__orb--tucked > svg {
-  transform: translate(0, -2px);
+.sidebar--right .notch__orb.notch__orb--tucked > svg {
+  transform: translate(calc(var(--head-offset) - var(--tucked-sink) / 2), calc(-1 * var(--head-offset)));
 }
 
 /* The privacy dots ride on the orb under Hodey's chin, so what Hodey is using shows even while it's tucked away. */
