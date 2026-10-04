@@ -1,7 +1,7 @@
 import type { ActionTarget, Rect, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
-import type { ReasoningProvider } from "../interfaces";
-import { groundTarget } from "./grounding";
-import { buildMessages, fromImageBox, insideFrame, selectCandidates } from "./prompt";
+import type { ReasoningHooks, ReasoningProvider } from "../interfaces";
+import { agreementConfidence, quotedLabels, resolveTarget } from "./grounding";
+import { buildMessages, fromImageBox, insideFrame, pointable, selectCandidates, windowBoundsOf } from "./prompt";
 import { parseVisionReply, replySchemaFor, type VisionReply } from "./schema";
 import type { CapturedFrame, VisionConnection } from "./types";
 
@@ -14,13 +14,27 @@ const MAX_TOKENS = 200;
 const MAX_BOX_SHARE = 0.5;
 const TEMPERATURE = 0.2;
 const GENERAL_SKILL = "general.vision";
+const MS_PER_SECOND = 1000;
+/** How much of a bad reply to quote in an error. */
+const SNIPPET_CHARS = 160;
+const EVENT_STREAM = "text/event-stream";
+const SSE_DONE = "[DONE]";
 
 export interface QwenVisionDeps {
   /** Undefined until the local server reports ready. */
   connection: () => VisionConnection | undefined;
-  capture: () => Promise<CapturedFrame>;
+  /** A capture of the learner's app; `windowId` is the window the screen read came from, when known. */
+  capture: (windowId?: number) => Promise<CapturedFrame>;
   fetch?: typeof fetch;
   timeoutMs?: number;
+}
+
+/** The screenshot shows another window than the screen read did: guidance would mix two apps. Looking again fixes it. */
+export class WindowChangedError extends Error {
+  constructor() {
+    super("The app changed while Hodey was looking.");
+    this.name = "WindowChangedError";
+  }
 }
 
 /** Local Qwen3-VL via llama-server's OpenAI-compatible API. Screenshots never leave the machine. */
@@ -29,10 +43,14 @@ export class QwenVisionProvider implements ReasoningProvider {
 
   constructor(private readonly deps: QwenVisionDeps) {}
 
-  async reason(context: TeachingContext): Promise<TeachingAction> {
-    const frame = await this.deps.capture();
+  async reason(context: TeachingContext, hooks?: ReasoningHooks): Promise<TeachingAction> {
+    hooks?.signal?.throwIfAborted();
+    const expected = context.observation.window?.id;
+    const frame = await this.deps.capture(expected);
+    if (frame.windowId !== undefined && expected !== undefined && frame.windowId !== expected) throw new WindowChangedError();
+    hooks?.signal?.throwIfAborted();
     const candidates = selectCandidates(context);
-    const reply = await this.ask(buildMessages(context, candidates, frame), candidates.length > 0);
+    const reply = await this.ask(buildMessages(context, candidates, frame), candidates.length > 0, hooks?.signal);
     return toAction(reply, candidates, frame, context);
   }
 
@@ -48,25 +66,82 @@ export class QwenVisionProvider implements ReasoningProvider {
     }
   }
 
-  private async ask(messages: unknown[], hasCandidates: boolean): Promise<VisionReply> {
+  /**
+   * Streams the reply so that calling it off (the Hode moved on) closes the connection and the server
+   * stops generating. A called-off request rethrows the caller's abort: stale, not a provider failure.
+   */
+  private async ask(messages: unknown[], hasCandidates: boolean, stale?: AbortSignal): Promise<VisionReply> {
     const connection = this.deps.connection();
     if (!connection) throw new Error("The local vision model isn't running.");
-    const response = await (this.deps.fetch ?? fetch)(`${connection.endpoint}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiKey}` },
-      signal: AbortSignal.timeout(this.deps.timeoutMs ?? VISION_TIMEOUT_MS),
-      body: JSON.stringify({
-        messages,
-        temperature: TEMPERATURE,
-        max_tokens: MAX_TOKENS,
-        response_format: { type: "json_schema", json_schema: { name: "teaching_action", schema: replySchemaFor(hasCandidates) } },
-      }),
-    });
-    if (!response.ok) throw new Error(`The vision model answered ${response.status}: ${(await response.text()).slice(0, 160)}`);
-    const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = body.choices?.[0]?.message?.content;
-    if (!content) throw new Error(`The vision model sent an empty reply: ${JSON.stringify(body).slice(0, 160)}`);
-    return parseVisionReply(content);
+    const timeoutMs = this.deps.timeoutMs ?? VISION_TIMEOUT_MS;
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const signal = stale ? AbortSignal.any([stale, timeout]) : timeout;
+    try {
+      const response = await (this.deps.fetch ?? fetch)(`${connection.endpoint}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiKey}` },
+        signal,
+        body: JSON.stringify({
+          messages,
+          temperature: TEMPERATURE,
+          max_tokens: MAX_TOKENS,
+          stream: true,
+          response_format: { type: "json_schema", json_schema: { name: "teaching_action", schema: replySchemaFor(hasCandidates) } },
+        }),
+      });
+      return parseVisionReply(await replyText(response));
+    } catch (error) {
+      stale?.throwIfAborted();
+      if (timeout.aborted) throw new Error(`The vision model took longer than ${timeoutMs / MS_PER_SECOND} s to answer.`, { cause: error });
+      throw error;
+    }
+  }
+}
+
+async function replyText(response: Response): Promise<string> {
+  if (!response.ok) throw new Error(`The vision model answered ${response.status}: ${(await response.text()).slice(0, SNIPPET_CHARS)}`);
+  const streamed = response.headers.get("content-type")?.includes(EVENT_STREAM) && response.body;
+  const content = streamed ? await collectStream(streamed) : await messageContent(response);
+  if (!content) throw new Error("The vision model sent an empty reply.");
+  return content;
+}
+
+/** A whole (non-streamed) reply: a server that ignored `stream`, or a test double. */
+async function messageContent(response: Response): Promise<string | undefined> {
+  const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+  const content = body.choices?.[0]?.message?.content;
+  if (!content) throw new Error(`The vision model sent an empty reply: ${JSON.stringify(body).slice(0, SNIPPET_CHARS)}`);
+  return content;
+}
+
+/** The text of one server-sent event's delta; llama-server reports a failure mid-stream as an `error` event. */
+function deltaOf(data: string): string {
+  let parsed: { choices?: { delta?: { content?: string } }[]; error?: { message?: string } };
+  try {
+    parsed = JSON.parse(data) as typeof parsed;
+  } catch {
+    throw new Error(`The vision model's reply stream had a malformed event: ${data.slice(0, SNIPPET_CHARS)}`);
+  }
+  if (parsed.error) throw new Error(`The vision model failed mid-reply: ${parsed.error.message ?? "unknown error"}`);
+  return parsed.choices?.[0]?.delta?.content ?? "";
+}
+
+/** The reply text from an OpenAI-style event stream, read to its end. */
+export async function collectStream(body: ReadableStream<Uint8Array>): Promise<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const events = buffer.split(/\r?\n\r?\n/);
+    buffer = done ? "" : (events.pop() ?? "");
+    for (const event of events) {
+      const data = event.split(/\r?\n/).find((line) => line.startsWith("data:"))?.slice("data:".length).trim();
+      if (data && data !== SSE_DONE) text += deltaOf(data);
+    }
+    if (done) return text;
   }
 }
 
@@ -78,16 +153,28 @@ function boxOf(reply: VisionReply, frame: CapturedFrame): Rect | undefined {
   return insideFrame(bounds, frame.rect) && share <= MAX_BOX_SHARE ? bounds : undefined;
 }
 
-/** A control from the screen read, checked against the model's box and the learner's words; else the bare box. */
+/** The names the model gave its target: target_label, then any it quoted in its speech. */
+function labelsOf(reply: VisionReply): string[] {
+  const labels = [reply.target_label?.trim() ?? "", ...quotedLabels(reply.speech)].filter((label) => label !== "");
+  return [...new Set(labels)];
+}
+
+/** A control from the screen read, settled by the name the model gave it and checked against its index and box; else the bare box. */
 function targetFrom(reply: VisionReply, candidates: UiElement[], frame: CapturedFrame, context: TeachingContext): ActionTarget | undefined {
   const box = boxOf(reply, frame);
   const chosen = reply.target_index >= 0 ? candidates[reply.target_index] : undefined;
-  const element = groundTarget({ chosen, box, elements: context.observation.elements, utterance: context.utterance });
-  if (element) {
-    return { elementId: element.id, bounds: element.bounds, confidence: Math.min(reply.confidence, element.confidence), label: element.name };
-  }
-  if (!box) return undefined;
-  return { elementId: "vision-box", bounds: box, confidence: Math.min(reply.confidence, VISUAL_CONFIDENCE_CAP), label: "Here" };
+  const labels = labelsOf(reply);
+  // In an open Hode with no question, the goal is what the learner asked for ("close the browser").
+  const utterance = context.utterance ?? (context.openGoal ? context.goal : undefined);
+  const elements = context.observation.elements;
+  const resolution = resolveTarget({ chosen, box, elements, utterance, labels, window: windowBoundsOf(context), pointable: (e) => pointable(e, context) });
+  console.debug("Vision grounding", { label: labels[0], index: chosen?.name, agreement: resolution.agreement, target: resolution.element?.name });
+  // The model's own confidence is near-constant (0.95), so it only ever caps what grounding found.
+  const confidence = Math.min(reply.confidence, agreementConfidence(resolution));
+  const { element } = resolution;
+  if (element) return { elementId: element.id, bounds: element.bounds, confidence, label: element.name };
+  if (!resolution.box) return undefined;
+  return { elementId: "vision-box", bounds: resolution.box, confidence: Math.min(confidence, VISUAL_CONFIDENCE_CAP), label: "Here" };
 }
 
 export function toAction(reply: VisionReply, candidates: UiElement[], frame: CapturedFrame, context: TeachingContext): TeachingAction {

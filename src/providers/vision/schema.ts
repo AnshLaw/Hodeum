@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 const MAX_SPEECH_CHARS = 240;
+/** Control names are flattened to this length in the prompt, so a longer label can't be one of them. */
+export const MAX_LABEL_CHARS = 80;
 /** Qwen3-VL reports boxes in a 0–1000 space relative to the image. */
 export const BOX_SCALE = 1000;
 
@@ -13,6 +15,8 @@ export const visionReplySchema = z.object({
   /** [x1, y1, x2, y2] in 0–1000 image space: around the picked control, or where to act when target_index is -1. */
   bbox: z.array(z.number().min(0).max(BOX_SCALE)).length(4).optional(),
   confidence: z.number().min(0).max(1),
+  /** The pointed-at control's name, copied from the list; grounding checks the index and box against it. Optional for older and cloud replies. */
+  target_label: z.string().max(MAX_LABEL_CHARS).optional(),
 });
 
 export type VisionReply = z.infer<typeof visionReplySchema>;
@@ -23,11 +27,14 @@ export const VISION_REPLY_JSON_SCHEMA = {
   properties: {
     kind: { type: "string", enum: ["guide", "answer", "clarify", "complete"] },
     speech: { type: "string", maxLength: MAX_SPEECH_CHARS },
+    // Before target_index: llama-server writes keys in this order, so the model names the control, then numbers it.
+    target_label: { type: "string", maxLength: MAX_LABEL_CHARS },
     target_index: { type: "integer", minimum: -1 },
     bbox: { type: "array", items: { type: "number", minimum: 0, maximum: BOX_SCALE }, minItems: 4, maxItems: 4 },
     confidence: { type: "number", minimum: 0, maximum: 1 },
   },
-  required: ["kind", "speech", "target_index", "confidence"],
+  // target_label is required here so the local model always names its target ("" when not pointing).
+  required: ["kind", "speech", "target_label", "target_index", "confidence"],
   additionalProperties: false,
 } as const;
 
