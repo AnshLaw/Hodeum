@@ -155,15 +155,24 @@ impl FocusReturn {
 /// Tells the overlay to re-read its monitor (scale and origin) after moving.
 const OVERLAY_MOVED_EVENT: &str = "overlay:moved";
 
-/// Moves the overlay onto `monitor` if it isn't already covering it, then has the overlay page re-read
-/// its monitor (origin and scale).
+/// Anything but "already there" (`Ok(false)` from `topmost::cover`) may have moved the overlay, even a
+/// move that didn't land exactly.
+fn may_have_moved(outcome: &Result<bool, String>) -> bool {
+    !matches!(outcome, Ok(false))
+}
+
+/// Moves the overlay onto `monitor` if it isn't already covering it. After any move the overlay page
+/// re-reads its monitor (origin and scale), so it draws for wherever the overlay really is.
 pub fn follow_monitor(app: &AppHandle, monitor: PxRect) -> Result<(), String> {
     let overlay = window(app, OVERLAY)?;
     let hwnd = HWND(overlay.hwnd().map_err(|e| e.to_string())?.0 as *mut _);
-    if crate::topmost::cover(hwnd, monitor)? {
-        app.emit(OVERLAY_MOVED_EVENT, ()).map_err(|e| e.to_string())?;
+    let outcome = crate::topmost::cover(hwnd, monitor);
+    if may_have_moved(&outcome) {
+        if let Err(error) = app.emit(OVERLAY_MOVED_EVENT, ()) {
+            log::warn!("couldn't tell the overlay page it moved: {error}");
+        }
     }
-    Ok(())
+    outcome.map(|_| ())
 }
 
 #[tauri::command]
@@ -211,8 +220,15 @@ pub fn monitor_info(app: AppHandle) -> Result<MonitorInfo, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{notch_origin, occlusion_safe, MonitorInfo};
+    use super::{may_have_moved, notch_origin, occlusion_safe, MonitorInfo};
     use windows::Win32::UI::WindowsAndMessaging::{WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT};
+
+    #[test]
+    fn the_overlay_page_hears_of_any_move_even_one_that_did_not_settle() {
+        assert!(may_have_moved(&Ok(true)));
+        assert!(may_have_moved(&Err("the overlay didn't settle on the monitor".into())));
+        assert!(!may_have_moved(&Ok(false)), "already covering that monitor");
+    }
 
     #[test]
     fn an_interactive_overlay_still_reads_as_a_tool_window() {
