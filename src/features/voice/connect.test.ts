@@ -3,7 +3,7 @@ import { initialState, type HodeEvent, type HodeState } from "../hode/model";
 import { PACK } from "../hode/test-fixtures";
 import { TASK_PACKS } from "../../task-packs";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
-import { CONVERSATION_PATIENCE_MS, connectVoice, isEcho, stripEcho } from "./connect";
+import { CONVERSATION_PATIENCE_MS, MIC_OPEN_PATIENCE_MS, connectVoice, isEcho, stripEcho } from "./connect";
 
 class FakeSpeech implements SpeechInput {
   statusHandlers = new Set<(status: SpeechInputStatus) => void>();
@@ -28,6 +28,15 @@ class FakeSpeech implements SpeechInput {
   }
   converse = vi.fn(async () => undefined);
   warmMic = vi.fn(async () => undefined);
+  errors = new Set<(message: string) => void>();
+  onError(handler: (message: string) => void) {
+    this.errors.add(handler);
+    return () => this.errors.delete(handler);
+  }
+  /** A problem the learner is told about, e.g. the conversation's microphone couldn't open. */
+  fail(message: string) {
+    this.errors.forEach((h) => h(message));
+  }
   /** Windows' echo cancellation is on for the open mic. */
   aec = false;
   echoCancelled() {
@@ -315,6 +324,113 @@ describe("conversation", () => {
       Object.assign(speech, { converse: undefined });
       tap(speech, "give me a hint");
       expect(conversationOpen).toEqual([]);
+    });
+  });
+
+  // The native side accepts the request at once and opens the microphone afterwards, or reports why it couldn't.
+  describe("a conversation's mic that opens late or never", () => {
+    const SAYING = "Here's a hint: look at the ribbon.";
+
+    it("ends the conversation when the mic never opens", () => {
+      vi.useFakeTimers();
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const { speech, conversationOpen } = setup(guiding);
+      tap(speech, "give me a hint");
+      vi.advanceTimersByTime(MIC_OPEN_PATIENCE_MS - 1);
+      expect(conversationOpen).toEqual([true]);
+      vi.advanceTimersByTime(1);
+      expect(conversationOpen).toEqual([true, false]);
+      expect(errorLog).toHaveBeenCalledWith(expect.stringContaining("didn't open"));
+      errorLog.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it("ends the conversation at once when the speech input says the mic couldn't open", () => {
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const { speech, conversationOpen, interrupt } = setup(guiding, SAYING);
+      tap(speech, "give me a hint");
+      speech.fail("No microphone found.");
+      expect(conversationOpen).toEqual([true, false]);
+      // The learner's next tap is a tap, not a late conversation mic.
+      interrupt.mockClear();
+      speech.setStatus("listening");
+      expect(interrupt).toHaveBeenCalledOnce();
+      expect(speech.stop).not.toHaveBeenCalled();
+      errorLog.mockRestore();
+    });
+
+    it("closes with the answer while the mic is opening, and turns that mic off once it opens", () => {
+      const { speech, conversationOpen, interrupt, hode } = setup(initialState, SAYING);
+      tap(speech, "hello hodey");
+      hode({ type: "DISMISS" });
+      expect(conversationOpen).toEqual([true, false]);
+      interrupt.mockClear();
+      speech.setStatus("listening");
+      expect(speech.stop).toHaveBeenCalledOnce();
+      expect(interrupt).not.toHaveBeenCalled();
+      speech.setStatus("idle");
+      expect(speech.converse).toHaveBeenCalledOnce();
+      expect(conversationOpen).toEqual([true, false]);
+    });
+
+    it("turns off a mic that opens after Hodey stopped waiting for it", () => {
+      vi.useFakeTimers();
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const { speech, interrupt } = setup(guiding, SAYING);
+      tap(speech, "give me a hint");
+      vi.advanceTimersByTime(MIC_OPEN_PATIENCE_MS);
+      interrupt.mockClear();
+      speech.setStatus("listening");
+      expect(speech.stop).toHaveBeenCalledOnce();
+      expect(interrupt).not.toHaveBeenCalled();
+      errorLog.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it("takes the next mic for a tap once a closed conversation's mic has failed to open", () => {
+      const { speech, interrupt, hode } = setup(guiding, SAYING);
+      tap(speech, "give me a hint");
+      hode({ type: "DISMISS" });
+      speech.fail("No microphone found.");
+      interrupt.mockClear();
+      speech.setStatus("listening");
+      expect(speech.stop).not.toHaveBeenCalled();
+      expect(interrupt).toHaveBeenCalledOnce();
+    });
+
+    it("takes the next mic for a tap once a closed conversation's mic was refused", async () => {
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const { speech, interrupt, hode } = setup(guiding, SAYING);
+      let refuse: (error: Error) => void = () => undefined;
+      speech.converse.mockImplementationOnce(
+        () =>
+          new Promise<undefined>((_, reject) => {
+            refuse = reject;
+          }),
+      );
+      tap(speech, "give me a hint");
+      hode({ type: "DISMISS" });
+      refuse(new Error("Hodey's listener has stopped"));
+      await vi.waitFor(() => expect(errorLog).toHaveBeenCalledWith("Couldn't keep listening for the conversation", expect.any(Error)));
+      interrupt.mockClear();
+      speech.setStatus("listening");
+      expect(speech.stop).not.toHaveBeenCalled();
+      expect(interrupt).toHaveBeenCalledOnce();
+      errorLog.mockRestore();
+    });
+
+    it("lets a new conversation use a closed one's mic that opens late", () => {
+      const { speech, conversationOpen, hode } = setup(guiding);
+      tap(speech, "give me a hint");
+      hode({ type: "DISMISS" });
+      speech.overheard("Hey Hodey, say that again");
+      expect(speech.converse).toHaveBeenCalledTimes(2);
+      speech.setStatus("listening");
+      expect(speech.stop).not.toHaveBeenCalled();
+      expect(conversationOpen).toEqual([true, false, true]);
+      speech.say("thanks, that's all");
+      expect(speech.stop).toHaveBeenCalledOnce();
+      expect(conversationOpen).toEqual([true, false, true, false]);
     });
   });
 

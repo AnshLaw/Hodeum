@@ -13,6 +13,11 @@ const BARGE_IN_WORDS = 2;
 export const CONVERSATION_PATIENCE_MS = 6000;
 /** While the learner is talking: long enough for the longest utterance, so noise that never becomes words can't hold the mic open. */
 const SPEAKING_PATIENCE_MS = 25_000;
+/**
+ * How long the conversation's mic may take to open before Hodey stops waiting and ends the conversation. Well past
+ * the slowest normal open (the echo-cancelled mic waits up to 3 s for the warm one, then 3 s more to open its own).
+ */
+export const MIC_OPEN_PATIENCE_MS = 10_000;
 
 export interface VoiceDeps {
   speech: SpeechInput;
@@ -93,6 +98,7 @@ export function connectVoice(deps: VoiceDeps): () => void {
     deps.speech.onSpeechStart(() => conversation.onSpeechStart()),
     deps.speech.onTranscript((text, final) => conversation.onTranscript(text, final)),
     deps.speech.onWakeCandidate?.((text, final) => conversation.onWakeCandidate(text, final)) ?? (() => undefined),
+    deps.speech.onError?.((message) => conversation.onError(message)) ?? (() => undefined),
     deps.onHodeyDoneSpeaking(() => conversation.onHodeyDone()),
     deps.onHodeEvent?.((event) => {
       if (ENDS_CONVERSATION.has(event.type)) conversation.close();
@@ -109,6 +115,10 @@ class Conversation {
   private conversing = false;
   /** The open-mic conversation session was requested and hasn't started yet. */
   private opening = false;
+  /** Gives up on a conversation whose mic never opens; the native side reports a failed open only as an error. */
+  private openTimer: ReturnType<typeof setTimeout> | undefined;
+  /** A requested conversation session nobody wants any more (its conversation ended first): turned off if it starts. */
+  private unwanted = false;
   /** The open-mic conversation session is running. */
   private open = false;
   private quietTimer: ReturnType<typeof setTimeout> | undefined;
@@ -123,17 +133,31 @@ class Conversation {
   constructor(private readonly deps: VoiceDeps) {}
 
   onStatus(status: SpeechInputStatus): void {
-    if (status === "listening") {
-      // Tapping the mic means "I want to talk": Hodey stops at once. The conversation's own mic doesn't.
-      if (this.opening) this.open = true;
-      else this.onTap();
-      this.session = this.opening ? "conversation" : "tap";
-      this.opening = false;
-      return;
-    }
+    if (status === "listening") return this.onListening();
     this.session = "none";
     if (this.open) this.end(false);
     else if (this.conversing) this.openMic();
+  }
+
+  /**
+   * A listening session started. While a conversation waits for its mic, this is it (even one an ended conversation
+   * asked for). A mic only an ended conversation wanted is turned off rather than taken for a tap. Otherwise it's a tap.
+   */
+  private onListening(): void {
+    const unwanted = this.unwanted;
+    this.unwanted = false;
+    if (this.opening) {
+      this.settleOpening();
+      this.open = true;
+      this.session = "conversation";
+    } else if (unwanted) {
+      this.session = "conversation";
+      this.deps.speech.stop().catch((error: unknown) => console.error("Couldn't turn off the mic of a conversation that had already ended", error));
+    } else {
+      // Tapping the mic means "I want to talk": Hodey stops at once. The conversation's own mic doesn't.
+      this.onTap();
+      this.session = "tap";
+    }
   }
 
   private onTap(): void {
@@ -208,8 +232,17 @@ class Conversation {
     if (this.open && !BUSY_PHASES.includes(this.deps.getState().phase)) this.armQuietTimer();
   }
 
+  /** The speech input hit a problem: a session that couldn't start reports it this way, with no change of status. */
+  onError(message: string): void {
+    this.unwanted = false;
+    if (!this.opening) return;
+    console.error("The conversation's mic didn't open, so the conversation ended", message);
+    this.giveUpOpening();
+  }
+
   dispose(): void {
     this.clearQuietTimer();
+    this.settleOpening();
   }
 
   /** The answer or the Hode was closed: stop listening for a reply to it. */
@@ -220,18 +253,43 @@ class Conversation {
   private openMic(): void {
     if (this.opening || this.open || !this.deps.speech.converse) return;
     this.opening = true;
+    this.openTimer = setTimeout(() => this.micNeverOpened(), MIC_OPEN_PATIENCE_MS);
     this.reportOpen();
     this.deps.speech.converse().catch((error: unknown) => {
-      this.opening = false;
-      this.conversing = false;
-      this.reportOpen();
       console.error("Couldn't keep listening for the conversation", error);
+      // Refused outright: no session will start, wanted or not.
+      this.unwanted = false;
+      if (this.opening) this.giveUpOpening();
     });
   }
 
-  /** The conversation is over: the learner said so, went quiet, or the mic closed. */
+  /** No session started in time: end the conversation, and turn its mic off if it does open after all. */
+  private micNeverOpened(): void {
+    console.error(`The conversation's mic didn't open within ${MIC_OPEN_PATIENCE_MS} ms, so the conversation ended`);
+    this.end(true);
+  }
+
+  /** The conversation's mic won't open: the conversation is over. */
+  private giveUpOpening(): void {
+    this.settleOpening();
+    this.conversing = false;
+    this.reportOpen();
+  }
+
+  /** Stops waiting for the conversation's mic: it opened, or it won't. */
+  private settleOpening(): void {
+    this.opening = false;
+    clearTimeout(this.openTimer);
+    this.openTimer = undefined;
+  }
+
+  /** The conversation is over: the learner said so, went quiet, or the mic closed. A mic still opening is unwanted. */
   private end(stopMic: boolean): void {
     const wasOpen = this.open;
+    if (this.opening) {
+      this.settleOpening();
+      this.unwanted = true;
+    }
     this.conversing = false;
     this.open = false;
     this.clearQuietTimer();
