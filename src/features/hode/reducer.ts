@@ -1,4 +1,4 @@
-import { onGoalSubmitted, onStartHode, onThinking } from "./flow";
+import { onGoalSubmitted, onShellObserved, onStartHode, onThinking } from "./flow";
 import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
 import { onPracticeAgain, onReviewAnswered } from "./closing";
 import { onAppSwitched, onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onShowMe, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
@@ -44,7 +44,7 @@ const handlers: Handlers = {
   LOOK_AGAIN: onLookAgain,
   APP_SWITCHED: onAppSwitched,
   // The reducer side (pointing at the search box) is the teach loop's; until then the read changes nothing.
-  SHELL_OBSERVED: noop,
+  SHELL_OBSERVED: onShellObserved,
   LET_ME_TRY: onLetMeTry,
   SKIP_STEP: onSkipStep,
   REVIEW_ANSWERED: onReviewAnswered,

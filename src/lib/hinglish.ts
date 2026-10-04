@@ -32,7 +32,7 @@ const LOANWORDS: [string, string][] = [
   ["Dark", "डार्क"], ["Light", "लाइट"], ["Wallpaper", "वॉलपेपर"], ["Text", "टेक्स्ट"], ["Size", "साइज़"], ["mirror", "मिरर"],
   ["mirroring", "मिररिंग"], ["Show", "शो"], ["connect", "कनेक्ट"], ["start", "स्टार्ट"], ["on", "ऑन"], ["grey", "ग्रे"], ["gear", "गियर"],
   ["setting", "सेटिंग"], ["look", "लुक"], ["background", "बैकग्राउंड"], ["choices", "चॉइसेज़"], ["Screen", "स्क्रीन"],
-  ["formula", "फ़ॉर्मूला"], ["quick", "क्विक"], ["check", "चेक"], ["email", "ईमेल"], ["skip", "स्किप"], ["card", "कार्ड"], ["sounds", "साउंड्स"],
+  ["search", "सर्च"], ["formula", "फ़ॉर्मूला"], ["quick", "क्विक"], ["check", "चेक"], ["email", "ईमेल"], ["skip", "स्किप"], ["card", "कार्ड"], ["sounds", "साउंड्स"],
 ];
 
 /** Common Hindi words written the way people type Hinglish (rules alone get these wrong). */

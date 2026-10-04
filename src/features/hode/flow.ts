@@ -3,7 +3,7 @@ import { spoken } from "../../lib/spoken";
 import { localizePack } from "../../task-packs/localize";
 import { appFromGoal } from "../../task-packs/match";
 import { area, padRect } from "../../lib/coords";
-import type { AssistanceLevel, HodeMode, LearnerAnnotation, Rect, ScreenObservation, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
+import type { AssistanceLevel, HodeMode, LearnerAnnotation, OverlayPrimitive, Rect, ScreenObservation, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
 import {
   QUESTION_PADDING_PX,
   STUCK_MS,
@@ -44,6 +44,9 @@ function opensApp(goal: string, app: string): boolean {
     .filter((word) => word !== "" && !appWords.has(word) && appFromGoal(word) !== app && !OPEN_FILLER.has(word));
   return rest.length > 0 && rest.every((word) => OPEN_VERB.test(word));
 }
+
+/** Opening an app from the taskbar, a skill every open-ended Hode can need. */
+const GENERAL_OPEN_SKILL = "windows.start.open_app";
 
 /** Open-ended Hodes have no saved skill: the vision model phrases each step at the mode's level. */
 const OPEN_START: Record<HodeMode, AssistanceLevel> = { teach: "hint", help: "observe", agent: "guide" };
@@ -91,10 +94,13 @@ export function waitForApp(s: HodeState, observation: ScreenObservation): Transi
   const action: TeachingAction = { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
   // Already said: a fresh look that still finds another app keeps the waiting card, quietly.
   if (s.waitingForApp === app) return { state: { ...s, phase: "guiding", observation }, effects: [] };
+  const waiting: HodeState = { ...s, phase: "guiding", observation, action, waitingForApp: app };
+  // An open-ended Hode first reads the taskbar, to point at its search box; the card shows the way meanwhile.
+  if (s.open && s.pack?.surface !== "phone") return { state: { ...waiting, shellPending: true }, effects: [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "observeShell" }] };
   // Teach's opening fills the time the learner spends opening the app.
   const line = [s.pendingIntro ?? "", speech].filter((part) => part !== "").join(" ");
   const effects: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "say", text: line }];
-  return { state: { ...s, phase: "guiding", observation, action, waitingForApp: app, pendingIntro: undefined }, effects };
+  return { state: { ...waiting, pendingIntro: undefined }, effects };
 }
 
 export function inWrongApp(s: HodeState, observation: ScreenObservation): boolean {
@@ -157,7 +163,7 @@ export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {
   // A second look at a screen that hasn't changed would only get the same unsure answer: ask the learner instead.
   const sameScreen = s.reobserved && !asking && s.observation !== undefined && isUnchanged(diffScreens(s.observation, e.observation));
   if (sameScreen) return showGuidance({ ...s, observation: e.observation }, clarifyFor(s));
-  return requestReason({ ...s, observation: e.observation, waitingForApp: asking ? s.waitingForApp : undefined });
+  return requestReason({ ...s, observation: e.observation, waitingForApp: asking ? s.waitingForApp : undefined, shellPending: asking ? s.shellPending : false });
 }
 
 /** "I'm not sure which control you need": said instead of pointing when Hodey can't tell where. */
@@ -365,6 +371,28 @@ export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
     prompted: false,
   };
   return { state, effects };
+}
+
+/** Taskbar controls that find an app, best first: its search box, then Start. */
+const SHELL_WAYS: [RegExp, string][] = [
+  [/search/i, "Search"],
+  [/^start$/i, "Start"],
+];
+
+/** The taskbar read for an app Hodey is waiting for: point at where to search for it, or say the Windows-key way. */
+export function onShellObserved(s: HodeState, e: EventOf<"SHELL_OBSERVED">): Transition {
+  const app = s.waitingForApp;
+  if (s.phase !== "guiding" || !app || s.shellPending !== true) return noop(s);
+  const words = spoken(s.language);
+  const way = SHELL_WAYS.flatMap(([pattern, label]) => e.elements.filter((element) => pattern.test(element.name)).map((element) => ({ element, label })))[0];
+  const intro = s.pendingIntro ? [s.pendingIntro] : [];
+  const settled: HodeState = { ...s, shellPending: false, pendingIntro: undefined };
+  if (!way) return { state: settled, effects: [{ type: "say", text: [...intro, words.howToOpen(app)].join(" ") }] };
+  const speech = words.searchToOpen(way.label, app);
+  const target = { elementId: way.element.id, bounds: way.element.bounds, confidence: way.element.confidence, label: way.label };
+  const action: TeachingAction = { kind: "guide", speech, target, skill: GENERAL_OPEN_SKILL, assistanceLevel: "guide" };
+  const ring: OverlayPrimitive = { kind: "highlight", bounds: way.element.bounds, label: way.label, emphasis: "precise" };
+  return { state: { ...settled, action }, effects: [{ type: "renderOverlay", primitives: [ring], screen: true }, { type: "say", text: [...intro, speech].join(" ") }] };
 }
 
 /** The app the learner was learning to open is open: that was the whole goal. */

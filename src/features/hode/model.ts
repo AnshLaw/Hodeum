@@ -90,6 +90,8 @@ export interface HodeState {
   app?: string;
   /** The goal is opening `app` itself ("how do I open Excel?"): Hodey teaches the launch and finishes once it's open. */
   openingApp?: boolean;
+  /** The taskbar is being read to point at where to find the app; its answer decides what Hodey says. */
+  shellPending?: boolean;
   /** That app, while Hodey waits for the learner to open or switch to it. */
   waitingForApp?: string;
   /** Teach (learn by doing), help (stand by until asked) or agent (guide or do every step). */
@@ -260,7 +262,8 @@ export type HodeEffect =
   | { type: "reason"; requestId: number; context: TeachingContext }
   /** Press a control after `delayMs`, unless the Hode moved on (another request, or no longer acting). */
   | { type: "perform"; requestId: number; request: PerformRequest; delayMs: number }
-  | { type: "renderOverlay"; primitives: OverlayPrimitive[] }
+  /** `screen`: drawn over the whole screen (the taskbar), not just the learner's window. */
+  | { type: "renderOverlay"; primitives: OverlayPrimitive[]; screen?: true }
   | { type: "clearOverlay" }
   | { type: "say"; text: string }
   | { type: "stopSpeech" }

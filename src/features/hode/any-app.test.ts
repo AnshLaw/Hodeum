@@ -53,7 +53,7 @@ describe("a hint about a control that stands alone", () => {
 
 describe("an app that isn't open yet", () => {
   it("is opened the way any app is: Windows key, its name, Enter", () => {
-    const waiting = play(openGoal("Discord").state, { type: "OBSERVED", observation: BROWSER });
+    const waiting = play(openGoal("Discord").state, { type: "OBSERVED", observation: BROWSER }, { type: "SHELL_OBSERVED", elements: [] });
     expect(said(waiting)).toEqual([EN.howToOpen("Discord")]);
     expect(waiting.state).toMatchObject({ phase: "guiding", waitingForApp: "Discord" });
   });

@@ -35,7 +35,7 @@ describe("a goal about opening an app", () => {
   it("doesn't open the app for the learner: it teaches how, from wherever they are", () => {
     const begun = ask("how to open excel");
     expect(types(begun)).not.toContain("focusApp");
-    const taught = play(begun.state, { type: "OBSERVED", observation: BROWSER });
+    const taught = play(begun.state, { type: "OBSERVED", observation: BROWSER }, { type: "SHELL_OBSERVED", elements: [] });
     expect(said(taught)).toEqual([EN.howToOpen("Excel")]);
     expect(taught.state).toMatchObject({ phase: "guiding", waitingForApp: "Excel" });
     expect(types(taught)).not.toContain("reason");
@@ -51,13 +51,13 @@ describe("a goal about opening an app", () => {
   });
 
   it("is heard in Hindi too", () => {
-    const taught = play(ask("एक्सेल कैसे खोलें", "hi").state, { type: "OBSERVED", observation: BROWSER });
+    const taught = play(ask("एक्सेल कैसे खोलें", "hi").state, { type: "OBSERVED", observation: BROWSER }, { type: "SHELL_OBSERVED", elements: [] });
     expect(said(taught)).toEqual([spoken("hi").howToOpen("Excel")]);
   });
 
   it("keeps going after the app opens for other goals about an app (they wait for it, saying how to open it)", () => {
     for (const goal of ["make a chart in excel", "how do I start a new workbook in excel", "how do I open a file in excel"]) {
-      const taught = play(ask(goal).state, { type: "OBSERVED", observation: BROWSER });
+      const taught = play(ask(goal).state, { type: "OBSERVED", observation: BROWSER }, { type: "SHELL_OBSERVED", elements: [] });
       expect(said(taught)).toEqual([EN.howToOpen("Excel")]);
       expect(taught.state.openingApp).toBe(false);
       const opened = play(taught.state, { type: "LOOK_AGAIN" }, { type: "OBSERVED", observation: EXCEL });

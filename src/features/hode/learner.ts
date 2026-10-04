@@ -193,7 +193,7 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
   if ((s.phase !== "guiding" && s.phase !== "reasoning") || !step) return noop(s);
   if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
   // Back in the app after Hodey asked them to switch: the step's instruction is said again.
-  if (s.waitingForApp) return requestReason({ ...s, observation: e.observation, waitingForApp: undefined, prompted: true });
+  if (s.waitingForApp) return requestReason({ ...s, observation: e.observation, waitingForApp: undefined, shellPending: false, prompted: true });
   const previous = s.observation;
   const action = { before: previous, after: e.observation };
   const verdict = assessAction(action, step);

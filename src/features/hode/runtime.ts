@@ -190,7 +190,7 @@ export class HodeRuntime {
       case "perform":
         return this.schedulePress(effect.requestId, effect.request, effect.delayMs);
       case "renderOverlay":
-        return this.renderOverlay(effect.primitives);
+        return this.renderOverlay(effect.primitives, effect.screen === true);
       case "clearOverlay":
         return this.deps.bus.emit("overlay:clear", {});
       case "say":
@@ -237,9 +237,10 @@ export class HodeRuntime {
   }
 
   /** Desktop guidance belongs to the window it was placed on, the one last read; the overlay draws it only there. */
-  private renderOverlay(primitives: OverlayPrimitive[]): void {
+  private renderOverlay(primitives: OverlayPrimitive[], screen = false): void {
     const surface = this.state.pack?.surface ?? "windows";
-    const anchor = surface === "windows" ? this.state.observation?.window : undefined;
+    // Screen-wide guidance (the taskbar's search box) isn't clipped to the learner's window.
+    const anchor = surface === "windows" && !screen ? this.state.observation?.window : undefined;
     this.deps.bus.emit("overlay:render", anchor ? { primitives, surface, anchor } : { primitives, surface });
   }
 
