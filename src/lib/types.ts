@@ -126,6 +126,8 @@ export interface TaskPack {
   surface?: Surface;
   goalPhrases: string[];
   prerequisites: string[];
+  /** Teach mode's opening: what the learner is about to make and why it's worth knowing, in a sentence or two. */
+  concept?: string;
   steps: TaskStep[];
 }
 

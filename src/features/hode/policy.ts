@@ -95,7 +95,8 @@ export function confidenceBand(confidence: number): ConfidenceBand {
   return "uncertain";
 }
 
-type OverlayStyle = "full" | "highlight" | "none";
+/** `area`: a hint shows where to look (the run of controls around the target), never which control. */
+type OverlayStyle = "full" | "highlight" | "area" | "none";
 
 function overlayStyle(action: TeachingAction): OverlayStyle {
   switch (action.kind) {
@@ -108,18 +109,23 @@ function overlayStyle(action: TeachingAction): OverlayStyle {
       return action.assistanceLevel === "demonstrate" ? "full" : "highlight";
     case "guide":
       if (action.assistanceLevel === "demonstrate") return "full";
-      return action.assistanceLevel === "guide" ? "highlight" : "none";
+      if (action.assistanceLevel === "guide") return "highlight";
+      return action.assistanceLevel === "hint" ? "area" : "none";
   }
 }
 
-/** `nearby`: bounds of text around the target, so its label can keep clear of them. */
-export function overlayFor(action: TeachingAction, pin?: PinPrimitive, nearby: Rect[] = []): OverlayPrimitive[] {
+/**
+ * `nearby`: bounds of text around the target, so its label can keep clear of them. `hintArea`: where a
+ * hint says to look; without one, a hint draws nothing rather than give the answer away.
+ */
+export function overlayFor(action: TeachingAction, pin?: PinPrimitive, nearby: Rect[] = [], hintArea?: Rect): OverlayPrimitive[] {
   const primitives: OverlayPrimitive[] = pin ? [pin] : [];
   const target = action.target;
   const style = overlayStyle(action);
   if (!target || style === "none") return primitives;
   const band = confidenceBand(target.confidence);
   if (band === "uncertain") return primitives;
+  if (style === "area") return hintArea ? [...primitives, { kind: "highlight", bounds: hintArea, emphasis: "broad" }] : primitives;
   const keepClear = nearby.length > 0 ? { keepClear: nearby } : {};
   if (band === "broad") {
     primitives.push({ kind: "highlight", bounds: padRect(target.bounds, BROAD_PADDING_PX), label: target.label, emphasis: "broad", ...keepClear });

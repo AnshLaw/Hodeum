@@ -96,7 +96,8 @@ function guidanceView(s: HodeState): NotchView {
     size: "guidance",
     eyebrow,
     title: showObjective ? `${COPY.yourTurn}: ${step?.objective ?? ""}` : speech,
-    detail: s.explanation ?? s.notice ?? prerequisites,
+    // The why of the step just done stays readable (muted too) until the learner acts again.
+    detail: s.explanation ?? s.notice ?? s.reason ?? prerequisites,
     progress: { current: s.stepIndex, total },
     busy: false,
     controls: ["hint", "explain", ...(silent ? [] : (["let_me_try"] as const)), "repeat", "look_again", ...(s.mode === "teach" ? (["all_steps"] as const) : []), "point", "pause", "end"],

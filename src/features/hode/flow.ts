@@ -2,7 +2,7 @@ import { COPY } from "../../lib/copy";
 import { spoken } from "../../lib/spoken";
 import { localizePack } from "../../task-packs/localize";
 import { area, padRect } from "../../lib/coords";
-import type { AssistanceLevel, HodeMode, LearnerAnnotation, ScreenObservation, TeachingAction, TeachingContext } from "../../lib/types";
+import type { AssistanceLevel, HodeMode, LearnerAnnotation, Rect, ScreenObservation, TeachingAction, TeachingContext, UiElement } from "../../lib/types";
 import {
   QUESTION_PADDING_PX,
   STUCK_MS,
@@ -18,6 +18,7 @@ import {
 import { summarizeActions } from "./change";
 import { neighboursOf } from "./neighbours";
 import { confidenceBand, nudgeStartLevel, overlayFor } from "./policy";
+import { regionAround } from "./region";
 
 /** Open-ended Hodes have no saved skill: the vision model phrases each step at the mode's level. */
 const OPEN_START: Record<HodeMode, AssistanceLevel> = { teach: "hint", help: "observe", agent: "guide" };
@@ -41,7 +42,9 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
   if (!e.pack) return { state: { ...s, goal, notice: noPack }, effects: [{ type: "say", text: noPack }] };
   // Bring the pack's app forward first, so Hodey reads Excel rather than whatever had focus.
   const pack = localizePack(e.pack, s.language);
-  const begun = beginStep({ ...s, goal, mode, agentStyle, pack, app: pack.app, notice: undefined }, 0);
+  // Teach opens with the idea: what the learner is about to make, and that they do the clicking.
+  const pendingIntro = mode === "teach" && pack.concept ? `${pack.concept} ${spoken(s.language).youDoTheClicking}` : undefined;
+  const begun = beginStep({ ...s, goal, mode, agentStyle, pack, app: pack.app, notice: undefined, pendingIntro }, 0);
   // Agent mode gets going on its own: it opens the app and the pack's practice file instead of asking the learner to.
   const launch = mode === "agent" && e.pack.launch ? { launch: e.pack.launch } : {};
   return { ...begun, effects: [{ type: "focusApp", app: e.pack.app, ...launch }, ...begun.effects] };
@@ -60,8 +63,10 @@ export function waitForApp(s: HodeState, observation: ScreenObservation): Transi
   const action: TeachingAction = { kind: "clarify", speech, skill: currentStep(s)?.skill ?? "", assistanceLevel: s.level };
   // Already said: a fresh look that still finds another app keeps the waiting card, quietly.
   if (s.waitingForApp === app) return { state: { ...s, phase: "guiding", observation }, effects: [] };
-  const effects: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "say", text: speech }];
-  return { state: { ...s, phase: "guiding", observation, action, waitingForApp: app }, effects };
+  // Teach's opening fills the time the learner spends opening the app.
+  const line = [s.pendingIntro ?? "", speech].filter((part) => part !== "").join(" ");
+  const effects: HodeEffect[] = [{ type: "clearOverlay" }, { type: "cancelStuckTimer" }, { type: "say", text: line }];
+  return { state: { ...s, phase: "guiding", observation, action, waitingForApp: app, pendingIntro: undefined }, effects };
 }
 
 export function inWrongApp(s: HodeState, observation: ScreenObservation): boolean {
@@ -90,6 +95,7 @@ export function beginStep(s: HodeState, stepIndex: number): Transition {
       handedBack: false,
       hodeyTries: 0,
       instructionSaid: undefined,
+      whySaid: false,
       prompted: false,
       toppedOut: false,
     },
@@ -101,7 +107,10 @@ export function onSkillLoaded(s: HodeState, e: EventOf<"SKILL_LOADED">): Transit
   if (s.phase !== "observing" || currentStep(s)?.skill !== e.skillId) return noop(s);
   // Memory nudges a skill's first step in a Hode only; later steps follow this Hode's own record.
   const remembered = s.learnedSkills.includes(e.skillId) ? undefined : e.remembered;
-  return { state: { ...s, level: nudgeStartLevel(s.mode, e.record, remembered) }, effects: [{ type: "observe" }] };
+  const level = nudgeStartLevel(s.mode, e.record, remembered);
+  // A learner who already does this with Hodey only watching doesn't need the idea explained again.
+  const pendingIntro = level === "observe" || level === "independent" ? undefined : s.pendingIntro;
+  return { state: { ...s, level, pendingIntro }, effects: [{ type: "observe" }] };
 }
 
 export function onObserved(s: HodeState, e: EventOf<"OBSERVED">): Transition {
@@ -165,10 +174,19 @@ export function onActionReady(s: HodeState, e: EventOf<"ACTION_READY">): Transit
   return showGuidance(withNotice, shown);
 }
 
-/** The action's overlay, with the text around its target so the label can keep clear of it. */
+/** The action's overlay, with the text around its target so the label can keep clear of it, and a hint's area. */
 export function overlayOf(s: HodeState, action: TeachingAction) {
-  const nearby = action.target && s.observation ? neighboursOf(action.target.bounds, s.observation.elements) : [];
-  return overlayFor(action, pinFor(s), nearby);
+  const elements = s.observation?.elements ?? [];
+  const nearby = action.target ? neighboursOf(action.target.bounds, elements) : [];
+  return overlayFor(action, pinFor(s), nearby, hintArea(action, elements, s.observation?.window?.bounds));
+}
+
+/** Where a hint says to look: the run of controls its target sits among, from the same screen read. */
+function hintArea(action: TeachingAction, elements: UiElement[], frame?: Rect): Rect | undefined {
+  const target = action.target;
+  if (action.assistanceLevel !== "hint" || !target) return undefined;
+  const element = elements.find((e) => e.id === target.elementId);
+  return element ? regionAround(element, elements, frame) : undefined;
 }
 
 /**
@@ -190,7 +208,8 @@ export function withWhy(s: HodeState, action: TeachingAction): TeachingAction {
 function lineFor(s: HodeState, action: TeachingAction): { line: string; instruction: string } {
   const heard = s.prompted !== true && action.speech === s.instructionSaid;
   const instruction = heard ? "" : action.speech;
-  return { line: [s.pendingAck ?? "", instruction].filter((part) => part !== "").join(" "), instruction };
+  const parts = [s.pendingIntro, s.pendingAck, s.pendingReason, instruction];
+  return { line: parts.filter((part): part is string => part !== undefined && part !== "").join(" "), instruction };
 }
 
 export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
@@ -200,9 +219,23 @@ export function showGuidance(s: HodeState, shown: TeachingAction): Transition {
   const { line, instruction } = lineFor(s, action);
   if (line !== "") effects.push({ type: "say", text: line });
   effects.push({ type: "startStuckTimer", ms: STUCK_MS });
-  const ack = s.pendingAck ?? s.ack;
-  const instructionSaid = instruction === "" ? s.instructionSaid : instruction;
-  return { state: { ...s, phase: "guiding", action, correction: undefined, reobserved: false, pendingAck: undefined, ack, instructionSaid, prompted: false }, effects };
+  const why = currentStep(s)?.explain;
+  const state: HodeState = {
+    ...s,
+    phase: "guiding",
+    action,
+    correction: undefined,
+    reobserved: false,
+    pendingIntro: undefined,
+    pendingAck: undefined,
+    pendingReason: undefined,
+    ack: s.pendingAck ?? s.ack,
+    reason: s.pendingReason ?? s.reason,
+    instructionSaid: instruction === "" ? s.instructionSaid : instruction,
+    whySaid: s.whySaid === true || (why !== undefined && instruction.includes(why)),
+    prompted: false,
+  };
+  return { state, effects };
 }
 
 function finishOpenHode(s: HodeState, action: TeachingAction): Transition {

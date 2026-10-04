@@ -56,7 +56,8 @@ function startActing(s: HodeState, action: TeachingAction, element: UiElement, o
   // A step the learner just finished (one handed back) is still acknowledged first.
   const line = [s.pendingAck ?? "", spoken(s.language).doing(target.label, button)].filter((part) => part !== "").join(" ");
   return {
-    state: { ...s, phase: "acting", action, correction: undefined, reobserved: false, pendingAck: undefined, ack: s.pendingAck ?? s.ack },
+    // Teach's opening and why are for a learner doing the step; Hodey doing it keeps to the acknowledgement.
+    state: { ...s, phase: "acting", action, correction: undefined, reobserved: false, pendingIntro: undefined, pendingAck: undefined, pendingReason: undefined, ack: s.pendingAck ?? s.ack },
     effects: [
       CANCEL_TIMER,
       { type: "renderOverlay", primitives: shown },

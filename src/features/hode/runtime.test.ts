@@ -27,7 +27,8 @@ function setup(reasoners: ReasoningProvider[] = [new TaskPackReasoningProvider()
   const overlays: string[] = [];
   const surfaces: string[] = [];
   bus.on("overlay:render", ({ primitives, surface }) => {
-    overlays.push(primitives.map((p) => p.kind).join("+"));
+    // A hint's area is an unlabelled highlight around the controls the target sits among.
+    overlays.push(primitives.map((p) => (p.kind === "highlight" && p.label === undefined ? "area" : p.kind)).join("+"));
     surfaces.push(surface ?? "unset");
   });
   bus.on("overlay:clear", () => overlays.push("clear"));
@@ -131,7 +132,8 @@ describe("HodeRuntime end to end", () => {
     await second.start("teach");
     await second.act("tab:Insert");
     expect(second.state()).toMatchObject({ stepIndex: 1, level: "hint" });
-    expect(second.overlays.at(-1)).toBe("clear");
+    // A question, with the area that holds the answer lit up rather than the answer itself.
+    expect(second.overlays.at(-1)).toBe("area");
   });
 
   it("tells views once a step's skill progress is saved", async () => {

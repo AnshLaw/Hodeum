@@ -5,6 +5,7 @@
   "launch": { "exe": "excel.exe", "sample": "hodeum-sales.csv" },
   "goalPhrases": ["pivot table", "pivottable", "pivot", "summarize data in excel", "पिवट टेबल", "पिवोट टेबल", "पाइवट टेबल"],
   "prerequisites": ["Open the sales workbook and click any cell inside the table."],
+  "concept": "A PivotTable turns a long list of rows into quick totals, like sales for each region, without a single formula.",
   "steps": [
     {
       "id": "open-insert",

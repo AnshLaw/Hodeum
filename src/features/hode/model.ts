@@ -106,8 +106,16 @@ export interface HodeState {
   surprise?: string;
   /** The learner acted while the step was being prepared; only then may the first screen read finish it. */
   actedWhilePreparing?: boolean;
+  /** Teach mode's opening (what the learner is about to make), said ahead of the first thing Hodey says about a step. */
+  pendingIntro?: string;
   /** "Exactly right." for the step just done, said ahead of the next step's guidance. */
   pendingAck?: string;
+  /** Teach mode: the why of the step just done, said after its acknowledgement. */
+  pendingReason?: string;
+  /** That why, shown on the card until the learner acts again. */
+  reason?: string;
+  /** The current step's why has been said (in a demonstration, a correction, or Explain). */
+  whySaid?: boolean;
   /** That acknowledgement, shown in the notch until the learner acts again. */
   ack?: string;
   /** The last acknowledgement used, so the next one is a different phrase. */

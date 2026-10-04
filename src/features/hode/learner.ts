@@ -118,17 +118,26 @@ function onUnfinishedAction(s: HodeState, step: TaskStep, wasReasoning: boolean,
 export function acknowledgement(s: HodeState): string | undefined {
   if (s.mode === "help" && !s.escalated) return undefined;
   const words = spoken(s.language);
-  const unaided = s.mode === "teach" && !s.escalated && (s.level === "observe" || s.level === "independent");
-  if (unaided && s.lastAck !== words.rememberedOnYourOwn) return words.rememberedOnYourOwn;
+  const unaided = s.mode === "teach" && !s.escalated && watchedOnly(s);
+  // A skill picked up earlier in this Hode isn't remembered from before: the learner has the hang of it now.
+  const skill = currentStep(s)?.skill;
+  const own = skill !== undefined && s.learnedSkills.includes(skill) ? words.gotTheHang : words.rememberedOnYourOwn;
+  if (unaided && s.lastAck !== own) return own;
   const pool = (s.mode === "agent" ? words.stepDoneLight : words.stepDone).filter((line) => line !== s.lastAck);
   return pool[s.stepIndex % pool.length];
 }
+
+/** Hodey only watched this step (escalating moves the level, so a step that needed help never counts). */
+const watchedOnly = (s: HodeState): boolean => s.level === "observe" || s.level === "independent";
+
+/** Teach confirms a step the learner needed help with by the idea behind it, unless that was said this step. */
+const reasonFor = (s: HodeState, step: TaskStep): string | undefined => (s.mode === "teach" && s.whySaid !== true && !watchedOnly(s) ? step.explain : undefined);
 
 function completeStep(s: HodeState, step: TaskStep): Transition {
   const outcome: StepOutcome = { completed: true, mistakes: s.mistakes, level: s.level, escalated: s.escalated };
   const learnedSkills = s.learnedSkills.includes(step.skill) ? s.learnedSkills : [...s.learnedSkills, step.skill];
   const done: HodeEffect[] = [CANCEL_TIMER, { type: "clearOverlay" }, { type: "recordOutcome", skillId: step.skill, outcome }];
-  const finished: HodeState = { ...s, learnedSkills, ack: undefined, pendingAck: undefined };
+  const finished: HodeState = { ...s, learnedSkills, ack: undefined, pendingAck: undefined, reason: undefined, pendingReason: undefined };
   const nextIndex = s.stepIndex + 1;
   if (!s.pack || nextIndex >= s.pack.steps.length) {
     return {
@@ -138,7 +147,7 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
   }
   // Said with the next step's guidance, so the next instruction doesn't cut the acknowledgement off.
   const ack = acknowledgement(s);
-  const acknowledged: HodeState = ack ? { ...finished, pendingAck: ack, lastAck: ack } : finished;
+  const acknowledged: HodeState = ack ? { ...finished, pendingAck: ack, lastAck: ack, pendingReason: reasonFor(s, step) } : finished;
   return withLeadingEffects(beginStep(acknowledged, nextIndex), done);
 }
 
@@ -185,7 +194,7 @@ export function onLearnerActed(s: HodeState, e: EventOf<"LEARNER_ACTED">): Trans
   const stepActions = remember(s.stepActions, action);
   // Something that matters happened: the stuck timer's reset at the most help may be given again.
   const toppedOut = s.toppedOut === true && !mattered(verdict);
-  const next: HodeState = { ...s, observation: e.observation, stepActions, ack: undefined, toppedOut };
+  const next: HodeState = { ...s, observation: e.observation, stepActions, ack: undefined, reason: undefined, toppedOut };
   if (evaluateSignal(step.success, e.observation)) return completeStep(next, step);
   const mistake = step.mistakes.find((m) => becameTrue(m.signal, previous, e.observation));
   if (mistake) {
@@ -223,7 +232,7 @@ export function onSaidStuck(s: HodeState): Transition {
 export function onExplainRequested(s: HodeState): Transition {
   const step = currentStep(s);
   if (s.phase !== "guiding" || !step) return noop(s);
-  return { state: { ...s, explanation: step.explain }, effects: [{ type: "say", text: step.explain }] };
+  return { state: { ...s, explanation: step.explain, whySaid: true }, effects: [{ type: "say", text: step.explain }] };
 }
 
 export function onRepeat(s: HodeState): Transition {

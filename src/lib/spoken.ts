@@ -17,6 +17,10 @@ export interface SpokenCopy {
   noPack: string;
   hodeCompleteSpeech: string;
   rememberedOnYourOwn: string;
+  /** A step done unaided with a skill the learner picked up earlier in this same Hode. */
+  gotTheHang: string;
+  /** Teach mode's opening, after the pack's idea: who does the clicking. */
+  youDoTheClicking: string;
   /** Said when the learner gets a step right (Teach, or Help once Hodey stepped in); varied so it doesn't sound canned. */
   stepDone: readonly string[];
   /** Agent mode's lighter acknowledgement of a step done right. */
@@ -53,6 +57,8 @@ const ENGLISH: SpokenCopy = {
   noPack: COPY.noPack,
   hodeCompleteSpeech: COPY.hodeCompleteSpeech,
   rememberedOnYourOwn: COPY.rememberedOnYourOwn,
+  gotTheHang: "You've got the hang of it.",
+  youDoTheClicking: "You do the clicking; I'll help if you get stuck.",
   stepDone: ["Nice, that's it.", "Exactly right.", "Good, that's the one.", "Yes, well done."],
   stepDoneLight: ["Good.", "Done."],
   nothingMarked: COPY.nothingMarked,
@@ -82,6 +88,8 @@ const HINDI: SpokenCopy = {
   noPack: "इसके लिए अभी मेरे पास कोई होड नहीं है। “पिवट टेबल बनाओ” या “ये फ़ाइलें ज़िप करो” बोलकर देखिए।",
   hodeCompleteSpeech: "होड पूरा हुआ। बहुत बढ़िया।",
   rememberedOnYourOwn: "बढ़िया, ये आपको खुद याद था।",
+  gotTheHang: "अब आपको ये आ गया है।",
+  youDoTheClicking: "क्लिक आप करेंगे; अटकने पर मदद मिलेगी।",
   stepDone: ["बढ़िया, यही था।", "बिल्कुल सही।", "हाँ, यही वाला।", "शाबाश, सही किया।"],
   stepDoneLight: ["ठीक है।", "हो गया।"],
   nothingMarked: "वहाँ अभी कोई कंट्रोल समझ नहीं आ रहा। किसी एक बटन के आसपास छोटा हिस्सा मार्क करके देखिए।",
@@ -111,6 +119,8 @@ const HINGLISH: SpokenCopy = {
   noPack: "इसके लिए अभी मेरे पास कोई Hode नहीं है। “PivotTable बनाओ” या “ये files zip करो” बोलकर देखिए।",
   hodeCompleteSpeech: "Hode complete. बहुत बढ़िया।",
   rememberedOnYourOwn: "बढ़िया, ये आपको खुद याद था।",
+  gotTheHang: "अब आपको ये आ गया।",
+  youDoTheClicking: "Click आप करेंगे; अटके तो help मिलेगी।",
   stepDone: ["बढ़िया, यही था।", "Perfect, बिल्कुल सही।", "हाँ, यही वाला।", "Great, सही किया।"],
   stepDoneLight: ["Good।", "Done।"],
   nothingMarked: "वहाँ अभी कोई control समझ नहीं आ रहा। किसी एक button के आसपास छोटा area mark करके देखिए।",

@@ -2,6 +2,7 @@
   "excel-pivot": {
     "title": "PivotTable बनाना",
     "prerequisites": ["Sales workbook खोलिए और table के अंदर किसी भी cell पर click कीजिए।"],
+    "concept": "PivotTable लंबी list को झट से totals में बदल देती है, जैसे हर region की sales, बिना किसी formula के।",
     "steps": {
       "open-insert": {
         "objective": "Insert tab खोलिए",
@@ -61,6 +62,7 @@
   "windows-zip": {
     "title": "Files zip करना",
     "prerequisites": ["File Explorer खोलिए और जिन files को zip करना है, उन्हें select कीजिए।"],
+    "concept": "ZIP file कई files को एक छोटी file में pack कर देती है, जिसे email या share करना आसान होता है।",
     "steps": {
       "open-menu": {
         "objective": "Selected files पर right-click कीजिए",
@@ -99,6 +101,7 @@
     "prerequisites": [
       "अपने iPhone को Hodey में mirror कीजिए (menu → Show iPhone) और Light mode में Home Screen से start कीजिए।"
     ],
+    "concept": "Dark Mode में dark background पर light text दिखता है, जो रात में आँखों के लिए आसान है।",
     "steps": {
       "open-settings": {
         "objective": "Settings खोलिए",

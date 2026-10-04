@@ -23,6 +23,8 @@ import { HodeRuntime } from "./runtime";
 const SETTLE_TICKS = 100;
 const FULL = "spotlight+highlight+arrow";
 const HIGHLIGHT = "highlight";
+/** A hint's area: an unlabelled highlight around the controls the target sits among, never the target itself. */
+const AREA = "area";
 const NONE = "clear";
 
 async function settle(): Promise<void> {
@@ -69,7 +71,7 @@ function harness(journey: Journey, skills = new MemorySkillStore()) {
   const perception = new MockPerception(() => scene);
   const bus = new LocalBus();
   const overlays: string[] = [];
-  bus.on("overlay:render", ({ primitives }) => overlays.push(primitives.map((p) => p.kind).join("+") || NONE));
+  bus.on("overlay:render", ({ primitives }) => overlays.push(primitives.map((p) => (p.kind === "highlight" && p.label === undefined ? AREA : p.kind)).join("+") || NONE));
   bus.on("overlay:clear", () => overlays.push(NONE));
   const said: string[] = [];
   const tts: TTSProvider = {
@@ -144,19 +146,27 @@ function expectAck(h: Harness, journey: Journey, index: number, pool: readonly s
 
 const line = (...parts: string[]) => parts.filter((part) => part !== "").join(" ");
 
-/** Teach: a question and no highlight; a skill just practised unaided gets only "Your turn". Never the whole flow. */
+/**
+ * Teach: the Hode opens with its idea; each question lights up the area holding the answer, never the
+ * answer; a step worked out from a hint is confirmed with its why; a skill just practised unaided gets
+ * only "Your turn". Never the whole flow.
+ */
 function expectTeachStep(h: Harness, journey: Journey, index: number, said: string[]): void {
   const s = step(journey, index);
-  const level = START_LEVELS.teach[journey.name][index];
+  const levels = START_LEVELS.teach[journey.name];
+  const level = levels[index];
   expect(h.state()).toMatchObject({ phase: "guiding", stepIndex: index, level, mode: "teach" });
   expect(highlighted(h.overlays.at(-1))).toBe(false);
-  const ack = expectAck(h, journey, index, [...EN.stepDone, EN.rememberedOnYourOwn], "Teach");
+  if (level === "hint") expect(h.overlays.at(-1)).toBe(AREA);
+  const ack = expectAck(h, journey, index, [...EN.stepDone, EN.rememberedOnYourOwn, EN.gotTheHang], "Teach");
+  const intro = index === 0 ? `${journey.pack.concept} ${EN.youDoTheClicking}` : "";
+  const reason = index > 0 && levels[index - 1] === "hint" ? why(journey, index - 1) : "";
   const view = h.view();
   if (level === "hint") {
-    expect(said).toEqual([line(ack, s.speech.hint)]);
+    expect(said).toEqual([line(intro, ack, reason, s.speech.hint)]);
     expect(view.title).toBe(s.speech.hint);
   } else {
-    expect(said).toEqual([ack]);
+    expect(said).toEqual([line(ack, reason)]);
     expect(view.title).toBe(`${COPY.yourTurn}: ${s.objective}`);
   }
   expect(view.hintLabel).toBe(COPY.needHint);
@@ -288,7 +298,7 @@ describe("a wrong action", () => {
     await click(h, { id: "item:notes.txt" });
     expect(h.newSpeech()).toEqual([]);
     await click(h, { id: "item:photo.jpg" });
-    const expected = { teach: ["guide", HIGHLIGHT], help: ["hint", NONE], agent: ["demonstrate", FULL] }[mode];
+    const expected = { teach: ["guide", HIGHLIGHT], help: ["hint", AREA], agent: ["demonstrate", FULL] }[mode];
     expect(h.state().level).toBe(expected[0]);
     expect(h.overlays.at(-1)).toBe(expected[1]);
     for (const next of ZIP.clicks) await click(h, next);
@@ -303,7 +313,7 @@ const LADDER: Record<HodeMode, Array<{ level: AssistanceLevel; overlay: string; 
     { level: "demonstrate", overlay: FULL, speech: (j) => `${step(j, 0).speech.demonstrate} ${why(j, 0)}` },
   ],
   help: [
-    { level: "hint", overlay: NONE, speech: (j) => step(j, 0).speech.hint },
+    { level: "hint", overlay: AREA, speech: (j) => step(j, 0).speech.hint },
     { level: "guide", overlay: HIGHLIGHT, speech: (j) => step(j, 0).speech.guide },
     { level: "demonstrate", overlay: FULL, speech: (j) => step(j, 0).speech.demonstrate },
   ],
@@ -328,7 +338,7 @@ describe.each(["HINT_REQUESTED", "STUCK_TIMEOUT"] as const)("help revealed gradu
 });
 
 describe("the stuck timer", () => {
-  it("in Help: after a quiet wait, Hodey offers the question first, with no highlight", async () => {
+  it("in Help: after a quiet wait, Hodey offers the question first, lighting up only the area", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const h = harness(ZIP);
     await start(h, ZIP, "help");
@@ -337,7 +347,7 @@ describe("the stuck timer", () => {
     await settle();
     expect(h.state().level).toBe("hint");
     expect(h.newSpeech()).toEqual([step(ZIP, 0).speech.hint]);
-    expect(highlighted(h.overlays.at(-1))).toBe(false);
+    expect(h.overlays.at(-1)).toBe(AREA);
   });
 
   it("in Teach: shows the target after a wait", async () => {
@@ -353,7 +363,7 @@ describe("the stuck timer", () => {
 });
 
 describe("Teach with a practised skill", () => {
-  it("starts with less help the next time: no question, no highlight, just Your turn", async () => {
+  it("starts with less help the next time: no idea re-explained, no question, no highlight, just Your turn", async () => {
     const skills = new MemorySkillStore();
     const first = harness(PIVOT, skills);
     await start(first, PIVOT, "teach");
@@ -369,7 +379,7 @@ describe("Teach with a practised skill", () => {
     expect(second.said[0]).toBe(COPY.rememberedOnYourOwn);
   });
 
-  it("never starts above a question, even after a fully demonstrated Hode", async () => {
+  it("never starts above a question (the area, not the target), even after a fully demonstrated Hode", async () => {
     const skills = new MemorySkillStore();
     const first = harness(PIVOT, skills);
     await start(first, PIVOT, "agent");
@@ -379,6 +389,7 @@ describe("Teach with a practised skill", () => {
     await start(second, PIVOT, "teach");
     expect(second.state().level).toBe("hint");
     expect(second.overlays.filter(highlighted)).toEqual([]);
+    expect(second.overlays.at(-1)).toBe(AREA);
   });
 });
 

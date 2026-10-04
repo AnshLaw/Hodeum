@@ -5,6 +5,7 @@
   "surface": "phone",
   "goalPhrases": ["iphone dark", "phone dark"],
   "prerequisites": ["Mirror your iPhone into Hodey (menu → Show iPhone) and start on the Home Screen, in Light mode."],
+  "concept": "Dark Mode shows light text on a dark background, which is easier on your eyes at night.",
   "steps": [
     {
       "id": "open-settings",

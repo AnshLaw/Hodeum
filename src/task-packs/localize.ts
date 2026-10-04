@@ -19,6 +19,7 @@ const packTextSchema = z
   .object({
     title: z.string().min(1),
     prerequisites: z.array(z.string().min(1)),
+    concept: z.string().min(1).optional(),
     steps: z.record(z.string(), stepTextSchema),
   })
   .strict();
@@ -44,7 +45,9 @@ function localizeStep(step: TaskStep, text: StepText | undefined): TaskStep {
 export function localizePack(pack: TaskPack, language: ReplyLanguage): TaskPack {
   const text = language === "en" ? undefined : TEXTS[language][pack.id];
   if (!text) return pack;
-  return { ...pack, title: text.title, prerequisites: text.prerequisites, steps: pack.steps.map((step) => localizeStep(step, text.steps[step.id])) };
+  const concept = text.concept ?? pack.concept;
+  const localized = { ...pack, title: text.title, prerequisites: text.prerequisites, steps: pack.steps.map((step) => localizeStep(step, text.steps[step.id])) };
+  return concept ? { ...localized, concept } : localized;
 }
 
 /** For tests: a pack's text in a language, to check every step is covered. */

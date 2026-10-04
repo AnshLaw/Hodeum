@@ -48,6 +48,7 @@ const packSchema = z
     surface: z.enum(["windows", "phone"]).optional(),
     goalPhrases: names,
     prerequisites: z.array(z.string().min(1)),
+    concept: z.string().min(1).optional(),
     steps: z.array(stepSchema).min(1),
   })
   .strict();
