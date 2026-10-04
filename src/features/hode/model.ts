@@ -3,6 +3,7 @@ import type {
   AgentStyle,
   AppLaunch,
   AssistanceLevel,
+  DialogueTurn,
   HodeMode,
   LearnerAnnotation,
   OverlayPrimitive,
@@ -21,6 +22,8 @@ import type {
 import type { StepAction, StuckSignal } from "./stuck";
 
 export const STUCK_MS = 12_000;
+/** Turns of conversation kept for context: three exchanges. */
+export const DIALOGUE_TURNS = 6;
 export const MAX_WRONG_ACTIONS = 2;
 export const QUESTION_PADDING_PX = 16;
 /** Agent · Do it for me: how long Hodey shows what it's about to press, so the learner can stop it. */
@@ -135,6 +138,8 @@ export interface HodeState {
   openDone?: string[];
   /** Open-ended Hodes: the learner did something that mattered since the instruction on show was given. */
   actedSinceInstruction?: boolean;
+  /** The last few turns of the conversation this Hode, oldest first (see `withTurn`). */
+  dialogue?: DialogueTurn[];
   /** That acknowledgement, shown in the notch until the learner acts again. */
   ack?: string;
   /** The last acknowledgement used, so the next one is a different phrase. */
@@ -271,6 +276,11 @@ export function rechecking(s: HodeState): boolean {
   // Asked for (a hint, look again) and a slow reasoner is on it: show Hodey working instead.
   const shownWorking = s.thinking === true && s.prompted === true;
   return s.phase === "reasoning" && !shownWorking && !asking && s.action !== undefined && s.action.kind !== "answer";
+}
+
+/** The conversation with one more turn, keeping only the last few. */
+export function withTurn(dialogue: DialogueTurn[] | undefined, turn: DialogueTurn): DialogueTurn[] {
+  return [...(dialogue ?? []), turn].slice(-DIALOGUE_TURNS);
 }
 
 /** Help with an open goal, before anyone asked: Hodey watches and leaves the vision model alone. */
