@@ -13,6 +13,7 @@ mod vlm;
 mod voice;
 mod web_search;
 
+use tauri::webview::{PermissionKind, PermissionResponse};
 use tauri::{AppHandle, Manager, RunEvent};
 
 /// Tells the overlay to start Point & Ask (Hodey key + P).
@@ -30,6 +31,15 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// The notch reads the mirrored iPhone (a camera device). Every other request keeps WebView2's default.
+fn notch_camera(webview: &tauri::Webview, kind: PermissionKind) -> PermissionResponse {
+    if matches!(kind, PermissionKind::Camera) && webview.label() == surfaces::NOTCH {
+        PermissionResponse::Allow
+    } else {
+        PermissionResponse::Default
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -38,6 +48,7 @@ pub fn run() {
                 .add_migrations(db::DATABASE_URL, db::migrations())
                 .build(),
         )
+        .on_permission_request(|webview, kind| notch_camera(&webview, kind))
         .manage(hit_test::NotchHitRect::default())
         .manage(perception::Perception::start())
         .manage(dock::DockState::default())
