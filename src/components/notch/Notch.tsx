@@ -346,7 +346,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
       if (state.phase === "goal_entry") runtime.dispatch({ type: "DISMISS" });
     },
     // Classified like a spoken goal: "open Excel" opens it, and a greeting or noise gets a nudge instead of an open Hode.
-    onSubmitGoal: (goal, mode, agentStyle) => goalEvents(goal, { packs, openAllowed: visionStatus?.state === "ready", apps: apps?.() ?? [], mode, agentStyle }).forEach(runtime.dispatch),
+    onSubmitGoal: (goal, mode, agentStyle) => goalEvents(goal, { packs, openAllowed: visionStatus?.state === "ready", visionStarting: visionStatus?.state === "starting", apps: apps?.() ?? [], mode, agentStyle }).forEach(runtime.dispatch),
     hodeMode: state.mode,
     hodeAgentStyle: state.agentStyle,
     defaultMode: runtime.getDefaultMode(),

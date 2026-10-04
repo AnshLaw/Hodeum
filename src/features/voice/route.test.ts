@@ -41,6 +41,24 @@ describe("asking Hodey to look it up", () => {
   });
 });
 
+describe("pressing the mic and asking to be taught", () => {
+  it("plans a Hode from a how-to request, as Start a Hode would", () => {
+    expect(types(route(initialState, "how do I send a message on discord", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
+    expect(types(route(initialState, "teach me to rename a file", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
+    expect(types(route(initialState, "help me add a column in excel", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
+    expect(types(route(initialState, "excel mein chart kaise banate hain", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
+  });
+
+  it("starts it while vision is still loading, so Hodey can say so", () => {
+    const events = routeUtterance(initialState, "how do I send a message on discord", TASK_PACKS, false, [], [], true);
+    expect(events).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", openAllowed: false, visionStarting: true }]);
+  });
+
+  it("still answers a question about what's on screen", () => {
+    expect(route(initialState, "What does this button do?")).toEqual([{ type: "VOICE_QUESTION", question: "What does this button do?" }]);
+  });
+});
+
 describe("routeUtterance", () => {
   it("starts a Hode from a spoken goal when idle", () => {
     const events = route(initialState, "Hey Hodey, teach me how to make a pivot table in Excel");
@@ -52,8 +70,8 @@ describe("routeUtterance", () => {
     expect(route(initialState, "What does this button do?")).toEqual([{ type: "VOICE_QUESTION", question: "What does this button do?" }]);
   });
 
-  it("asks a question when a goal has no pack and vision can't plan it", () => {
-    expect(types(route(initialState, "how do I write a poem"))).toEqual(["VOICE_QUESTION"]);
+  it("plans a Hode from a how-to request even when vision can't plan it yet: the Hode says why", () => {
+    expect(route(initialState, "how do I write a poem")).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", openAllowed: false }]);
     expect(types(route(initialState, "how do I write a poem", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
   });
 

@@ -36,6 +36,8 @@ export interface VoiceDeps {
   onHodeEvent?: (listener: (event: HodeEvent) => void) => () => void;
   /** The PC's installed apps, so "open Excel" opens it. */
   apps?: () => InstalledApp[];
+  /** Whether the local vision model is still loading, so a spoken goal it can't plan yet says so. */
+  visionStarting?: () => boolean;
 }
 
 const ENDS_CONVERSATION = new Set<HodeEvent["type"]>(["DISMISS", "END_HODE"]);
@@ -171,7 +173,7 @@ class Conversation {
     }
     this.conversing = this.deps.conversation();
     this.deps.heard?.(said);
-    const events = routeUtterance(this.deps.getState(), said, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? [], this.deps.apps?.() ?? []);
+    const events = routeUtterance(this.deps.getState(), said, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? [], this.deps.apps?.() ?? [], this.deps.visionStarting?.() ?? false);
     events.forEach(this.deps.dispatch);
     // Nothing came of it (noise, a thank-you): the learner's turn is still open, but not forever.
     if (events.length === 0 && this.open) this.armQuietTimer();
@@ -193,7 +195,7 @@ class Conversation {
     }
     this.conversing = this.deps.conversation();
     this.deps.heard?.(rest);
-    routeUtterance(this.deps.getState(), rest, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? [], this.deps.apps?.() ?? []).forEach(this.deps.dispatch);
+    routeUtterance(this.deps.getState(), rest, this.deps.packs, this.deps.openAllowed(), this.deps.wakeWords?.() ?? [], this.deps.apps?.() ?? [], this.deps.visionStarting?.() ?? false).forEach(this.deps.dispatch);
     if (this.conversing) this.openMic();
   }
 

@@ -189,19 +189,23 @@ function routeInHode(s: HodeState, text: string, apps: InstalledApp[]): HodeEven
   return [open ?? question(text)];
 }
 
-/** Idle: only a real task (or a pack's own words) starts a Hode; a greeting gets a reply, noise nothing. */
-function routeIdle(text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[]): HodeEvent[] {
+/** "How do I…", "teach me…", "help me…": a request to be taught, planned into a Hode rather than answered once. */
+const TEACH_ME =
+  /^(?:how (?:do|can|would|should|could) (?:i|we|you)|how to|where do i|teach me|show me how|help me|i want to|i need to|i'd like to|(?:can|could|will|would) you (?:teach|show|help))\b|\b(?:kaise|sikhao|sikha do)\b|कैसे|सिखाओ|सिखा दो/i;
+
+/** Idle: a task, a pack's own words or a how-to request starts a Hode; a greeting gets a reply, noise nothing. */
+function routeIdle(text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[], visionStarting: boolean): HodeEvent[] {
   const open = idleOpenAppEvent(text, apps, openAllowed);
   if (open) return [open];
   // App requests are settled above: one that names no app is judged by its words ("open a new tab").
   const intent = classify(text, { isCommand, isApp: () => false });
   if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];
   if (intent === "noise" || intent === "ack" || intent === "control" || tooShort(text)) return [];
-  if (intent === "question") return [question(text)];
-  const goal = goalEvent(text, packs, openAllowed);
+  const goal = goalEvent(text, packs, openAllowed, undefined, undefined, visionStarting);
   if (goal.type === "GOAL_SUBMITTED" && goal.pack) return [{ type: "START_HODE" }, goal];
-  if (intent !== "task") return [];
-  return openAllowed ? [{ type: "START_HODE" }, goal] : [question(text)];
+  // Pressing the mic and asking to be taught plans a Hode (it says so if vision isn't ready); a question about the screen is answered once.
+  if (intent === "task" || TEACH_ME.test(text)) return [{ type: "START_HODE" }, goal];
+  return intent === "question" ? [question(text)] : [];
 }
 
 /**
@@ -209,7 +213,7 @@ function routeIdle(text: string, packs: TaskPack[], openAllowed: boolean, apps: 
  * screen, a greeting gets a reply, "open Excel" opens it. Goal entry: it's the goal. During a Hode: a control
  * word, an app to open, or else a question. `apps`: the installed apps, for "open X" (none: no app requests).
  */
-export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], openAllowed: boolean, wakeWords: string[] = [], apps: InstalledApp[] = []): HodeEvent[] {
+export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], openAllowed: boolean, wakeWords: string[] = [], apps: InstalledApp[] = [], visionStarting = false): HodeEvent[] {
   const text = clean(raw, wakeWords);
   if (text.length < MIN_CHARS) return [];
   if (s.phase === "annotating") return [];
@@ -219,5 +223,5 @@ export function routeUtterance(s: HodeState, raw: string, packs: TaskPack[], ope
   if (answering && !isAcknowledgement(text)) return [asCommand(text) ?? { type: "REVIEW_ANSWERED", said: text }];
   const lookUp = lookUpRequest(s, text);
   if (lookUp) return [lookUp];
-  return s.phase === "idle" ? routeIdle(text, packs, openAllowed, apps) : routeInHode(s, text, apps);
+  return s.phase === "idle" ? routeIdle(text, packs, openAllowed, apps, visionStarting) : routeInHode(s, text, apps);
 }
