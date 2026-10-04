@@ -48,6 +48,15 @@ describe("an open-ended Hode whose app isn't in front", () => {
     expect(t.state.action?.speech).toBe(EN.searchToOpen("Search", "Discord"));
   });
 
+  it("with a taskbar on each monitor, rings the one on the monitor the learner's window is on", () => {
+    const begun = play(initialState, { type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "how do I send a message on discord", openAllowed: true, app: "Discord", mode: "teach" });
+    const onSecond: ScreenObservation = { ...BROWSER, window: { id: 3, bounds: { x: 1920, y: 0, width: 1920, height: 1040 } } };
+    const t = play(begun.state, { type: "OBSERVED", observation: onSecond });
+    const secondSearch = el("Search", "edit", { id: "shell:search:2", bounds: { x: 2220, y: 1040, width: 220, height: 36 } });
+    const ringed = play(t.state, { type: "SHELL_OBSERVED", elements: [SEARCH, secondSearch] });
+    expect(renders(ringed)[0].primitives[0]).toMatchObject({ bounds: secondSearch.bounds });
+  });
+
   it("rings Start when there's no search box", () => {
     const t = play(waiting().state, { type: "SHELL_OBSERVED", elements: [START] });
     expect(said(t)).toEqual([EN.searchToOpen("Start", "Discord")]);

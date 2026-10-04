@@ -379,12 +379,29 @@ const SHELL_WAYS: [RegExp, string][] = [
   [/^start$/i, "Start"],
 ];
 
+const centre = (r: Rect) => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
+const distance = (a: Rect, b: Rect) => Math.hypot(centre(a).x - centre(b).x, centre(a).y - centre(b).y);
+
+/**
+ * The best taskbar control to point at: a search box before Start; with a taskbar on each monitor, the
+ * one nearest the learner's window (the overlay covers that monitor); the primary, listed first, otherwise.
+ */
+function shellWay(elements: UiElement[], window: Rect | undefined): { element: UiElement; label: string } | undefined {
+  for (const [pattern, label] of SHELL_WAYS) {
+    const found = elements.filter((element) => pattern.test(element.name));
+    if (found.length === 0) continue;
+    const nearest = window ? [...found].sort((a, b) => distance(a.bounds, window) - distance(b.bounds, window))[0] : found[0];
+    return { element: nearest, label };
+  }
+  return undefined;
+}
+
 /** The taskbar read for an app Hodey is waiting for: point at where to search for it, or say the Windows-key way. */
 export function onShellObserved(s: HodeState, e: EventOf<"SHELL_OBSERVED">): Transition {
   const app = s.waitingForApp;
   if (s.phase !== "guiding" || !app || s.shellPending !== true) return noop(s);
   const words = spoken(s.language);
-  const way = SHELL_WAYS.flatMap(([pattern, label]) => e.elements.filter((element) => pattern.test(element.name)).map((element) => ({ element, label })))[0];
+  const way = shellWay(e.elements, s.observation?.window?.bounds);
   const intro = s.pendingIntro ? [s.pendingIntro] : [];
   const settled: HodeState = { ...s, shellPending: false, pendingIntro: undefined };
   if (!way) return { state: settled, effects: [{ type: "say", text: [...intro, words.howToOpen(app)].join(" ") }] };
