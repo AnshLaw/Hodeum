@@ -20,7 +20,7 @@
         "independent": ""
       },
       "explain": "Right-clicking opens a menu of actions for whatever you clicked.",
-      "success": { "kind": "element_visible", "names": ["Compress to..."] },
+      "success": { "kind": "element_visible", "names": ["Compress to...", "Compress to"] },
       "mistakes": [],
       "press": "right"
     },
@@ -28,7 +28,7 @@
       "id": "choose-compress",
       "objective": "Choose Compress to…",
       "skill": "windows.explorer.compress",
-      "target": { "names": ["Compress to..."], "role": "menu item" },
+      "target": { "names": ["Compress to...", "Compress to"], "role": "menu item" },
       "speech": {
         "demonstrate": "Choose Compress to… in the menu.",
         "guide": "Choose Compress to…",
@@ -53,7 +53,7 @@
         "independent": ""
       },
       "explain": "ZIP works everywhere — any computer can open it without extra software.",
-      "success": { "kind": "element_visible", "names": ["*.zip"] },
+      "success": { "kind": "element_visible", "names": ["*.zip", "Compressed (zipped) Folder"] },
       "mistakes": []
     }
   ]

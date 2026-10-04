@@ -1,7 +1,7 @@
 {
   "excel-pivot": {
     "title": "PivotTable बनाना",
-    "prerequisites": ["Sales workbook खोलिए और table के अंदर किसी भी cell पर click कीजिए।"],
+    "prerequisites": ["Excel को maximize कीजिए, फिर sales table के अंदर किसी भी cell पर click कीजिए।"],
     "concept": "PivotTable लंबी list को झट से totals में बदल देती है, जैसे हर region की sales, बिना किसी formula के।",
     "steps": {
       "open-insert": {

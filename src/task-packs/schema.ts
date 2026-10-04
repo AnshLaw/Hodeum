@@ -29,7 +29,7 @@ const stepSchema = z
     id: z.string().min(1),
     objective: z.string().min(1),
     skill: z.string().regex(SKILL_ID_PATTERN, "skill ids look like app.area.skill"),
-    target: z.object({ names, role: z.string().min(1).optional(), label: z.string().min(1).optional(), prefer: z.literal("selected").optional() }).strict(),
+    target: z.object({ names, role: z.union([z.string().min(1), names]).optional(), label: z.string().min(1).optional(), prefer: z.literal("selected").optional() }).strict(),
     speech: speechSchema,
     explain: z.string().min(1),
     success: signalSchema,

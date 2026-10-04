@@ -4,7 +4,7 @@
   "app": "Excel",
   "launch": { "exe": "excel.exe", "sample": "hodeum-sales.csv" },
   "goalPhrases": ["pivot table", "pivottable", "pivot", "summarize data in excel", "पिवट टेबल", "पिवोट टेबल", "पाइवट टेबल"],
-  "prerequisites": ["Open the sales workbook and click any cell inside the table."],
+  "prerequisites": ["Maximize Excel, then click any cell inside the sales table."],
   "concept": "A PivotTable turns a long list of rows into quick totals, like sales for each region, without a single formula.",
   "steps": [
     {
@@ -36,7 +36,7 @@
       "id": "click-pivot",
       "objective": "Click PivotTable",
       "skill": "excel.pivot.create",
-      "target": { "names": ["PivotTable"], "role": "button" },
+      "target": { "names": ["PivotTable"], "role": ["button", "split button"] },
       "speech": {
         "demonstrate": "Now click PivotTable — the first button on the Insert ribbon.",
         "guide": "Click PivotTable.",
@@ -62,14 +62,14 @@
         "independent": ""
       },
       "explain": "The dialog asks which cells to summarize; Excel fills it in from the cell you clicked.",
-      "success": { "kind": "element_visible", "names": ["PivotTable Fields"] },
+      "success": { "kind": "element_visible", "names": ["PivotTable Fields", "PivotTable Field List", "PivotTable Analyze"] },
       "mistakes": []
     },
     {
       "id": "add-region",
       "objective": "Tick Region in the field list",
       "skill": "excel.pivot.fields",
-      "target": { "names": ["Region"], "role": "check box" },
+      "target": { "names": ["Region"], "role": ["check box", "tree item", "list item"] },
       "speech": {
         "demonstrate": "Tick Region in the PivotTable Fields list. It becomes your rows.",
         "guide": "Tick the Region field.",
@@ -90,7 +90,7 @@
       "id": "add-sales",
       "objective": "Tick Sales to total it",
       "skill": "excel.pivot.fields",
-      "target": { "names": ["Sales"], "role": "check box" },
+      "target": { "names": ["Sales"], "role": ["check box", "tree item", "list item"] },
       "speech": {
         "demonstrate": "Now tick Sales to total it for each region.",
         "guide": "Tick the Sales field.",

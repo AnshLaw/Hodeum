@@ -92,6 +92,9 @@ export type StateSignal =
   /** `names` must be visible too, so a dark lock screen or a black frame never counts. */
   | { kind: "screen_tone"; tone: ScreenTone; names?: string[] };
 
+/** A control's role as UI Automation reports it, or the roles one control may report (Excel's PivotTable: button or split button). */
+export type TargetRole = string | string[];
+
 export interface TaskStep {
   id: string;
   objective: string;
@@ -100,7 +103,7 @@ export interface TaskStep {
    * `prefer: "selected"` points at a selected item inside the matched container (one of the files
    * the learner selected) instead of the whole container; the container stays the fallback.
    */
-  target: { names: string[]; role?: string; label?: string; prefer?: "selected" };
+  target: { names: string[]; role?: TargetRole; label?: string; prefer?: "selected" };
   speech: Record<AssistanceLevel, string>;
   explain: string;
   success: StateSignal;

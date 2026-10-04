@@ -1,4 +1,4 @@
-import type { ScreenObservation, StateSignal, UiElement } from "../../lib/types";
+import type { ScreenObservation, StateSignal, TargetRole, UiElement } from "../../lib/types";
 
 function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/…/g, "...");
@@ -14,6 +14,13 @@ export function nameMatches(pattern: string, name: string): boolean {
   const n = normalize(name);
   if (!p.includes("*")) return p === n;
   return new RegExp(`^${p.split("*").map(escapeRegex).join(".*")}$`).test(n);
+}
+
+/** Whether a control's role is one the step accepts (case-insensitive); any role when the step names none. */
+export function roleMatches(role: string, expected?: TargetRole): boolean {
+  if (expected === undefined) return true;
+  const actual = role.toLowerCase();
+  return (Array.isArray(expected) ? expected : [expected]).some((r) => r.toLowerCase() === actual);
 }
 
 export function findByNames(elements: UiElement[], names: string[]): UiElement[] {

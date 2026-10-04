@@ -1,7 +1,7 @@
 import { area, center, containsPoint, intersects } from "../lib/coords";
 import { spoken } from "../lib/spoken";
 import type { ActionTarget, LearnerAnnotation, Rect, TaskStep, TeachingAction, TeachingContext, UiElement } from "../lib/types";
-import { findByNames, nameMatches } from "../features/hode/signals";
+import { findByNames, nameMatches, roleMatches } from "../features/hode/signals";
 import type { ReasoningProvider } from "./interfaces";
 
 const ROLE_MISMATCH_PENALTY = 0.8;
@@ -23,10 +23,6 @@ export class TaskPackReasoningProvider implements ReasoningProvider {
   }
 }
 
-function roleMatches(element: UiElement, role?: string): boolean {
-  return role === undefined || element.role.toLowerCase() === role.toLowerCase();
-}
-
 /** The first selected element (top to bottom, then left to right) inside `container`, if any. */
 function firstSelectedIn(container: UiElement, elements: UiElement[]): UiElement | undefined {
   const inside = elements.filter((e) => e !== container && e.selected === true && containsPoint(container.bounds, center(e.bounds)));
@@ -36,9 +32,9 @@ function firstSelectedIn(container: UiElement, elements: UiElement[]): UiElement
 function locateTarget(step: TaskStep, elements: UiElement[], focus?: Rect): ActionTarget | undefined {
   const candidates = findByNames(elements, step.target.names);
   if (candidates.length === 0) return undefined;
-  const score = (e: UiElement) => (roleMatches(e, step.target.role) ? 2 : 0) + (focus && intersects(e.bounds, focus) ? 1 : 0);
+  const score = (e: UiElement) => (roleMatches(e.role, step.target.role) ? 2 : 0) + (focus && intersects(e.bounds, focus) ? 1 : 0);
   const best = [...candidates].sort((a, b) => score(b) - score(a))[0];
-  const confidence = roleMatches(best, step.target.role) ? best.confidence : best.confidence * ROLE_MISMATCH_PENALTY;
+  const confidence = roleMatches(best.role, step.target.role) ? best.confidence : best.confidence * ROLE_MISMATCH_PENALTY;
   const label = step.target.label ?? best.name;
   // A whole file list is too big to point at: one of the learner's selected files is what they act on.
   const selected = step.target.prefer === "selected" ? firstSelectedIn(best, elements) : undefined;

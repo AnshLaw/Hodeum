@@ -17,7 +17,7 @@ const LOANWORDS: [string, string][] = [
   ["column", "कॉलम"], ["columns", "कॉलम्स"], ["cell", "सेल"], ["cells", "सेल्स"], ["sheet", "शीट"], ["workbook", "वर्कबुक"],
   ["chart", "चार्ट"], ["charts", "चार्ट्स"], ["dialog", "डायलॉग"], ["menu", "मेन्यू"], ["option", "ऑप्शन"], ["options", "ऑप्शन्स"],
   ["file", "फ़ाइल"], ["files", "फ़ाइल्स"], ["folder", "फ़ोल्डर"], ["zip", "ज़िप"], ["compress", "कंप्रेस"], ["archive", "आर्काइव"],
-  ["window", "विंडो"], ["mouse", "माउस"], ["select", "सेलेक्ट"], ["selected", "सेलेक्टेड"], ["step", "स्टेप"], ["steps", "स्टेप्स"],
+  ["window", "विंडो"], ["maximize", "मैक्सिमाइज़"], ["mouse", "माउस"], ["select", "सेलेक्ट"], ["selected", "सेलेक्टेड"], ["step", "स्टेप"], ["steps", "स्टेप्स"],
   ["hint", "हिंट"], ["highlight", "हाइलाइट"], ["screen", "स्क्रीन"], ["save", "सेव"], ["copy", "कॉपी"], ["paste", "पेस्ट"],
   ["format", "फ़ॉर्मैट"], ["software", "सॉफ़्टवेयर"], ["computer", "कंप्यूटर"], ["settings", "सेटिंग्स"], ["app", "ऐप"],
   ["filter", "फ़िल्टर"], ["sort", "सॉर्ट"], ["group", "ग्रुप"], ["checkbox", "चेकबॉक्स"], ["scroll", "स्क्रॉल"], ["type", "टाइप"],

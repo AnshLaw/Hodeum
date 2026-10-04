@@ -45,8 +45,8 @@ export function onGoalSubmitted(s: HodeState, e: EventOf<"GOAL_SUBMITTED">): Tra
   // Teach opens with the idea: what the learner is about to make, and that they do the clicking.
   const pendingIntro = mode === "teach" && pack.concept ? `${pack.concept} ${spoken(s.language).youDoTheClicking}` : undefined;
   const begun = beginStep({ ...s, goal, mode, agentStyle, pack, app: pack.app, notice: undefined, pendingIntro }, 0);
-  // Agent mode gets going on its own: it opens the app and the pack's practice file instead of asking the learner to.
-  const launch = mode === "agent" && e.pack.launch ? { launch: e.pack.launch } : {};
+  // The pack's practice file opens with the lesson in every mode: it's setup, not the skill, and the steps need its data.
+  const launch = e.pack.launch ? { launch: e.pack.launch } : {};
   return { ...begun, effects: [{ type: "focusApp", app: e.pack.app, ...launch }, ...begun.effects] };
 }
 

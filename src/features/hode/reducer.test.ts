@@ -151,9 +151,9 @@ describe("opening the pack's app", () => {
     expect(begun.effects[0]).toEqual({ type: "focusApp", app: "Excel", launch: LAUNCHING.launch });
   });
 
-  it("leaves opening it to the learner in Teach mode", () => {
+  it("opens it in Teach mode too: the practice file is setup, not the skill", () => {
     const begun = fold(initialState, { type: "START_HODE" }, { type: "GOAL_SUBMITTED", goal: "teach me", pack: LAUNCHING, mode: "teach" });
-    expect(begun.effects[0]).toEqual({ type: "focusApp", app: "Excel" });
+    expect(begun.effects[0]).toEqual({ type: "focusApp", app: "Excel", launch: LAUNCHING.launch });
   });
 });
 

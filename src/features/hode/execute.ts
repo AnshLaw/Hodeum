@@ -16,7 +16,7 @@ import {
   type Transition,
 } from "./model";
 import { confidenceBand, overlayFor } from "./policy";
-import { evaluateSignal, nameMatches } from "./signals";
+import { evaluateSignal, nameMatches, roleMatches } from "./signals";
 
 /**
  * Agent · Do it for me: Hodey presses each step's control itself, verifies the result the same way it
@@ -44,8 +44,7 @@ function stepTarget(s: HodeState, target: ActionTarget): UiElement | undefined {
   const element = s.observation?.elements.find((e) => e.id === target.elementId);
   if (!step || !element) return undefined;
   const named = step.target.names.some((name) => nameMatches(name, element.name));
-  const role = step.target.role;
-  return named && (role === undefined || element.role.toLowerCase() === role.toLowerCase()) ? element : undefined;
+  return named && roleMatches(element.role, step.target.role) ? element : undefined;
 }
 
 /** Shows what Hodey is about to press and asks the runtime to press it, as the screen read saw it, after a short preview. */
