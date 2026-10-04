@@ -272,10 +272,25 @@ describe("what the learner means", () => {
       "dark mode kya hota hai",
       "क्या लाइट मोड ऑन है",
       "zip file kya hoti hai",
+      "what is dark mode",
+      "what is pivot table",
+      "what are pivot tables",
+      "why is dark mode on",
+      "where is dark mode",
+      "which is better dark mode or light mode",
+      "how many pivot tables are there",
+      "what is zip",
+      "who made dark mode",
     ];
     for (const said of questions) {
       expect(route(initialState, said), said).toEqual([{ type: "VOICE_QUESTION", question: said }]);
       expect(route(initialState, said, true), said).toEqual([{ type: "VOICE_QUESTION", question: said }]);
+    }
+  });
+
+  it("starts a lesson when its task is asked as a sum to work out, in English or Hinglish", () => {
+    for (const said of ["what is 15% of 200", "what's 15% of 200", "how much is 15% of 200", "200 ka 15 percent kya hai"]) {
+      expect(route(initialState, said, true), said).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", pack: { id: "calculator-percent" } }]);
     }
   });
 

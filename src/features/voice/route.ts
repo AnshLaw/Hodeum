@@ -189,9 +189,8 @@ function routeInHode(s: HodeState, text: string, apps: InstalledApp[]): HodeEven
   return [open ?? question(text)];
 }
 
-/** Asking what something is, or a yes/no question: answered even when it names a lesson's task. */
-const ANSWER_ONLY =
-  /^(?:what(?:'s| is| are) (?:a|an|the)\b|what does\b|(?:is|are|does|do|did|can|could|was|were|has|have)\b|kya\b|क्या(?:\s|$))|\b(?:kya (?:hai|hota|hoti|hote)|kahan|kahaan|matlab kya)\b|क्या (?:है|होता|होती|करता|करती)|कहाँ|कहां/i;
+/** A question with a number in it asks for a sum to work out ("what is 15% of 200", "200 ka 15 percent kya hai"). */
+const SUM = /\d/;
 
 /** "How do I…", "teach me…", "help me…": a request to be taught, planned into a Hode rather than answered once. */
 const TEACH_ME =
@@ -207,9 +206,9 @@ const TEACH_ME =
 function askOrStart(text: string, intent: Intent, packs: TaskPack[], openAllowed: boolean, visionStarting: boolean, apps: InstalledApp[]): HodeEvent[] {
   const goal = goalEvent(text, { packs, openAllowed, apps, visionStarting });
   if (intent === "task" || TEACH_ME.test(text)) return [{ type: "START_HODE" }, goal];
-  // "What is 15% of 200?" is the lesson's task; "what is a pivot table?" or "is dark mode on?" is answered.
+  // A question about a lesson's topic is answered ("what is dark mode?"); one asking for the sum it teaches starts it.
   const lesson = goal.type === "GOAL_SUBMITTED" && goal.pack !== undefined;
-  if (lesson && !(intent === "question" && ANSWER_ONLY.test(text.trim()))) return [{ type: "START_HODE" }, goal];
+  if (lesson && (intent !== "question" || SUM.test(text))) return [{ type: "START_HODE" }, goal];
   if (intent === "question") return [question(text)];
   return asksAboutScreen(text) ? [question(text)] : [];
 }
