@@ -881,3 +881,24 @@
     animation: none;
   }
 }
+
+/* Bar items keep their size; only the title gives way (and truncates) when space is short. */
+.notch__bar > * {
+  flex-shrink: 0;
+}
+
+.notch__bar > .notch__grip {
+  flex-shrink: 1;
+  min-width: 34px;
+}
+
+.notch__grip .hodey {
+  flex: none;
+  margin-right: 2px;
+}
+
+/* Hovering the idle pill shows its buttons; the face alone says it's Hodey. */
+.notch--idle.notch--hovered .notch__bar-title,
+.notch--idle:focus-within .notch__bar-title {
+  display: none;
+}

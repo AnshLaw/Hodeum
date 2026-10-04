@@ -73,13 +73,22 @@ function HeardLine({ heard }: { heard?: string }) {
 
 function useActivity(tracker: ActivityTracker): ActivityState {
   const [state, setState] = useState(tracker.current());
-  useEffect(() => tracker.subscribe(setState), [tracker]);
+  useEffect(() => {
+    const off = tracker.subscribe(setState);
+    setState(tracker.current());
+    return off;
+  }, [tracker]);
   return state;
 }
 
 function useSpeechStatus(speech: SpeechInput): SpeechInputStatus {
   const [status, setStatus] = useState(speech.status());
-  useEffect(() => speech.onStatus(setStatus), [speech]);
+  useEffect(() => {
+    const off = speech.onStatus(setStatus);
+    // The voice engine may have reported in between the first render and this subscription.
+    setStatus(speech.status());
+    return off;
+  }, [speech]);
   return status;
 }
 
