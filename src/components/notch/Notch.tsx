@@ -25,7 +25,7 @@ import { useDock, useRevealed } from "./use-dock";
 import { EXPANDED_SIZES, NOTCH_WIDTHS, awaitingAnswer, inScript, islandSize, notchView, shouldPeek, stepItems, voiceNotice, type NotchControl, type NotchSize, type NotchView } from "./notch-view";
 import type { NativeVoiceStatus } from "../../providers/speech/native-voice";
 import { HodeyFace } from "../hodey/HodeyFace";
-import { hodeyMood, type HodeyMood } from "../hodey/mood";
+import { faceMood, type HodeyMood } from "../hodey/mood";
 import type { VisionStatus, VisionStatusSource } from "../../providers/vision/types";
 import type { ActivityState, ActivityTracker } from "../../lib/activity";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
@@ -312,7 +312,7 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
 
   const props: SurfaceProps = {
     view,
-    mood: micStatus === "listening" ? "listening" : hodeyMood(state, hovered),
+    mood: faceMood(state, hovered, engagement),
     steps: stepItems(state).map((item) => ({ ...item, objective: show(item.objective) })),
     hovered,
     revealed,

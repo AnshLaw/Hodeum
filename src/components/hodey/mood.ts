@@ -84,3 +84,13 @@ export function hodeyMood(s: HodeState, hovered: boolean): HodeyMood {
       return "celebrating";
   }
 }
+
+/**
+ * Hodey's face with its voice in it: listening whenever the mic is open, and talking while it speaks with no Hode
+ * (a greeting, an app opened by voice), which the notch stays out to show. During a Hode, the Hode's face.
+ */
+export function faceMood(s: HodeState, hovered: boolean, voice: { listening: boolean; speaking: boolean }): HodeyMood {
+  if (voice.listening) return "listening";
+  if (voice.speaking && s.phase === "idle") return "speaking";
+  return hodeyMood(s, hovered);
+}
