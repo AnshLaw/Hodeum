@@ -25,7 +25,10 @@ final class VisionBoxTests: XCTestCase {
         let size = CGSize(width: 1000, height: 2000)
         let normalized = CGRect(x: 0.1, y: 0.75, width: 0.2, height: 0.05)
         let pixels = VisionBox.toPixels(normalized: normalized, imageSize: size)
-        XCTAssertEqual(pixels, CGRect(x: 100, y: 400, width: 200, height: 100))
+        XCTAssertEqual(pixels.minX, 100, accuracy: 0.001)
+        XCTAssertEqual(pixels.minY, 400, accuracy: 0.001)
+        XCTAssertEqual(pixels.width, 200, accuracy: 0.001)
+        XCTAssertEqual(pixels.height, 100, accuracy: 0.001)
     }
 }
 
