@@ -23,6 +23,8 @@ function tokens(text: string): string[] {
     .normalize("NFC")
     .toLowerCase()
     .replace(NUKTA, "")
+    // Speech recognition writes "fifteen percent" as "15%".
+    .replace(/%/g, " percent ")
     .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter(Boolean);
