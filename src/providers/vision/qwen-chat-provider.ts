@@ -125,11 +125,13 @@ export class QwenChatProvider {
   }
 
   /**
-   * A generic web query for the learner's latest message, decided locally (the screenshot never
-   * leaves the PC), or undefined when no search is needed.
+   * A generic web query for the learner's latest message, or undefined when no search is needed.
+   * Only the learner's own words go in: the query leaves the PC, so screen text, window titles and
+   * earlier replies (which may quote web pages) must not be able to steer what it contains.
    */
-  async searchQuery(history: ChatMessage[], frame: CapturedFrame | undefined, signal: AbortSignal): Promise<string | undefined> {
-    const messages = [{ role: "system", content: DECIDE_PROMPT }, ...chatMessages(history, frame).slice(1)];
+  async searchQuery(history: ChatMessage[], signal: AbortSignal): Promise<string | undefined> {
+    const learner = history.filter((m) => m.role === "user").slice(-HISTORY_TURNS);
+    const messages = [{ role: "system", content: DECIDE_PROMPT }, ...learner.map((m) => ({ role: "user", content: m.content }))];
     const schema = { type: "object", properties: { search: { type: "boolean" }, query: { type: "string", maxLength: MAX_QUERY_CHARS } }, required: ["search", "query"] };
     const body = { messages, temperature: 0, max_tokens: DECIDE_MAX_TOKENS, response_format: { type: "json_schema", json_schema: { name: "web_search", schema } } };
     const response = await this.post(body, signal);

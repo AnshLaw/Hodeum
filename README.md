@@ -39,7 +39,7 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - **Your Hodes**: every Hode as a timeline of steps, corrections, hints and questions.
 - **Learning paths**: task packs and every skill's mastery. Change how much help a skill gets, or reset it.
 - **Web search** (off by default; turn it on with the globe in Ask Hodey or in Settings):
-  - On this PC, Hodey decides whether a question needs the web and writes a short, generic query.
+  - On this PC, Hodey decides whether a question needs the web and writes a short, generic query from what you typed. The screen, window titles and earlier replies are never used for it, so nothing on screen or on a web page can steer what gets sent.
   - Rust then removes emails, links, file paths and names, long numbers and your Windows user name, so only that query is sent.
   - Your screen, chat and files never leave the PC.
   - The blue privacy dot shows while it searches, and each answer shows the exact query and its sources.

@@ -27,9 +27,10 @@ export interface ReplyResult {
   webError?: string;
 }
 
-async function maybeSearch(deps: ReplyDeps, history: ChatMessage[], frame: CapturedFrame | undefined, options: ReplyOptions): Promise<{ web?: WebSearch; webError?: string }> {
+async function maybeSearch(deps: ReplyDeps, history: ChatMessage[], options: ReplyOptions): Promise<{ web?: WebSearch; webError?: string }> {
   if (!options.webEnabled || !deps.web || !deps.chat.searchQuery) return {};
-  const query = await deps.chat.searchQuery(history, frame, options.signal);
+  // The query is written from the learner's words alone; the frame is only for the local answer.
+  const query = await deps.chat.searchQuery(history, options.signal);
   if (!query) return {};
   options.onStatus(`Searching the web for “${query}”…`);
   try {
@@ -43,7 +44,7 @@ async function maybeSearch(deps: ReplyDeps, history: ChatMessage[], frame: Captu
 /** Looks at the attached window, searches the web if allowed and useful, then streams Hodey's answer. */
 export async function produceReply(deps: ReplyDeps, history: ChatMessage[], context: WindowInfo | undefined, options: ReplyOptions): Promise<ReplyResult> {
   const frame = context && deps.windows ? await deps.windows.capture(context.id) : undefined;
-  const { web, webError } = await maybeSearch(deps, history, frame, options);
+  const { web, webError } = await maybeSearch(deps, history, options);
   let text = "";
   for await (const chunk of deps.chat.reply(history, frame, options.signal, web)) {
     text += chunk;

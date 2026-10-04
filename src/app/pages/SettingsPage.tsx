@@ -111,7 +111,7 @@ export function SettingsPage({ services }: { services: AppServices }) {
         vision={vision}
         webSearch={
           settings && (
-            <Row label="Let Hodey search the web" detail="For questions in Ask Hodey. Hodey writes a short, generic query on this PC; only that query is sent (to DuckDuckGo), never your screen, chat or files. The blue dot shows while it searches.">
+            <Row label="Let Hodey search the web" detail="For questions in Ask Hodey. On this PC, Hodey turns what you typed into a short, generic query and removes emails, links, file names and long numbers; only that query is sent, to Stack Exchange and Microsoft Learn (or Brave Search if you've set a key). Your screen, files and Hodey's replies never are. Each answer shows the exact query, and the blue dot shows while it searches.">
               <input type="checkbox" className="hswitch" checked={settings.webSearch} onChange={(e) => update({ ...settings, webSearch: e.target.checked })} aria-label="Let Hodey search the web" />
             </Row>
           )

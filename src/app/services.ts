@@ -23,7 +23,7 @@ export interface WindowSource {
 export interface ChatProvider {
   reply(history: ChatMessage[], frame: CapturedFrame | undefined, signal: AbortSignal, web?: WebSearch): AsyncIterable<string>;
   /** A generic web query for the latest message, decided locally; undefined when none is needed. */
-  searchQuery?(history: ChatMessage[], frame: CapturedFrame | undefined, signal: AbortSignal): Promise<string | undefined>;
+  searchQuery?(history: ChatMessage[], signal: AbortSignal): Promise<string | undefined>;
 }
 
 export interface AppWindowControls {
