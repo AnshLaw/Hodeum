@@ -91,7 +91,7 @@ export function fromImageBox(box: number[], frame: Rect): Rect {
 }
 
 /** Hindi is written in Devanagari, English words included: Hodey's voice says it far better that way. */
-const LANGUAGE_LINES: Record<ReplyLanguage, string | undefined> = {
+export const LANGUAGE_LINES: Record<ReplyLanguage, string | undefined> = {
   en: undefined,
   hi: 'Write "speech" in Hindi, in Devanagari script. Write English words and control names in Devanagari too, as they sound (Insert → इंसर्ट, PivotTable → पिवट टेबल).',
   hinglish:

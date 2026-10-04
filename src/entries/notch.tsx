@@ -12,6 +12,8 @@ import { Notch } from "../components/notch/Notch";
 import { connectAccount } from "../features/account/connect";
 import { CloudContext } from "../components/notch/cloud-context";
 import { connectCloud } from "../providers/cloud/connect";
+import { GatedReasoner } from "../providers/cloud/gated";
+import { GeminiReasoningProvider } from "../providers/cloud/gemini-reasoner";
 import { connectHodeBridge } from "../features/hode/bridge";
 import { connectVoice, withoutEcho } from "../features/voice/connect";
 import type { HodePhase } from "../features/hode/model";
@@ -88,7 +90,9 @@ async function boot(): Promise<void> {
   showMicDot(voice.speech, activity);
   showStandbyDot(voice.status, activity);
   const cloud = connectCloud({ invoke, bus, activeApp: () => runtime.getState().observation });
-  const runtime = new HodeRuntime({ perception, reasoners: [local], skills: learning, bus, tts: voice.tts });
+  // Gemini only when opted in and allowed for this app; local always answers last.
+  const gemini = new GatedReasoner(new GeminiReasoningProvider({ invoke }), "gemini", cloud.policy, activity);
+  const runtime = new HodeRuntime({ perception, reasoners: [gemini, local], skills: learning, bus, tts: voice.tts });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   runtime.subscribe(() => {
     const state = runtime.getState();
