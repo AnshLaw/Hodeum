@@ -5,6 +5,7 @@ import type {
   AssistanceLevel,
   DialogueTurn,
   HodeMode,
+  HodePlan,
   InstalledApp,
   LearnerAnnotation,
   OverlayPrimitive,
@@ -134,6 +135,10 @@ export interface HodeState {
   areaShown?: boolean;
   /** The learner is in another app while the Hode's window stays open: the step waits for them, quietly. */
   away?: boolean;
+  /** Open Teach Hodes: the plan made in the background once the first step showed; its steps guide each next look. */
+  plan?: HodePlan;
+  /** The plan asked for (`planOpenGoal`), so it's asked for once and a plan for an earlier Hode is told apart. */
+  planId?: number;
   /** Paused, then a question: where the pause itself resumes to, kept while the question is answered. */
   pausedResume?: Pick<HodeState, "resumePhase" | "resumeAction" | "resumeObservation">;
   /** A short line said once, ahead of the next guidance ("I can't see that done yet."). */
@@ -270,7 +275,11 @@ export type HodeEvent =
   /** Windows couldn't open it, or no installed app (`reason` "not_found") or more than one ("ambiguous", with `options`) fits the name. */
   | { type: "APP_OPEN_FAILED"; app: InstalledApp; reason: string; options?: string[] }
   /** Small talk, not a task: a greeting gets a friendly reply, anything unclear a nudge to name a task. No Hode starts. */
-  | { type: "CHITCHAT"; kind: "greeting" | "unclear" };
+  | { type: "CHITCHAT"; kind: "greeting" | "unclear" }
+  /** After Hodey asked where the learner is working, their pointer moved and came to rest: the answer. */
+  | { type: "POINTER_RESTED" }
+  /** The open goal's plan, for the `planId` and `goal` it was asked for. */
+  | { type: "PLAN_READY"; planId: number; goal: string; plan: HodePlan };
 
 export type EventOf<T extends HodeEvent["type"]> = Extract<HodeEvent, { type: T }>;
 
@@ -293,7 +302,11 @@ export type HodeEffect =
   /** Open an installed app by its catalog id; APP_OPEN_FAILED comes back if it doesn't appear. */
   | { type: "launchApp"; app: InstalledApp }
   /** Read the taskbar's Start button and search box; SHELL_OBSERVED always comes back. */
-  | { type: "observeShell" };
+  | { type: "observeShell" }
+  /** While Hodey asks where the learner is working: POINTER_RESTED comes back when their pointer settles somewhere new. */
+  | { type: "watchPointer" }
+  /** Plan an open goal in the background (with reference steps when found); PLAN_READY comes back when it works. */
+  | { type: "planOpenGoal"; planId: number; goal: string; app?: string; language: ReplyLanguage };
 
 export interface Transition {
   state: HodeState;

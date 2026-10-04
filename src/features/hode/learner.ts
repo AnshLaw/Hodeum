@@ -309,6 +309,12 @@ export function onAppSwitched(s: HodeState, e: EventOf<"APP_SWITCHED">): Transit
   return { state: { ...s, phase: "observing", reobserved: false, toppedOut: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
 }
 
+/** Hodey asked where the learner is working, and their pointer came to rest somewhere new: look again, with it. */
+export function onPointerRested(s: HodeState): Transition {
+  if (s.phase !== "guiding" || s.action?.kind !== "clarify" || s.waitingForApp !== undefined || s.away === true) return noop(s);
+  return { state: { ...s, phase: "observing", reobserved: false }, effects: [CANCEL_TIMER, { type: "observe" }] };
+}
+
 /** Phases of a running Hode the learner can step away from. */
 const AWAY_PHASES: HodeState["phase"][] = ["guiding", "reasoning", "observing", "answering"];
 

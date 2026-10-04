@@ -1,0 +1,37 @@
+UxPlay (GPL-3.0) patch applied by scripts/setup-airplay.ps1 to the learner's own build; Hodeum never ships UxPlay.
+UXPLAY_MDNS_IPV4 lets Hodeum advertise the receiver on the laptop's Mobile Hotspot. On Windows, UxPlay's
+built-in mDNS otherwise answers on one adapter and skips every "Virtual" one, which includes the hotspot.
+
+diff --git a/lib/mdnsd/mdnsd.c b/lib/mdnsd/mdnsd.c
+index 97a1ba6..0c1e8bf 100644
+--- a/lib/mdnsd/mdnsd.c
++++ b/lib/mdnsd/mdnsd.c
+@@ -345,9 +345,27 @@ static int mdns_query_type_matches(uint16_t query_type, uint16_t record_type)
+     return query_type == record_type || query_type == DNS_TYPE_ANY;
+ }
+
++/* Hodeum: UXPLAY_MDNS_IPV4 names the interface to advertise on, e.g. the laptop's Mobile Hotspot,
++ * whose "Wi-Fi Direct Virtual Adapter" the automatic choice below skips. */
++static uint32_t mdns_override_ipv4(void)
++{
++    const char *value = getenv("UXPLAY_MDNS_IPV4");
++    struct in_addr addr;
++
++    if (!value || !*value || inet_pton(AF_INET, value, &addr) != 1) {
++        return 0;
++    }
++    fprintf(stderr, "mDNS: advertising on %s (UXPLAY_MDNS_IPV4)\n", value);
++    return addr.s_addr;
++}
++
+ static uint32_t mdns_get_default_ipv4(void)
+ {
+-    uint32_t addr = 0;
++    uint32_t addr = mdns_override_ipv4();
++
++    if (addr) {
++        return addr;
++    }
+ #ifdef _WIN32
+     ULONG buflen = 15000;
+     PIP_ADAPTER_ADDRESSES pAddresses = NULL;

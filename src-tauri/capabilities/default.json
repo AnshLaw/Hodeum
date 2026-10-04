@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Hodeum notch and guidance overlay permissions",
   "windows": ["main_notch", "guidance_overlay"],
-  "permissions": ["core:default", "sql:default", "sql:allow-execute", "log:default"]
+  "permissions": ["core:default", "core:window:allow-cursor-position", "sql:default", "sql:allow-execute", "log:default"]
 }

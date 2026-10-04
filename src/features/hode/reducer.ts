@@ -1,10 +1,11 @@
 import { onGoalSubmitted, onShellObserved, onStartHode, onThinking } from "./flow";
 import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
 import { onPracticeAgain, onReviewAnswered } from "./closing";
-import { onAppSwitched, onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onShowMe, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
+import { onAppSwitched, onPointerRested, onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onShowMe, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
 import { noop, type EventOf, type HodeEvent, type HodeState, type Transition } from "./model";
 import { onAppOpenFailed, onOpenApp } from "./open-app";
 import { onChitchat } from "./chitchat";
+import { onPlanReady } from "./planning";
 import {
   onAnnotateCancel,
   onAnnotateStart,
@@ -67,6 +68,8 @@ const handlers: Handlers = {
   OPEN_APP: onOpenApp,
   APP_OPEN_FAILED: onAppOpenFailed,
   CHITCHAT: onChitchat,
+  PLAN_READY: onPlanReady,
+  POINTER_RESTED: onPointerRested,
 };
 
 /** Pure Hode state machine: no I/O, only a next state plus effects for the runtime to execute. */

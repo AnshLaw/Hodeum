@@ -32,20 +32,31 @@ Invoke-Msys "sed -i 's|^Server = https://mirror.msys2.org|#&|' /etc/pacman.d/mir
 Invoke-Msys "pacman -Sy --noconfirm --needed $($packages -join ' ')"
 
 $exe = Join-Path $msys "ucrt64\bin\uxplay.exe"
-if ($Rebuild -or -not (Test-Path $exe)) {
+# Lets Hodeum advertise the receiver on the laptop's Mobile Hotspot (see the patch's header).
+$patch = Join-Path $PSScriptRoot "uxplay-mdns-interface.patch"
+# Which source and patch the installed uxplay.exe was built from, so a changed patch triggers a rebuild.
+$stamp = Join-Path $msys "ucrt64\share\uxplay-hodeum.stamp"
+$build = "$uxplayCommit $((Get-FileHash $patch -Algorithm SHA256).Hash)"
+$built = if (Test-Path $stamp) { (Get-Content $stamp -Raw).Trim() } else { "" }
+if ($Rebuild -or -not (Test-Path $exe) -or $built -ne $build) {
   if (-not (Test-Path $source)) { & git clone https://github.com/FDH2/UxPlay.git $source; if ($LASTEXITCODE -ne 0) { throw "git clone failed" } }
   & git -C $source fetch --quiet origin $uxplayCommit
-  & git -C $source checkout --quiet $uxplayCommit
+  # --force drops an older copy of the patch before it is applied again.
+  & git -C $source checkout --quiet --force $uxplayCommit
   if ($LASTEXITCODE -ne 0) { throw "couldn't check out UxPlay $uxplayCommit" }
+  & git -C $source apply $patch
+  if ($LASTEXITCODE -ne 0) { throw "couldn't apply $patch to UxPlay $uxplayCommit" }
   $unixSource = (& (Join-Path $msys "usr\bin\cygpath.exe") -u $source)
   Invoke-Msys "cd '$unixSource' && cmake -S . -B build -G Ninja && cmake --build build && cmake --install build --prefix /ucrt64"
+  Set-Content -Path $stamp -Value $build
 }
 Write-Host "built $exe"
 # GStreamer scans every plugin on first use (about a minute); do it now so Show iPhone doesn't stall on "waiting".
 Write-Host "warming the GStreamer plugin registry"
 Invoke-Msys "gst-inspect-1.0 rtph264pay > /dev/null"
 
-# A junction, so Hodeum runs UxPlay from its own fixed runtime folder and UxPlay finds its DLLs beside it.
+# A junction, so Hodeum finds UxPlay in its own fixed runtime folder. Hodeum resolves it before launching:
+# GStreamer looks for its plugins relative to the real ucrt64\bin, not to the junction.
 $link = Join-Path $root "runtime\uxplay"
 if (-not (Test-Path (Join-Path $link "uxplay.exe"))) {
   New-Item -ItemType Directory -Force -Path (Split-Path $link) | Out-Null
@@ -53,4 +64,4 @@ if (-not (Test-Path (Join-Path $link "uxplay.exe"))) {
   New-Item -ItemType Junction -Path $link -Target (Join-Path $msys "ucrt64\bin") | Out-Null
 }
 Write-Host "ready: $link\uxplay.exe"
-Write-Host "Next: allow uxplay.exe on Private networks when Windows Firewall asks, and use a Private Wi-Fi or this laptop's Mobile hotspot."
+Write-Host "Next: when Windows Firewall asks about uxplay.exe, allow Private and Public networks (the laptop hotspot and the iPhone cable link are Public)."

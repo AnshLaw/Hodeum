@@ -148,6 +148,26 @@ export interface AppLaunch {
 }
 
 /** A recall question: retrieving a move from memory is what makes it stick. */
+/** One step of a planned open goal. */
+export interface PlanStep {
+  /** What the step achieves, in a few words. */
+  objective: string;
+  /** The control to use, labelled as the app shows it, so it can be found on screen. */
+  control: string;
+  /** A question that gets the learner thinking where to look, without naming the control. */
+  hint: string;
+  /** Why the step matters, in one short sentence. */
+  why: string;
+}
+
+/** An open goal planned into a Hode: the idea, the steps in order, a recap, and a question to check the idea stuck. */
+export interface HodePlan {
+  concept: string;
+  steps: PlanStep[];
+  recap: string;
+  check?: RecallCheck;
+}
+
 export interface RecallCheck {
   question: string;
   /** Two to four short answers; `answer` is the right one's index. */
@@ -249,6 +269,10 @@ export interface TeachingContext {
   lastInstruction?: string;
   /** Open-ended Hodes: the instructions the learner has already carried out, oldest first. */
   doneSteps?: string[];
+  /** Open-ended Hodes: the steps planned for the goal (from reference steps when found); data, followed where it fits the screen. */
+  plan?: PlanStep[];
+  /** The learner's pointer when the request was made, in physical screen px: it usually rests near what they're working on. */
+  pointer?: Point;
   /** The last few exchanges, oldest first, so a follow-up ("why?") is answered in context. Local reasoners only: the learner's words never leave the PC. */
   history?: DialogueTurn[];
   /** Look up reference steps for this question (offline help, then the web if it's on). Set only when the learner asked to, or the screen couldn't answer. */

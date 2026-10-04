@@ -4,6 +4,7 @@ import type { HindiScript } from "../data/settings";
 import { asrLanguage } from "../lib/language";
 import { TauriVoiceHardware, applyVoiceHardware, type VoiceSetup } from "../features/voice/hardware";
 import { invoke } from "@tauri-apps/api/core";
+import { cursorPosition } from "@tauri-apps/api/window";
 import { ActivityTracker, mirrorRemoteActivity, screenWatch, withScreenActivity } from "../lib/activity";
 import { connectAppearance } from "../lib/appearance";
 import { Flag } from "../lib/flag";
@@ -46,6 +47,7 @@ import { PhonePerception, type OcrSegment } from "../features/phone/phone-percep
 import { loadPhonePrefs } from "../features/phone/prefs";
 import { GroundedPlannerProvider, LocalReasoningProvider } from "../providers/local-reasoner";
 import { TaskPackReasoningProvider } from "../providers/task-pack-reasoner";
+import { LocalPlanner } from "../providers/vision/plan";
 import { QwenVisionProvider } from "../providers/vision/qwen-vision-provider";
 import { TauriVisionStatus } from "../providers/vision/tauri-vision-status";
 import { connectionOf, type CapturedFrame } from "../providers/vision/types";
@@ -87,7 +89,7 @@ async function openStores(): Promise<Stores> {
 function createPerception(activity: ActivityTracker) {
   const native = new NativePerception({ invoke, listen: (event, handler) => subscribeTauri(event, handler) });
   const mirror = new PhoneMirror(new FrameCanvas(), (kind) =>
-    kind === "camera" ? new CameraPhoneSource(() => loadPhonePrefs().cameraLabel) : new AirPlayPhoneSource(invoke),
+    kind === "camera" ? new CameraPhoneSource(() => loadPhonePrefs().cameraLabel) : new AirPlayPhoneSource(invoke, () => loadPhonePrefs().airplayNetwork ?? "direct"),
   );
   const phone = new PhonePerception(mirror, (png) => invoke<OcrSegment[]>("ocr_frame", { png }));
   const surfaces = new SurfacePerception({ windows: native, phone });
@@ -166,7 +168,14 @@ async function boot(): Promise<void> {
   let webAllowed = false;
   const howTo = createHowToLookup({ web: new TauriWebSearch(bus), webEnabled: () => webAllowed, onProgress: (progress) => bus.emit("web:search", progress) });
   const reference = spokenReference(howTo, (stop) => bus.on("web:cancel", stop));
-  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference });
+  // An open Teach Hode is planned in the background by the local model; it never waits on the plan.
+  const hodePlanner = new LocalPlanner({ connection: () => connectionOf(vision.current()) });
+  // The pointer goes with each request (physical px, like the screen read): it usually rests near the learner's work.
+  const pointer = async () => {
+    const at = await cursorPosition();
+    return { x: at.x, y: at.y };
+  };
+  const runtime = new HodeRuntime({ perception, reasoners: [new GroundedPlannerProvider(planner), gemini, local], skills: learning, bus, tts, memory, reference, planner: hodePlanner, pointer });
   // Runs before the transition's effects, so a phone Hode's first focusApp/observe already reach the phone.
   const watchDot = screenWatch(activity);
   let hintedPack: string | undefined;

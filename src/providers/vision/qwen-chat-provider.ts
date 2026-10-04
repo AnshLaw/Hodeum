@@ -178,7 +178,7 @@ export class QwenChatProvider {
 
   async *reply(history: ChatMessage[], frame: CapturedFrame | undefined, signal: AbortSignal, web?: WebSearch): AsyncGenerator<string> {
     const body = { messages: chatMessages(history, frame, web), temperature: TEMPERATURE, max_tokens: MAX_TOKENS, stream: true };
-    const response = await this.post(body, signal);
+    const response = await postChat(this.deps, body, signal);
     if (!response.body) throw new Error("The local model sent no reply stream.");
     yield* sseDeltas(response.body);
   }
@@ -193,23 +193,27 @@ export class QwenChatProvider {
     const messages = [{ role: "system", content: DECIDE_PROMPT }, ...learner.map((m) => ({ role: "user", content: m.content }))];
     const schema = { type: "object", properties: { search: { type: "boolean" }, query: { type: "string", maxLength: MAX_QUERY_CHARS } }, required: ["search", "query"] };
     const body = { messages, temperature: 0, max_tokens: DECIDE_MAX_TOKENS, response_format: { type: "json_schema", json_schema: { name: "web_search", schema } } };
-    const response = await this.post(body, signal);
+    const response = await postChat(this.deps, body, signal);
     const parsed = (await response.json()) as { choices?: { message?: { content?: string } }[] };
     const decision = decisionSchema.parse(JSON.parse(parsed.choices?.[0]?.message?.content ?? "null"));
     const query = decision.query.trim();
     return decision.search && query !== "" ? query : undefined;
   }
+}
 
-  private async post(body: object, signal: AbortSignal): Promise<Response> {
-    const connection = this.deps.connection();
-    if (!connection) throw new Error(this.deps.unavailableReason?.() ?? "The local model isn't running.");
-    const response = await (this.deps.fetch ?? fetch)(`${connection.endpoint}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiKey}` },
-      signal,
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) throw new Error(`The local model answered ${response.status}: ${(await response.text()).slice(0, 160)}`);
-    return response;
-  }
+/** Shown of a failed reply's body: enough to tell what went wrong. */
+const ERROR_BODY_CHARS = 160;
+
+/** One OpenAI-style chat request to the local model; says why when it isn't running, and what it answered when it fails. */
+export async function postChat(deps: QwenChatDeps, body: object, signal: AbortSignal): Promise<Response> {
+  const connection = deps.connection();
+  if (!connection) throw new Error(deps.unavailableReason?.() ?? "The local model isn't running.");
+  const response = await (deps.fetch ?? fetch)(`${connection.endpoint}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiKey}` },
+    signal,
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`The local model answered ${response.status}: ${(await response.text()).slice(0, ERROR_BODY_CHARS)}`);
+  return response;
 }
