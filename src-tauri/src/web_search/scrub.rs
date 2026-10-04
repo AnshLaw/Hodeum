@@ -36,7 +36,7 @@ pub fn scrub_query(query: &str, user_name: &str) -> String {
     let mut text = re(&EMAIL, r"\S+@\S+").replace_all(query, " ").into_owned();
     text = re(&URL, r"(?i)\b(?:https?://|www\.)\S+").replace_all(&text, " ").into_owned();
     text = re(&PATH, r#"(?i)(?:\b[a-z]:[\\/]|\\\\|~/|/(?:users|home)/)[^\s"']*"#).replace_all(&text, " ").into_owned();
-    text = re(&FILE, r"\b[\w-]+\.(?:xlsx?|docx?|pptx?|pdf|csv|txt|png|jpe?g|zip)\b").replace_all(&text, " ").into_owned();
+    text = re(&FILE, r"(?i)\b[\w-]+\.(?:xlsx?|docx?|pptx?|pdf|csv|txt|png|jpe?g|zip)\b").replace_all(&text, " ").into_owned();
     text = re(&DIGITS, SECRET_NUMBER).replace_all(&text, " ").into_owned();
     if user_name.chars().count() >= MIN_USER_NAME_CHARS {
         match Regex::new(&format!(r"(?i)\b{}\b", regex::escape(user_name))) {
@@ -93,6 +93,11 @@ mod tests {
     fn scrubs_personal_details_from_queries() {
         let query = r"anshr asked: email anshr@example.com about C:\Users\anshr\Q3-salaries.xlsx see https://intranet/x 4111111111111111 pivot table";
         assert_eq!(scrub_query(query, "anshr"), "asked: email about see pivot table");
+    }
+
+    #[test]
+    fn scrubs_file_names_whatever_the_case_of_their_extension() {
+        assert_eq!(scrub_query("open Q3-salaries.XLSX and scan_0001.PDF in excel", ""), "open and in excel");
     }
 
     #[test]
