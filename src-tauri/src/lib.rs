@@ -8,6 +8,7 @@ mod perception;
 mod surfaces;
 mod tray;
 mod vlm;
+mod voice;
 mod web_search;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
@@ -57,6 +58,7 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     hit_test::spawn(app.clone());
     perception::input_hook::spawn(app.clone())?;
     vlm::spawn(app.clone());
+    voice::start(app);
     Ok(())
 }
 
@@ -89,7 +91,12 @@ pub fn run() {
             chat_context::last_app_window,
             chat_context::capture_window,
             app_focus::focus_app,
-            web_search::web_search
+            web_search::web_search,
+            voice::voice_status,
+            voice::voice_start,
+            voice::voice_stop,
+            voice::tts_speak,
+            voice::tts_stop
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())
