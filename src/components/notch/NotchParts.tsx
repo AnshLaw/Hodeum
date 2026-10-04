@@ -235,10 +235,10 @@ export interface BarProps {
   micStatus: SpeechInputStatus;
   onToggleMic: () => void;
   onOpenApp: () => void;
-  /** Opens the mic's or speaker's menu; absent where there are no devices to pick (the practice stage). */
+  /** Opens the mic's or speaker's menu; absent where there are no devices to pick. */
   onVoiceMenu?: (kind: "mic" | "speaker") => void;
   voiceMenu?: "mic" | "speaker" | "cloud";
-  /** Opens the Local/Cloud menu from the badge; absent in the practice stage. */
+  /** Opens the Local/Cloud menu from the badge; absent where cloud isn't available. */
   onCloudMenu?: () => void;
 }
 

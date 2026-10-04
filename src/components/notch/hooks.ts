@@ -116,8 +116,8 @@ export function useNotchHover(ref: RefObject<HTMLElement | null>, shell: NativeS
 
 /**
  * Closes the notch's open menu or panel on a press anywhere else, like any popover. The notch never takes
- * focus and is click-through outside its surface, so in the app the native side reports such presses; the
- * DOM listener covers the browser practice stage.
+ * focus and is click-through outside its surface, so the native side reports such presses; the DOM listener
+ * catches presses inside the notch window but off its surface.
  */
 export function useOutsidePress(ref: RefObject<HTMLElement | null>, shell: NativeShell, active: boolean, onOutside: () => void): void {
   const latest = useRef(onOutside);

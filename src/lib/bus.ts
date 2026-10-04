@@ -76,7 +76,7 @@ export interface Bus {
   on<K extends BusEventName>(name: K, handler: BusHandler<K>): () => void;
 }
 
-/** In-page bus for tests and the browser practice stage. */
+/** In-page bus, for tests and single-window use. */
 export class LocalBus implements Bus {
   private readonly handlers = new Map<BusEventName, Set<(payload: unknown) => void>>();
 

@@ -118,11 +118,10 @@ Requirements: Node 20+, Rust stable (MSVC), WebView2.
 ```powershell
 npm install
 powershell -File scripts/setup-local-ai.ps1   # once: ~4 GB of model + llama.cpp CUDA into models/ and runtime/
-npm run dev          # practice stage at http://localhost:1420 (Excel + File Explorer mock apps)
-npm test             # unit + end-to-end teaching-loop tests
+npm run tauri:dev    # the desktop app: notch, overlay and app windows (starts Vite for you)
+npm test             # unit + end-to-end teaching-loop tests (scripted apps in src/test-support/)
 npm run typecheck
 npm run build
-npm run tauri:dev    # native notch + overlay windows
 ```
 
 ```powershell
@@ -145,9 +144,9 @@ npm run tauri:build
 
 **This is a dev-machine install.** The installer contains the app and its speech DLLs, but not the ~4 GB of local AI files. When the app is built, the path to the checkout's `models/` and `runtime/` folders is written into it (from a git worktree, that path is the main checkout's). The installed app reads them from there, so leave that folder where it is. If you move or delete it, the local model and voice report as not found. To fix that, run the setup script again and rebuild.
 
-### Practice stage walkthrough
+### Walkthrough (in the desktop app)
 
-1. Hover the notch and choose **Start a Hode**, then pick **Make a PivotTable**.
+1. Hover the notch and choose **Start a Hode**, then pick **Make a PivotTable**. In Agent mode Hodey opens Excel with a practice sheet.
 2. Click **Data** on purpose: Hodey corrects you and moves the highlight.
 3. Follow the steps through Insert → PivotTable → OK → tick Region and Sales.
 4. Press <kbd>Right Ctrl</kbd>+<kbd>P</kbd>, drag over any control, and ask **What is this?**
@@ -175,7 +174,7 @@ src/features/account/ Google sign-in (notch-owned), account status over the bus
 src/features/sync/   sync engine (pull/merge/push), web command channel, Supabase adapter
 src/web/             web dashboard (web.html): desktop pages over the account + PC picker
 supabase/migrations/ Postgres schema, RLS and Realtime for accounts
-src/stage/           browser practice stage and scripted mock apps
+src/test-support/    scripted mock apps (Excel, File Explorer, iPhone) for the end-to-end tests
 src-tauri/src/       windows, hit-test, docking + app bar, tray, perception (UIA, input hook, capture), app window, chat context, SQLite
 src-tauri/migrations/ SQLite schema, shared with the TypeScript store tests
 ```

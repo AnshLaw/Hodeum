@@ -7,7 +7,7 @@ import type { ReasoningProvider, TTSProvider } from "../../providers/interfaces"
 import { MemorySkillStore } from "../../providers/memory-skill-store";
 import { MockPerception } from "../../providers/mock-perception";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
-import { ExcelScene } from "../../stage/scenes/excel";
+import { ExcelScene } from "../../test-support/scenes/excel";
 import { TASK_PACKS, matchGoal } from "../../task-packs";
 import type { HodeMode } from "../../lib/types";
 import { STUCK_MS } from "./model";

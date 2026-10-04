@@ -6,7 +6,7 @@ import { LocalMemoryProvider } from "../../providers/memory/sqlite-memory";
 import type { MemoryProvider } from "../../providers/interfaces";
 import { MockPerception } from "../../providers/mock-perception";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
-import { ExcelScene } from "../../stage/scenes/excel";
+import { ExcelScene } from "../../test-support/scenes/excel";
 import { TASK_PACKS } from "../../task-packs";
 import { connectHodeBridge, summaryOf } from "./bridge";
 import { initialState } from "./model";

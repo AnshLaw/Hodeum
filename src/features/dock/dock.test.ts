@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_PREFS, applyCommand, holdsSpace, loadPrefs, notchWindow, reservesSpace, savePrefs, seedPrefs, shouldReveal } from "./dock";
+import { DEFAULT_PREFS, applyCommand, holdsSpace, loadPrefs, notchWindow, reservesSpace, savePrefs, shouldReveal } from "./dock";
 
 const storage = (value: string | null) => ({ getItem: () => value });
 
@@ -22,25 +22,6 @@ describe("dock preferences", () => {
     let saved = "";
     savePrefs({ setItem: (_key, value) => (saved = value) }, { dock: "right", visibility: "pinned", sidebar: "floating" });
     expect(loadPrefs(storage(saved))).toEqual({ dock: "right", visibility: "pinned", sidebar: "floating" });
-  });
-});
-
-describe("seedPrefs", () => {
-  const memory = (initial: string | null) => {
-    let value = initial;
-    return { getItem: () => value, setItem: (_key: string, next: string) => (value = next) };
-  };
-
-  it("writes starting preferences when nothing is saved", () => {
-    const store = memory(null);
-    seedPrefs(store, { ...DEFAULT_PREFS, visibility: "pinned" });
-    expect(loadPrefs(store).visibility).toBe("pinned");
-  });
-
-  it("never overwrites the learner's own choice", () => {
-    const store = memory(JSON.stringify({ dock: "left", visibility: "auto", sidebar: "floating" }));
-    seedPrefs(store, { ...DEFAULT_PREFS, visibility: "pinned" });
-    expect(loadPrefs(store)).toEqual({ dock: "left", visibility: "auto", sidebar: "floating" });
   });
 });
 

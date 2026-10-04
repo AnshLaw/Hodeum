@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "../../../data/settings";
-import { PracticeCloudCatalog, PracticeCloudKeys } from "../../../stage/practice-cloud-keys";
+import { PracticeCloudCatalog, PracticeCloudKeys } from "../../../test-support/practice-cloud-keys";
 import { CLOUD_ROWS } from "./cloud-settings";
 import { KeyLink, ProviderPickers } from "./CloudPickers";
 

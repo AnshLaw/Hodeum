@@ -22,7 +22,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // The practice stage (index.html) is dev-only; the app ships the Tauri windows.
+      // The Tauri windows, plus the web dashboard.
       input: {
         app: resolve(root, "app.html"),
         notch: resolve(root, "notch.html"),

@@ -58,7 +58,7 @@ Turn every cloud provider off in Settings → Cloud, so the run proves the local
 
 ## 6. Spoken goal → target guidance → learner action → verified success
 
-**Automated:** `src/features/hode/runtime.test.ts` covers this against the mock apps. The browser stage (`npm run dev`) rehearses it.
+**Automated:** `src/features/hode/runtime.test.ts` covers this against the scripted apps in `src/test-support/scenes/`.
 
 **Live, on real Excel:**
 1. Open the sample sales workbook and click inside the table.

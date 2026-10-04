@@ -234,7 +234,6 @@ Expected commands once dependencies are installed:
 
 ```powershell
 npm install
-npm run dev
 npm run typecheck
 npm run build
 npm run tauri:dev
@@ -243,7 +242,7 @@ npm test                         # vitest: unit + end-to-end teaching loop
 cd src-tauri; cargo test --lib   # Rust geometry / hit-test
 ```
 
-`npm run dev` serves the browser practice stage (`index.html`): real notch, overlay and runtime driving scripted Excel / File Explorer mocks. Use it to rehearse Gate 6 without native perception. Its iPhone tab rehearses the Dark Mode phone Hode; real iPhone mirroring setup is in `docs/iphone-mirroring.md`.
+Test behaviour in the real desktop app (`npm run tauri:dev`) on the PC; there is no browser practice stage. The end-to-end tests drive scripted Excel / File Explorer / iPhone mocks from `src/test-support/scenes/`. Real iPhone mirroring setup is in `docs/iphone-mirroring.md`.
 
 ## Validation gates
 

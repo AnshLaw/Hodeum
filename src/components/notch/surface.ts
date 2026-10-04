@@ -53,18 +53,18 @@ export interface SurfaceProps {
   onToggleMic: () => void;
   onOpenApp: () => void;
   bus: Bus;
-  /** The iPhone mirror (the desktop app's, or the practice stage's mirror of its practice iPhone). */
+  /** The iPhone mirror. */
   phone?: PhoneMirror;
   phoneOpen?: boolean;
   /** Shows or hides the iPhone mirror; absent where there is no mirror. */
   onTogglePhone?: () => void;
   /** The learner's skill graph and this Hode's progress; absent where no skill store is readable. */
   skills?: NotchSkills;
-  /** The mic's or speaker's menu, when open; the voice menus need `voiceSetup` (absent in the practice stage). */
+  /** The mic's or speaker's menu, when open; the voice menus need `voiceSetup`. */
   voiceMenu?: VoiceMenuKind;
   onVoiceMenu?: (kind: VoiceMenuKind) => void;
   voiceSetup?: VoiceSetup;
-  /** Cloud services, models and keys for the badge's menu; absent in the practice stage. */
+  /** Cloud services, models and keys for the badge's menu. */
   cloudSetup?: CloudSetup;
   /** Hodey's natural voices, for the speaker's menu. */
   naturalVoices: NaturalVoice[];

@@ -5,7 +5,7 @@ import type { TTSProvider } from "../../providers/interfaces";
 import { MemorySkillStore } from "../../providers/memory-skill-store";
 import { MockPerception } from "../../providers/mock-perception";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
-import { ExcelScene } from "../../stage/scenes/excel";
+import { ExcelScene } from "../../test-support/scenes/excel";
 import { TASK_PACKS, matchGoal } from "../../task-packs";
 import { HodeRuntime, PRESS_SETTLE_MS } from "./runtime";
 import type { TaskPack } from "../../lib/types";

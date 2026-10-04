@@ -6,7 +6,7 @@ import { asrLanguage, hasDevanagari, replyLanguage } from "../../lib/language";
 import type { TTSProvider } from "../../providers/interfaces";
 import { MemorySkillStore } from "../../providers/memory-skill-store";
 import { MockPerception } from "../../providers/mock-perception";
-import { ExcelScene } from "../../stage/scenes/excel";
+import { ExcelScene } from "../../test-support/scenes/excel";
 import { HodeRuntime } from "./runtime";
 import { spoken } from "../../lib/spoken";
 import type { TeachingContext } from "../../lib/types";

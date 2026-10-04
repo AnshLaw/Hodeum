@@ -5,8 +5,8 @@ import type { TTSProvider } from "../../providers/interfaces";
 import { MemorySkillStore } from "../../providers/memory-skill-store";
 import { MockPerception, type MockApp } from "../../providers/mock-perception";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
-import { ExcelScene } from "../../stage/scenes/excel";
-import { IphoneScene } from "../../stage/scenes/iphone";
+import { ExcelScene } from "../../test-support/scenes/excel";
+import { IphoneScene } from "../../test-support/scenes/iphone";
 import { TASK_PACKS, matchGoal } from "../../task-packs";
 import { HodeRuntime } from "./runtime";
 

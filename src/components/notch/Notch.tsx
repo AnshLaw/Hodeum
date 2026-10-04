@@ -56,13 +56,13 @@ export interface NotchProps {
   speech: SpeechInput;
   /** How Hindi words are shown (Settings > Voice): Devanagari, or English letters. */
   script?: () => HindiScript;
-  /** The iPhone mirror: the desktop app's, or the practice stage's mirror of its practice iPhone. */
+  /** The iPhone mirror. */
   phone?: PhoneMirror;
   /** The learner's skills, read from the same local store the runtime saves progress to. */
   skills?: SkillSource;
-  /** Microphones, speakers and speech models to pick from the notch; absent in the practice stage. */
+  /** Microphones, speakers and speech models to pick from the notch; absent where they can't be listed. */
   voiceSetup?: VoiceSetup;
-  /** Local or cloud, and each cloud service's model, from the badge; absent in the practice stage. */
+  /** Local or cloud, and each cloud service's model, from the badge; absent where cloud isn't available. */
   cloudSetup?: CloudSetup;
 }
 
