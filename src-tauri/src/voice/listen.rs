@@ -14,7 +14,7 @@ use sherpa_onnx::{
 use tauri::{AppHandle, Emitter};
 
 use super::models::{asr_files, voice_root, AsrFiles};
-use super::segment::{downmix, Recognizer, Segmenter, SpeechEvent};
+use super::segment::{downmix, Recognizer, Segmenter, Session, SpeechEvent};
 use super::{set_listening, set_status_detail};
 
 const SAMPLE_RATE: i32 = 16_000;
@@ -36,6 +36,8 @@ const SILENCE_LEVEL: f32 = 1e-7;
 /// Tap-to-talk: a tap that hears no speech at all gives up after this long.
 const NO_SPEECH_AFTER: Duration = Duration::from_secs(8);
 const NOTHING_HEARD: &str = "I didn't catch anything. Tap the mic and try again.";
+/// A held talk key is released eventually; this guards against a stuck key.
+const MAX_HOLD: Duration = Duration::from_secs(60);
 const MIC_SILENT: &str = "Your microphone is sending silence. Check it isn't muted, or pick another input in Windows sound settings.";
 
 pub const SPEECH_START_EVENT: &str = "voice:speech-start";
@@ -50,7 +52,11 @@ struct Transcript {
 }
 
 pub enum ListenCommand {
-    Start,
+    /// `hold`: the talk key is held, so listen until Finish rather than for one sentence.
+    Start { hold: bool },
+    /// The talk key was released: send what was said.
+    Finish,
+    /// Stop without sending anything.
     Stop,
 }
 
@@ -151,10 +157,7 @@ fn open_mic(tx: Sender<Vec<f32>>) -> Result<Mic, String> {
     Ok(Mic { _stream: stream, rate })
 }
 
-/// Sends the events; returns what this window held: (speech started, utterance finished).
-fn emit_events(app: &AppHandle, events: Vec<SpeechEvent>) -> (bool, bool) {
-    let started = events.iter().any(|e| *e == SpeechEvent::Start);
-    let finished = events.iter().any(|e| matches!(e, SpeechEvent::Final(_)));
+fn emit_events(app: &AppHandle, events: Vec<SpeechEvent>) {
     for event in events {
         let result = match event {
             SpeechEvent::Start => app.emit(SPEECH_START_EVENT, ()),
@@ -165,7 +168,6 @@ fn emit_events(app: &AppHandle, events: Vec<SpeechEvent>) -> (bool, bool) {
             eprintln!("couldn't send a voice event: {error}");
         }
     }
-    (started, finished)
 }
 
 /// Runs 16 kHz audio through VAD and recognition, returning the final transcripts.
@@ -192,9 +194,8 @@ pub(crate) fn transcribe(engines: &mut Engines, audio: &[f32]) -> Vec<String> {
 }
 
 /// Resamples a device chunk to 16 kHz and runs every full VAD window through the segmenter.
-/// Returns (speech started, utterance finished) across the chunk.
-fn process(app: &AppHandle, engines: &mut Engines, resampler: &LinearResampler, pending: &mut Vec<f32>, chunk: &[f32]) -> (bool, bool) {
-    let mut seen = (false, false);
+fn process(engines: &mut Engines, resampler: &LinearResampler, pending: &mut Vec<f32>, chunk: &[f32]) -> Vec<SpeechEvent> {
+    let mut events = Vec::new();
     pending.extend(resampler.resample(chunk, false));
     while pending.len() >= VAD_WINDOW {
         let window: Vec<f32> = pending.drain(..VAD_WINDOW).collect();
@@ -203,38 +204,40 @@ fn process(app: &AppHandle, engines: &mut Engines, resampler: &LinearResampler, 
         while !engines.vad.is_empty() {
             engines.vad.pop();
         }
-        let (started, finished) = emit_events(app, engines.segmenter.push(&window, speech));
-        seen = (seen.0 || started, seen.1 || finished);
-        if finished {
-            break;
-        }
+        events.extend(engines.segmenter.push(&window, speech));
     }
-    seen
+    events
 }
 
-/// One tap-to-talk session: listens for a single utterance, then stops by itself. Also ends on Stop,
-/// when nothing is said for a while, or when the command channel closes.
-fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>) -> Result<(), String> {
+/// One listening session. Tap: one sentence, then it stops by itself (or after a silent wait).
+/// Hold: until the talk key is released, then everything said goes as one utterance.
+fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenCommand>, hold: bool) -> Result<(), String> {
     let (tx, audio) = mpsc::channel::<Vec<f32>>();
     let mic = open_mic(tx)?;
     let resampler = LinearResampler::create(mic.rate as i32, SAMPLE_RATE).ok_or("Couldn't set up audio resampling.")?;
     set_listening(app, true);
     let started = Instant::now();
-    let mut heard_sound = false;
-    let mut heard_speech = false;
-    let mut warned = false;
+    let mut session = Session::new(hold);
+    let (mut heard_sound, mut heard_speech, mut warned) = (false, false, false);
     let mut pending = Vec::new();
     loop {
         match commands.try_recv() {
             Ok(ListenCommand::Stop) | Err(TryRecvError::Disconnected) => break,
-            Ok(ListenCommand::Start) | Err(TryRecvError::Empty) => {}
+            Ok(ListenCommand::Finish) => {
+                let tail = engines.segmenter.flush();
+                emit_events(app, session.finish(tail).into_iter().collect());
+                break;
+            }
+            Ok(ListenCommand::Start { .. }) | Err(TryRecvError::Empty) => {}
         }
         match audio.recv_timeout(AUDIO_POLL) {
             Ok(chunk) => {
                 heard_sound |= chunk.iter().any(|s| s.abs() > SILENCE_LEVEL);
-                let (started, finished) = process(app, engines, &resampler, &mut pending, &chunk);
-                heard_speech |= started;
-                if finished {
+                let events = process(engines, &resampler, &mut pending, &chunk);
+                heard_speech |= events.contains(&SpeechEvent::Start);
+                let (out, done) = session.on_events(events);
+                emit_events(app, out);
+                if done {
                     break;
                 }
             }
@@ -245,8 +248,9 @@ fn listen(app: &AppHandle, engines: &mut Engines, commands: &Receiver<ListenComm
             warned = true;
             emit_error(app, MIC_SILENT);
         }
-        if !heard_speech && started.elapsed() > NO_SPEECH_AFTER {
-            if heard_sound {
+        let waited_out = if hold { started.elapsed() > MAX_HOLD } else { !heard_speech && started.elapsed() > NO_SPEECH_AFTER };
+        if waited_out {
+            if heard_sound && !heard_speech {
                 emit_error(app, NOTHING_HEARD);
             }
             break;
@@ -261,27 +265,34 @@ pub fn emit_error(app: &AppHandle, message: &str) {
     }
 }
 
-/// The listener thread: waits for Start, loads the models once, listens until Stop.
-pub fn worker(app: AppHandle, commands: Receiver<ListenCommand>) {
-    let mut engines: Option<Engines> = None;
+fn load(app: &AppHandle) -> Option<Engines> {
+    set_status_detail(app, Some("Loading Hodey's ears...".into()));
+    match asr_files(&voice_root()).and_then(|files| load_engines(&files)) {
+        Ok(engines) => {
+            set_status_detail(app, None);
+            Some(engines)
+        }
+        Err(reason) => {
+            set_status_detail(app, Some(reason.clone()));
+            None
+        }
+    }
+}
+
+/// The listener thread: loads the models up front (so the first hold-to-talk doesn't lose words),
+/// then runs a session per Start.
+pub fn worker(app: AppHandle, commands: Receiver<ListenCommand>, installed: bool) {
+    let mut engines = if installed { load(&app) } else { None };
     while let Ok(command) = commands.recv() {
-        if matches!(command, ListenCommand::Stop) {
-            continue;
-        }
+        let ListenCommand::Start { hold } = command else { continue };
         if engines.is_none() {
-            set_status_detail(&app, Some("Loading Hodey's ears…".into()));
-            match asr_files(&voice_root()).and_then(|files| load_engines(&files)) {
-                Ok(loaded) => engines = Some(loaded),
-                Err(reason) => {
-                    set_status_detail(&app, Some(reason.clone()));
-                    emit_error(&app, &reason);
-                    continue;
-                }
-            }
-            set_status_detail(&app, None);
+            engines = load(&app);
         }
-        let Some(loaded) = engines.as_mut() else { continue };
-        if let Err(reason) = listen(&app, loaded, &commands) {
+        let Some(loaded) = engines.as_mut() else {
+            emit_error(&app, super::models::SETUP_HINT);
+            continue;
+        };
+        if let Err(reason) = listen(&app, loaded, &commands, hold) {
             emit_error(&app, &reason);
         }
         loaded.segmenter.reset();

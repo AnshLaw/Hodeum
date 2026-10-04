@@ -45,7 +45,7 @@ export function savePrefs(storage: WriteStorage, prefs: DockPrefs): void {
   }
 }
 
-/** Commands from the tray menu and Ctrl+Alt+N. Must match ids in src-tauri/src/tray.rs. */
+/** Commands from the tray menu and the Hodey key + H. Must match ids in src-tauri/src/tray.rs. */
 export type ShellCommand = "toggle-visibility" | "dock-top" | "dock-left" | "dock-right" | "pinned" | "auto" | "sidebar-copilot" | "sidebar-floating";
 
 /** Showing again after Hide pins the notch, so it doesn't immediately tuck away under auto-hide. */

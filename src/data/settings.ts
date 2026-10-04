@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HODEY_KEYS } from "../lib/keys";
 import type { AssistanceLevel } from "../lib/types";
 
 /** PRD §6: learner-selected difficulty. */
@@ -52,6 +53,8 @@ export const settingsSchema = z.object({
   appearance: appearanceSchema,
   /** Off by default: when on, only a scrubbed, generic query leaves the PC. */
   webSearch: z.boolean().default(false),
+  /** Hold to talk; with a letter for commands. */
+  hodeyKey: z.enum(HODEY_KEYS).catch("right-ctrl").default("right-ctrl"),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -63,6 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
   stuckSeconds: 12,
   appearance: { ...DEFAULT_APPEARANCE },
   webSearch: false,
+  hodeyKey: "right-ctrl",
 };
 
 export const SETTINGS_LIMITS = { MIN_RATE, MAX_RATE, MIN_STUCK_SECONDS, MAX_STUCK_SECONDS } as const;
@@ -74,7 +78,7 @@ export function parseSettings(raw: unknown): Settings {
     const result = settingsSchema.shape[key].safeParse(value[key]);
     return (result.success ? result.data : DEFAULT_SETTINGS[key]) as Settings[K];
   };
-  return { voice: pick("voice"), help: pick("help"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance"), webSearch: pick("webSearch") };
+  return { voice: pick("voice"), help: pick("help"), stuckSeconds: pick("stuckSeconds"), appearance: pick("appearance"), webSearch: pick("webSearch"), hodeyKey: pick("hodeyKey") };
 }
 
 export interface SettingsStore {

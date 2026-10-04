@@ -29,6 +29,8 @@ export interface BridgeDeps {
   openGoalsAllowed: () => boolean;
   /** Applies speech settings to the voice in use. */
   applyVoice: (voice: Settings["voice"]) => void;
+  /** Tells the system-wide key handler which key is the Hodey key. */
+  applyHodeyKey?: (key: Settings["hodeyKey"]) => void;
 }
 
 /** A typed goal as an event: its task pack, or (when vision can plan) the app it names. */
@@ -47,6 +49,7 @@ function applySettings(deps: BridgeDeps, settings: Settings): void {
   deps.runtime.configure({ fallbackLevel: PRESET_START_LEVEL[settings.help], stuckMs: settings.stuckSeconds * MS_PER_SECOND });
   deps.runtime.setMuted(!settings.voice.enabled);
   deps.applyVoice(settings.voice);
+  deps.applyHodeyKey?.(settings.hodeyKey);
 }
 
 function loadSettings(deps: BridgeDeps): void {

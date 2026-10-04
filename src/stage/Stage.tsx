@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useState } from "react";
+import { StageKeys, hodeyKeySetting } from "../lib/keys";
 import type { Bus } from "../lib/bus";
 import type { BrowserShell } from "../lib/shell";
 import type { MouseButton } from "../providers/mock-perception";
@@ -8,7 +9,7 @@ import { HodeumMark } from "../components/shared/icons";
 import { TASK_PACKS } from "../task-packs";
 import { ExcelBackdrop, ExplorerBackdrop } from "./Backdrops";
 import { MockAppView } from "./MockAppView";
-import { StageAppWindow } from "./StageAppWindow";
+import { STAGE_OPEN_APP_EVENT, StageAppWindow } from "./StageAppWindow";
 import type { StageAppId, StageEnvironment } from "./environment";
 import { DESKTOP } from "./scenes/layout";
 import "./stage.css";
@@ -18,18 +19,24 @@ const APP_TABS: { id: StageAppId; label: string }[] = [
   { id: "explorer", label: "File Explorer" },
 ];
 
-/** Mirrors the native Ctrl+Alt+H (Point & Ask) and Ctrl+Alt+N (show/hide) shortcuts in the browser. */
+/** Mirrors the native Hodey key in the browser: Hodey key + P, H or A (no hold-to-talk: no voice here). */
 function useStageHotkeys(bus: Bus, shell: BrowserShell): void {
   useEffect(() => {
+    const keys = new StageKeys(() => hodeyKeySetting.get());
     const onKey = (event: KeyboardEvent) => {
-      if (!event.ctrlKey || !event.altKey) return;
-      if (event.code === "KeyH") bus.emit("annotate:start", {});
-      else if (event.code === "KeyN") shell.command("toggle-visibility");
-      else return;
+      const command = keys.handle(event);
+      if (!command) return;
       event.preventDefault();
+      if (command === "point") bus.emit("annotate:start", {});
+      else if (command === "show-hide") shell.command("toggle-visibility");
+      else window.dispatchEvent(new Event(STAGE_OPEN_APP_EVENT));
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
   }, [bus, shell]);
 }
 
@@ -75,7 +82,7 @@ export function Stage({ env }: { env: StageEnvironment }) {
           Reset
         </button>
         <span className="stage-hint">
-          <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>H</kbd> Point &amp; Ask · <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>N</kbd> show/hide · <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>J</kbd> app
+          <kbd>Right Ctrl</kbd> + <kbd>P</kbd> Point &amp; Ask · <kbd>H</kbd> show/hide · <kbd>A</kbd> app
         </span>
       </header>
       <main className="stage-desktop" style={{ width: DESKTOP.width, height: DESKTOP.height }}>

@@ -5,6 +5,7 @@ import type { AppServices, VoicePreview } from "../services";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { Row } from "./settings/controls";
 import { OnScreenSettings } from "./settings/OnScreenSettings";
+import { KeySettings } from "./settings/KeySettings";
 import { useEditableSettings } from "./settings/use-settings";
 import { VoiceSettings } from "./settings/VoiceSettings";
 
@@ -70,15 +71,6 @@ function AboutSettings({ vision, webSearch }: { vision?: VisionStatus; webSearch
         </Row>
       </section>
       <section className="hcard">
-        <h2>Shortcuts</h2>
-        <ul className="hkeys">
-          <li><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>H</kbd> Point &amp; Ask</li>
-          <li><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>N</kbd> Show or hide Hodey</li>
-          <li><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>J</kbd> Open this app</li>
-          <li><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Space</kbd> Talk to Hodey</li>
-        </ul>
-      </section>
-      <section className="hcard">
         <h2>Account</h2>
         <Row label="Sign in with Google" detail="Signing in syncs your skills, Hodes, settings and chats to your account so the web app and your other PCs see them. Coming next.">
           <button type="button" className="btn" disabled>
@@ -108,6 +100,7 @@ export function SettingsPage({ services }: { services: AppServices }) {
       )}
       {loadError && <p className="hchat__error">Couldn't load settings: {loadError}</p>}
       <OnScreenSettings bus={services.bus} />
+      {settings && <KeySettings hodeyKey={settings.hodeyKey} onChange={(hodeyKey) => update({ ...settings, hodeyKey })} />}
       <AboutSettings
         vision={vision}
         webSearch={

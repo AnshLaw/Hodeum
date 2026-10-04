@@ -34,19 +34,17 @@ function AppFrame({ env, from, onClosed }: { env: StageEnvironment; from?: Rect;
   );
 }
 
+/** The stage opens its in-page app window when this fires (the native app has its own window). */
+export const STAGE_OPEN_APP_EVENT = "stage:open-app";
+
 /** In the stage the desktop app is an in-page window that unfolds from the notch, like the native one. */
 export function StageAppWindow({ env }: { env: StageEnvironment }) {
   const [opening, setOpening] = useState<{ from?: Rect; key: number }>();
   useEffect(() => env.shell.onOpenApp((from) => setOpening({ from, key: Date.now() })), [env]);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.altKey && event.code === "KeyJ") {
-        event.preventDefault();
-        setOpening((current) => current ?? { key: Date.now() });
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const open = () => setOpening((current) => current ?? { key: Date.now() });
+    window.addEventListener(STAGE_OPEN_APP_EVENT, open);
+    return () => window.removeEventListener(STAGE_OPEN_APP_EVENT, open);
   }, []);
   if (!opening) return null;
   return <AppFrame key={opening.key} env={env} from={opening.from} onClosed={() => setOpening(undefined)} />;

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ActivityTracker, mirrorRemoteActivity, withScreenActivity } from "../lib/activity";
 import { connectAppearance } from "../lib/appearance";
+import { hodeyKeySetting } from "../lib/keys";
 import { COPY } from "../lib/copy";
 import { createLocalVoice, showMicDot } from "../providers/speech/local-voice";
 import { TauriBus, subscribeTauri } from "../lib/tauri-bus";
@@ -68,6 +69,10 @@ async function boot(): Promise<void> {
     packs: TASK_PACKS,
     openGoalsAllowed: () => vision.current().state === "ready",
     applyVoice: (settings) => voice.apply(settings),
+    applyHodeyKey: (key) => {
+      hodeyKeySetting.set(key);
+      invoke<void>("set_hodey_key", { key }).catch((error) => console.error("Couldn't set the Hodey key", error));
+    },
   });
   connectVoice({
     speech: voice.speech,

@@ -9,7 +9,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{VK_ESCAPE, VK_RETURN, VK_SPACE
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, SetWindowsHookExW,
     UnhookWindowsHookEx, WindowFromPoint, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT, WH_KEYBOARD_LL,
-    WH_MOUSE_LL, WM_KEYUP, WM_LBUTTONUP, WM_RBUTTONUP,
+    WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONUP, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
 use super::foreground::{root_window, window_pid};
@@ -51,12 +51,21 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
+/// Returned instead of passing a key on: the Hodey key's letter commands never reach the app.
+const SWALLOW: LRESULT = LRESULT(1);
+
 unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code >= 0 && wparam.0 as u32 == WM_KEYUP {
+    let message = wparam.0 as u32;
+    if code >= 0 {
         // SAFETY: for WH_KEYBOARD_LL, lparam points to a KBDLLHOOKSTRUCT for the duration of the call.
         let vk_code = unsafe { (*(lparam.0 as *const KBDLLHOOKSTRUCT)).vkCode };
+        let down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+        let up = message == WM_KEYUP || message == WM_SYSKEYUP;
+        if (down || up) && crate::hodey_key::on_key(vk_code, down) {
+            return SWALLOW;
+        }
         // SAFETY: GetForegroundWindow has no preconditions.
-        if is_action_key(vk_code) && !is_own(unsafe { GetForegroundWindow() }) {
+        if message == WM_KEYUP && is_action_key(vk_code) && !is_own(unsafe { GetForegroundWindow() }) {
             signal();
         }
     }

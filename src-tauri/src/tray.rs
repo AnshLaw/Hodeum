@@ -10,8 +10,8 @@ pub const SHELL_COMMAND_EVENT: &str = "shell:command";
 const QUIT: &str = "quit";
 const OPEN_APP: &str = "open-app";
 const COMMANDS: [(&str, &str); 10] = [
-    (OPEN_APP, "Open Hodeum\tCtrl+Alt+J"),
-    ("toggle-visibility", "Show / hide Hodey\tCtrl+Alt+N"),
+    (OPEN_APP, "Open Hodeum\tHodey key + A"),
+    ("toggle-visibility", "Show / hide Hodey\tHodey key + H"),
     ("dock-top", "Top"),
     ("dock-left", "Left side"),
     ("dock-right", "Right side"),

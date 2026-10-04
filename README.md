@@ -9,7 +9,7 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 **Teaching loop**
 - **Hode engine**: a pure, tested state machine covering the assistance ladder (demonstrate → independent), wrong-action correction, the stuck timer, hints, Explain, Let me try, pause/resume, and dropping stale results so the latest learner action wins.
 - **Task packs**: Excel PivotTable and File Explorer Zip. They contain labels, success signals and common mistakes, and never coordinates (enforced by the schema).
-- **Point & Ask** (beyond the PRD): press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> or the ⌖ button. Drag a box, Shift-draw a circle, or click to mark part of the screen, then ask about it or choose *Focus here*. Focus returns to your app afterwards. Everything stays local.
+- **Point & Ask** (beyond the PRD): press <kbd>Right Ctrl</kbd>+<kbd>P</kbd> or the ⌖ button. Drag a box, Shift-draw a circle, or click to mark part of the screen, then ask about it or choose *Focus here*. Focus returns to your app afterwards. Everything stays local.
 
 **Seeing the real screen**
 - **UI Automation** reads the app you're working in (never Hodeum itself): control names, roles, boxes, and selected or checked state. It skips spreadsheet cells and caps at 1,500 elements so Excel stays fast.
@@ -22,7 +22,7 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - **Dynamic island**: the top notch changes shape with what Hodey is doing. It's a pill when idle and shrinks to an orb around Hodey's face while it looks or thinks; the orb shows a sweeping ring and the green dot while it reads the screen. When the next step is ready it springs open into a card.
 - **The right app**: starting a Hode brings its app forward (a task pack's app, or one an open goal names, like "…in Word"), so Hodey reads and highlights there and not in whatever had focus. If you're in another app, Hodey asks you to open or switch to it, points at nothing meanwhile, and picks up when you act there.
 - **Copilot sidebar** (default for side docks): a real side panel. Windows reserves its width and any normal windows overlapping it slide over; they move back when the panel closes, unless you've moved them since. Choose *Floating* to have the panel hover over your windows instead.
-- **Auto-hide** (default): Hodey tucks into a sliver at the screen edge when idle and slides back on hover or when a Hode needs you. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd> hides or shows it completely.
+- **Auto-hide** (default): Hodey tucks into a sliver at the screen edge when idle and slides back on hover or when a Hode needs you. <kbd>Right Ctrl</kbd>+<kbd>H</kbd> hides or shows it completely.
 - **No covering**: during a Hode, a side sidebar reserves its width so maximized apps move over. At the top, the card shrinks to a slim bar whenever the highlighted control sits beneath it.
 - **Never steals focus**: clicks outside Hodey pass straight through to your app.
 - **Hodey has moods**: it sleeps when idle, listens as you type your goal, scans, thinks, nods while guiding, watches quietly when you work unaided, reacts to mistakes, and celebrates when you finish. All of it is animated and respects reduced-motion settings.
@@ -34,7 +34,7 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
 - The server listens only on 127.0.0.1, needs a fresh random key each launch, and won't start if another program already holds its port.
 
 **Hodeum app**
-- Open it from the notch's expand button, the tray, or <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>J</kbd>. It grows out of the notch and folds back into it when closed. Closing only hides it; Hodey keeps running.
+- Open it from the notch's expand button, the tray, or <kbd>Right Ctrl</kbd>+<kbd>A</kbd>. It grows out of the notch and folds back into it when closed. Closing only hides it; Hodey keeps running.
 - **Home**: start a Hode, continue the live one, and see streak, skills mastered, minutes learning, recent Hodes and what to practise next.
 - **Your Hodes**: every Hode as a timeline of steps, corrections, hints and questions.
 - **Learning paths**: task packs and every skill's mastery. Change how much help a skill gets, or reset it.
@@ -51,8 +51,16 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
   - **Hodey on screen**: position, sidebar style and idle behaviour.
   - Everything applies to the notch and overlay right away.
 
+**Keys**: one Hodey key, <kbd>Right Ctrl</kbd> (or <kbd>Right Alt</kbd>, in Settings), which apps rarely use on its own:
+- **Hold it:** talk to Hodey; let go to send.
+- **Hodey key + P:** Point & Ask.
+- **Hodey key + H:** show or hide Hodey.
+- **Hodey key + A:** open the Hodeum app.
+
+Hodey swallows these letter presses, so the app underneath never sees them, and other Right Ctrl shortcuts (copy, paste) work as usual.
+
 **Voice, on this PC** (CPU, so the GPU stays free for vision):
-- **Talking to Hodey:** tap the mic (or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd>) and talk. NVIDIA Nemotron speech recognition, with Silero voice detection, turns it into text, and the notch shows the words as Hodey hears them.
+- **Talking to Hodey:** hold <kbd>Right Ctrl</kbd> and talk, then let go (or tap the mic for one sentence). NVIDIA Nemotron speech recognition, with Silero voice detection, turns it into text, and the notch shows the words as Hodey hears them.
 - **What you can say:**
   - when idle, a goal ("teach me how to make a pivot table") starts a Hode, and a what/where question asks about the screen;
   - during a Hode, "hint", "explain", "repeat", "I did it", "pause", "continue" and "stop" are controls, and anything else is a question.
@@ -88,9 +96,9 @@ cd src-tauri; cargo test --lib   # Rust geometry, hit-test, dock, app-bar, perce
 1. Hover the notch and choose **Start a Hode**, then pick **Make a PivotTable**.
 2. Click **Data** on purpose: Hodey corrects you and moves the highlight.
 3. Follow the steps through Insert → PivotTable → OK → tick Region and Sales.
-4. Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>, drag over any control, and ask **What is this?**
+4. Press <kbd>Right Ctrl</kbd>+<kbd>P</kbd>, drag over any control, and ask **What is this?**
 5. Run the Hode again. Steps for skills you already practised get less help (no arrow, a shorter hint).
-6. Open ⋯ and dock Hodey to the left or right; press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd> to hide it and bring it back.
+6. Open ⋯ and dock Hodey to the left or right; press <kbd>Right Ctrl</kbd>+<kbd>H</kbd> to hide it and bring it back.
 
 No cloud API keys are needed. Copy `.env.example` to `.env.local` only when you explicitly enable the optional providers.
 

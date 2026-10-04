@@ -47,6 +47,17 @@ impl<R: Recognizer> Segmenter<R> {
         }
     }
 
+    /// Ends an utterance in progress right now (the talk key was released) and returns its text.
+    pub fn flush(&mut self) -> Option<String> {
+        if !self.speaking {
+            return None;
+        }
+        match self.end(&[]).pop() {
+            Some(SpeechEvent::Final(text)) => Some(text),
+            _ => None,
+        }
+    }
+
     /// Drops any utterance in progress (listening stopped mid-sentence).
     pub fn reset(&mut self) {
         if self.speaking {
@@ -92,6 +103,54 @@ impl<R: Recognizer> Segmenter<R> {
         self.preroll.extend(frame.iter().copied());
         let excess = self.preroll.len().saturating_sub(PREROLL_SAMPLES);
         self.preroll.drain(..excess);
+    }
+}
+
+fn join(a: &str, b: &str) -> String {
+    match (a.is_empty(), b.is_empty()) {
+        (true, _) => b.to_string(),
+        (_, true) => a.to_string(),
+        _ => format!("{a} {b}"),
+    }
+}
+
+/// One listening session. Tap-to-talk ends at the first finished sentence; while the talk key is held,
+/// sentences (split by pauses) build up into one utterance that's sent on release.
+pub struct Session {
+    hold: bool,
+    said: String,
+}
+
+impl Session {
+    pub fn new(hold: bool) -> Self {
+        Self { hold, said: String::new() }
+    }
+
+    /// What to send on for these events, and whether the session is over.
+    pub fn on_events(&mut self, events: Vec<SpeechEvent>) -> (Vec<SpeechEvent>, bool) {
+        let mut out = Vec::new();
+        for event in events {
+            match event {
+                SpeechEvent::Start => out.push(SpeechEvent::Start),
+                SpeechEvent::Partial(text) => out.push(SpeechEvent::Partial(join(&self.said, &text))),
+                SpeechEvent::Final(text) if self.hold => {
+                    self.said = join(&self.said, &text);
+                    out.push(SpeechEvent::Partial(self.said.clone()));
+                }
+                SpeechEvent::Final(text) => {
+                    out.push(SpeechEvent::Final(text));
+                    return (out, true);
+                }
+            }
+        }
+        (out, false)
+    }
+
+    /// The key was released: everything said, as one final utterance.
+    pub fn finish(&mut self, tail: Option<String>) -> Option<SpeechEvent> {
+        let all = join(&self.said, tail.as_deref().unwrap_or_default());
+        self.said.clear();
+        (!all.is_empty()).then_some(SpeechEvent::Final(all))
     }
 }
 
@@ -162,6 +221,32 @@ mod tests {
         s.push(&vec![0.0; PREROLL_SAMPLES + 100], false);
         s.push(&[0.1; 1], true);
         assert_eq!(s.recognizer.heard, PREROLL_SAMPLES + 1);
+    }
+
+    #[test]
+    fn tap_sessions_end_at_the_first_sentence() {
+        let mut session = Session::new(false);
+        let (out, done) = session.on_events(vec![SpeechEvent::Final("give me a hint".into())]);
+        assert_eq!((out, done), (vec![SpeechEvent::Final("give me a hint".into())], true));
+    }
+
+    #[test]
+    fn held_sessions_join_sentences_until_release() {
+        let mut session = Session::new(true);
+        let (out, done) = session.on_events(vec![SpeechEvent::Final("teach me how to make".into())]);
+        assert_eq!((out, done), (vec![SpeechEvent::Partial("teach me how to make".into())], false));
+        let (out, _) = session.on_events(vec![SpeechEvent::Partial("a pivot".into())]);
+        assert_eq!(out, vec![SpeechEvent::Partial("teach me how to make a pivot".into())]);
+        assert_eq!(session.finish(Some("a pivot table".into())), Some(SpeechEvent::Final("teach me how to make a pivot table".into())));
+        assert_eq!(session.finish(None), None);
+    }
+
+    #[test]
+    fn flushing_ends_the_sentence_in_progress() {
+        let mut s = Segmenter::new(Fake::default());
+        s.push(&[0.1; 1], true);
+        assert_eq!(s.flush(), Some("hint".into()));
+        assert_eq!(s.flush(), None);
     }
 
     #[test]

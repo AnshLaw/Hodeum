@@ -89,7 +89,8 @@ pub fn start(app: &AppHandle) {
     let status = VoiceStatus { asr, tts: "loading", listening: false, detail, tts_detail: None, voices: 0 };
     app.manage(Voice { status: Mutex::new(status), listen: Mutex::new(listen_tx), speak: Mutex::new(speak_tx), stop: Arc::clone(&stop) });
     let listener = app.clone();
-    thread::spawn(move || listen::worker(listener, listen_rx));
+    let installed = asr == "ready";
+    thread::spawn(move || listen::worker(listener, listen_rx, installed));
     let speaker = app.clone();
     thread::spawn(move || speak::worker(speaker, speak_rx, stop));
 }
@@ -103,26 +104,34 @@ fn send_listen(voice: &Voice, command: ListenCommand) -> Result<(), String> {
     voice.listen.lock().map_err(|e| e.to_string())?.send(command).map_err(|_| "Hodey's listener has stopped; restart Hodeum.".to_string())
 }
 
-/// Ctrl+Alt+Space: start listening, or stop if already listening.
-pub fn toggle(app: &AppHandle) {
-    let voice = app.state::<Voice>();
-    let listening = match voice.status.lock() {
-        Ok(status) => status.listening,
-        Err(e) => return eprintln!("voice status lock poisoned: {e}"),
-    };
-    let result = if listening { send_listen(&voice, ListenCommand::Stop) } else { voice_start(voice.clone()) };
-    if let Err(reason) = result {
-        listen::emit_error(app, &reason);
+fn asr_ready(voice: &Voice) -> Result<(), String> {
+    let status = voice.status.lock().map_err(|e| e.to_string())?.clone();
+    if status.asr == "ready" {
+        Ok(())
+    } else {
+        Err(status.detail.unwrap_or_else(|| models::SETUP_HINT.into()))
     }
+}
+
+/// Hodey key held: listen until it's released.
+pub fn hold_start(app: &AppHandle) -> Result<(), String> {
+    let voice = app.state::<Voice>();
+    if let Err(reason) = asr_ready(&voice) {
+        listen::emit_error(app, &reason);
+        return Ok(());
+    }
+    send_listen(&voice, ListenCommand::Start { hold: true })
+}
+
+/// Hodey key released: send what was said.
+pub fn hold_end(app: &AppHandle) -> Result<(), String> {
+    send_listen(&app.state::<Voice>(), ListenCommand::Finish)
 }
 
 #[tauri::command]
 pub fn voice_start(voice: State<'_, Voice>) -> Result<(), String> {
-    let status = voice.status.lock().map_err(|e| e.to_string())?.clone();
-    if status.asr != "ready" {
-        return Err(status.detail.unwrap_or_else(|| models::SETUP_HINT.into()));
-    }
-    send_listen(&voice, ListenCommand::Start)
+    asr_ready(&voice)?;
+    send_listen(&voice, ListenCommand::Start { hold: false })
 }
 
 #[tauri::command]

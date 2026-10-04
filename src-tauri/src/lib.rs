@@ -4,6 +4,7 @@ mod chat_context;
 mod db;
 mod dock;
 mod hit_test;
+mod hodey_key;
 mod perception;
 mod surfaces;
 mod tray;
@@ -11,50 +12,12 @@ mod vlm;
 mod voice;
 mod web_search;
 
-use tauri::{AppHandle, Emitter, Manager, RunEvent};
-use tauri_plugin_global_shortcut::{Builder as ShortcutBuilder, Shortcut, ShortcutState};
+use tauri::{AppHandle, Manager, RunEvent};
 
-const ANNOTATE_SHORTCUT: &str = "ctrl+alt+h";
-const ANNOTATE_EVENT: &str = "annotate:start";
-const VISIBILITY_SHORTCUT: &str = "ctrl+alt+n";
-const APP_SHORTCUT: &str = "ctrl+alt+j";
-const TALK_SHORTCUT: &str = "ctrl+alt+space";
-
-fn matches(shortcut: &Shortcut, text: &str) -> bool {
-    match text.parse::<Shortcut>() {
-        Ok(parsed) => parsed == *shortcut,
-        Err(error) => {
-            eprintln!("invalid shortcut {text}: {error}");
-            false
-        }
-    }
-}
-
-fn on_shortcut(app: &AppHandle, shortcut: &Shortcut) {
-    if matches(shortcut, VISIBILITY_SHORTCUT) {
-        tray::emit_command(app, "toggle-visibility");
-    } else if matches(shortcut, TALK_SHORTCUT) {
-        voice::toggle(app);
-    } else if matches(shortcut, APP_SHORTCUT) {
-        if let Err(error) = app_window::show(app, None) {
-            eprintln!("couldn't open the Hodeum app: {error}");
-        }
-    } else if let Err(error) = app.emit(ANNOTATE_EVENT, serde_json::json!({})) {
-        eprintln!("failed to emit {ANNOTATE_EVENT}: {error}");
-    }
-}
+/// Tells the overlay to start Point & Ask (Hodey key + P).
+pub(crate) const ANNOTATE_EVENT: &str = "annotate:start";
 
 fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    app.plugin(
-        ShortcutBuilder::new()
-            .with_shortcuts([ANNOTATE_SHORTCUT, VISIBILITY_SHORTCUT, APP_SHORTCUT, TALK_SHORTCUT])?
-            .with_handler(|app, shortcut, event| {
-                if event.state == ShortcutState::Pressed {
-                    on_shortcut(app, shortcut);
-                }
-            })
-            .build(),
-    )?;
     surfaces::setup(app)?;
     app_window::keep_alive(app)?;
     tray::install(app)?;
@@ -62,6 +25,7 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     perception::input_hook::spawn(app.clone())?;
     vlm::spawn(app.clone());
     voice::start(app);
+    hodey_key::spawn(app.clone())?;
     Ok(())
 }
 
@@ -99,7 +63,8 @@ pub fn run() {
             voice::voice_start,
             voice::voice_stop,
             voice::tts_speak,
-            voice::tts_stop
+            voice::tts_stop,
+            hodey_key::set_hodey_key
         ])
         .setup(|app| setup(app.handle()))
         .build(tauri::generate_context!())

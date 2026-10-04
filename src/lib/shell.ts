@@ -24,7 +24,7 @@ export interface NativeShell {
   onDockSnapped(handler: (dock: Dock) => void): () => void;
   /** Opens the Hodeum desktop app, unfolding from `from` (the notch's screen rect, CSS px of the notch window). */
   openApp(from: Rect): Promise<void>;
-  /** Tray menu and Ctrl+Alt+N commands (see `applyCommand`). */
+  /** Tray menu and Hodey key commands (see `applyCommand`). */
   onShellCommand(handler: (command: string) => void): () => void;
 }
 
@@ -82,7 +82,7 @@ export class BrowserShell implements NativeShell {
     };
   }
 
-  /** Lets the stage simulate the tray menu and Ctrl+Alt+N. */
+  /** Lets the stage simulate the tray menu and the Hodey key. */
   command(command: string): void {
     this.commandHandlers.forEach((handler) => handler(command));
   }

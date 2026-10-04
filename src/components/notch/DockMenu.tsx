@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { COPY } from "../../lib/copy";
+import { HODEY_KEY_LABELS, KEY_LETTERS, hodeyKeySetting } from "../../lib/keys";
 import type { Dock, DockPrefs, SidebarStyle, Visibility } from "../../features/dock/dock";
 import type { VisionStatus } from "../../providers/vision/types";
 
@@ -62,7 +64,14 @@ interface DockMenuProps {
 }
 
 /** Where Hodey lives and how it behaves when idle. Rendered inside the notch so hit-testing stays exact. */
+function useHodeyKeyLabel(): string {
+  const [key, setKey] = useState(hodeyKeySetting.get());
+  useEffect(() => hodeyKeySetting.subscribe(setKey), []);
+  return HODEY_KEY_LABELS[key];
+}
+
 export function DockMenu({ prefs, vision, onChange, onHide }: DockMenuProps) {
+  const keyLabel = useHodeyKeyLabel();
   const idle = prefs.visibility === "hidden" ? "pinned" : prefs.visibility;
   return (
     <div className="notch__content dock-menu">
@@ -79,7 +88,7 @@ export function DockMenu({ prefs, vision, onChange, onHide }: DockMenuProps) {
           {COPY.hideHodey}
         </button>
         <span className="dock-menu__hint">
-          <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>N</kbd> {COPY.bringsBack}
+          <kbd>{keyLabel}</kbd> <kbd>{KEY_LETTERS["show-hide"]}</kbd> {COPY.bringsBack}
         </span>
       </div>
       <p className="dock-menu__hint">{COPY.dragTip}</p>
