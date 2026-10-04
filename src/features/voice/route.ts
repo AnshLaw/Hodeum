@@ -198,7 +198,7 @@ function routeIdle(text: string, packs: TaskPack[], openAllowed: boolean, apps: 
   if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];
   if (intent === "noise" || intent === "ack" || intent === "control" || tooShort(text)) return [];
   if (intent === "question") return [question(text)];
-  const goal = goalEvent(text, packs, openAllowed);
+  const goal = goalEvent(text, { packs, openAllowed, apps });
   if (goal.type === "GOAL_SUBMITTED" && goal.pack) return [{ type: "START_HODE" }, goal];
   if (intent !== "task") return [];
   return openAllowed ? [{ type: "START_HODE" }, goal] : [question(text)];

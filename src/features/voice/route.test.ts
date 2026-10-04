@@ -195,6 +195,12 @@ describe("what the learner means", () => {
     expect(routeApps(initialState, "open outlook")).toMatchObject([{ type: "APP_OPEN_FAILED", reason: "ambiguous" }]);
   });
 
+  it("names the installed app a spoken goal is about, from idle or goal entry", () => {
+    expect(routeApps(initialState, "how do I send a message on Discord", true)).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", app: "Discord" }]);
+    expect(routeApps({ ...initialState, phase: "goal_entry" }, "Hey Hodey, how do I send a message on Discord")).toMatchObject([{ type: "GOAL_SUBMITTED", goal: "how do I send a message on Discord", app: "Discord" }]);
+    expect(routeApps(initialState, "how do I turn on dark mode in discord", true)).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", app: "Discord", pack: undefined }]);
+  });
+
   it("without a catalog, an app request is an ordinary goal", () => {
     expect(types(route(initialState, "open excel", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
   });
