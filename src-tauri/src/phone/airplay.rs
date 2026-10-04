@@ -4,7 +4,7 @@
 
 use std::fs::File;
 use std::io::ErrorKind;
-use std::net::{Ipv4Addr, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -39,6 +39,8 @@ const POLL: Duration = Duration::from_millis(250);
 /// Large enough for any RTP packet on loopback.
 const MAX_PACKET: usize = 65_536;
 const KEY_FLAG: u8 = 1;
+/// Restarts of a receiver that keeps exiting before any video arrives, before the notch shows the error.
+const MAX_RESTARTS: u32 = 3;
 /// Room for a whole mirrored-screen keyframe burst (hundreds of KB) while the pump is busy.
 const RECEIVE_BUFFER_BYTES: i32 = 4 * 1024 * 1024;
 
@@ -184,8 +186,20 @@ fn send(channel: &Channel<InvokeResponseBody>, body: serde_json::Value) -> bool 
     channel.send(InvokeResponseBody::Json(body.to_string())).is_ok()
 }
 
-fn spawn_receiver(root: &Path, exe: &Path, port: u16, mdns_ipv4: Option<Ipv4Addr>) -> Result<Child, String> {
-    let log = File::create(root.join(LOG_FILE)).map_err(|e| format!("couldn't create {LOG_FILE}: {e}"))?;
+/// A fresh log per start; a restart appends, so the log still shows why the receiver went down.
+fn open_log(root: &Path, fresh: bool) -> Result<File, String> {
+    let path = root.join(LOG_FILE);
+    let opened = if fresh { File::create(&path) } else { std::fs::OpenOptions::new().append(true).create(true).open(&path) };
+    let mut log = opened.map_err(|e| format!("couldn't open {LOG_FILE}: {e}"))?;
+    if !fresh {
+        use std::io::Write;
+        writeln!(log, "--- Hodeum restarted the receiver ---").map_err(|e| format!("couldn't write {LOG_FILE}: {e}"))?;
+    }
+    Ok(log)
+}
+
+fn spawn_receiver(root: &Path, exe: &Path, port: u16, mdns_ipv4: Option<Ipv4Addr>, fresh_log: bool) -> Result<Child, String> {
+    let log = open_log(root, fresh_log)?;
     let errors = log.try_clone().map_err(|e| e.to_string())?;
     // UxPlay loads its GStreamer DLLs from its own folder, MSYS2's ucrt64/bin.
     let dir = exe.parent().ok_or("the AirPlay receiver path has no folder")?;
@@ -218,30 +232,106 @@ fn forward(depacketizer: &mut Depacketizer, packet: &[u8], channel: &Channel<Inv
     channel.send(InvokeResponseBody::Raw(message)).is_ok()
 }
 
-/// Forwards video until stopped, the notch goes away, or the receiver exits.
-fn pump(socket: UdpSocket, channel: Channel<InvokeResponseBody>, stop: Arc<AtomicBool>, root: PathBuf, receiver_pid: u32, exited: impl Fn() -> bool) {
-    let mut depacketizer = Depacketizer::new();
+/// Everything needed to start UxPlay again inside the same session, on the same network and video port.
+struct Relaunch {
+    app: AppHandle,
+    root: PathBuf,
+    exe: PathBuf,
+    port: u16,
+    mdns_ipv4: Option<Ipv4Addr>,
+    network: Network,
+    stop: Arc<AtomicBool>,
+}
+
+impl Relaunch {
+    /// The new receiver's pid, or None when this session was closed or replaced meanwhile.
+    fn run(&self) -> Result<Option<u32>, String> {
+        let state = self.app.state::<Airplay>();
+        let mut slot = state.session.lock().map_err(|e| e.to_string())?;
+        let Some(session) = slot.as_mut().filter(|s| Arc::ptr_eq(&s.stop, &self.stop)) else { return Ok(None) };
+        if self.stop.load(Ordering::SeqCst) {
+            return Ok(None);
+        }
+        let child = spawn_receiver(&self.root, &self.exe, self.port, self.mdns_ipv4, false)?;
+        state.job.bind(&child, "the AirPlay receiver")?;
+        let pid = child.id();
+        session.child = child;
+        Ok(Some(pid))
+    }
+}
+
+/// Whether a receiver that exited on its own is started again: not after `MAX_RESTARTS` tries with no video between them.
+pub fn may_restart(restarts_without_video: u32) -> bool {
+    restarts_without_video < MAX_RESTARTS
+}
+
+/// UxPlay went down mid-session (an iPhone dropping off Wi-Fi can take it with it): start it again and show the
+/// notch it's waiting for the iPhone, instead of an error. None: the session is over (closed, replaced, or given up).
+fn restart(relaunch: &Relaunch, channel: &Channel<InvokeResponseBody>, restarts: &mut u32) -> Option<u32> {
+    if !may_restart(*restarts) {
+        status(channel, "failed", Some(exit_detail(&relaunch.root)));
+        return None;
+    }
+    *restarts += 1;
+    log::warn!("AirPlay receiver exited mid-session ({}); restarting it ({}/{MAX_RESTARTS})", exit_detail(&relaunch.root), restarts);
+    match relaunch.run() {
+        Ok(Some(pid)) => {
+            send(channel, serde_json::json!({ "state": "waiting", "network": relaunch.network }));
+            Some(pid)
+        }
+        Ok(None) => None,
+        Err(error) => {
+            log::error!("couldn't restart the AirPlay receiver: {error}");
+            status(channel, "failed", Some(error));
+            None
+        }
+    }
+}
+
+/// One receiver process's video: only its own sockets may feed it, and a new stream starts clean.
+struct Feed {
+    depacketizer: Depacketizer,
+    gate: SenderGate,
+    started: Instant,
+    pid: u32,
+    streaming: bool,
+}
+
+impl Feed {
+    fn new(pid: u32) -> Self {
+        Self { depacketizer: Depacketizer::new(), gate: SenderGate::new(), started: Instant::now(), pid, streaming: false }
+    }
+
+    fn admits(&mut self, from: SocketAddr) -> bool {
+        let pid = self.pid;
+        let owned = |from| udp_rows().is_some_and(|rows| owned_by(&rows, from, pid));
+        self.gate.admits(from, self.started.elapsed().as_millis() as u64, &owned)
+    }
+}
+
+/// Forwards video until stopped or the notch goes away; a receiver that exits is restarted.
+fn pump(socket: UdpSocket, channel: Channel<InvokeResponseBody>, relaunch: Relaunch, first_pid: u32) {
     let mut buffer = vec![0u8; MAX_PACKET];
-    let mut streaming = false;
-    let mut gate = SenderGate::new();
-    let started = Instant::now();
-    let owned = |from| udp_rows().is_some_and(|rows| owned_by(&rows, from, receiver_pid));
-    while !stop.load(Ordering::SeqCst) {
+    let mut feed = Feed::new(first_pid);
+    let mut restarts = 0;
+    while !relaunch.stop.load(Ordering::SeqCst) {
         match socket.recv_from(&mut buffer) {
-            Ok((_, from)) if !gate.admits(from, started.elapsed().as_millis() as u64, &owned) => continue,
+            Ok((_, from)) if !feed.admits(from) => continue,
             Ok((n, _)) => {
-                if !streaming {
-                    streaming = status(&channel, "streaming", None);
+                restarts = 0;
+                if !feed.streaming {
+                    feed.streaming = status(&channel, "streaming", None);
                 }
-                if !forward(&mut depacketizer, &buffer[..n], &channel) {
+                if !forward(&mut feed.depacketizer, &buffer[..n], &channel) {
                     return;
                 }
             }
             Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-                if exited() && !stop.load(Ordering::SeqCst) {
-                    status(&channel, "failed", Some(exit_detail(&root)));
-                    return;
+                if !relaunch.app.state::<Airplay>().exited() || relaunch.stop.load(Ordering::SeqCst) {
+                    continue;
                 }
+                let Some(pid) = restart(&relaunch, &channel, &mut restarts) else { return };
+                feed = Feed::new(pid);
             }
             Err(e) => {
                 status(&channel, "failed", Some(format!("AirPlay video stopped arriving: {e}")));
@@ -277,15 +367,15 @@ pub async fn airplay_start(app: AppHandle, network: NetworkChoice, on_frame: Cha
     end(&mut slot)?;
     let socket = video_socket()?;
     let port = socket.local_addr().map_err(|e| e.to_string())?.port();
-    let child = spawn_receiver(&root, &exe, port, mdns_ipv4)?;
+    let child = spawn_receiver(&root, &exe, port, mdns_ipv4, true)?;
     state.job.bind(&child, "the AirPlay receiver")?;
     let receiver_pid = child.id();
     let stop = Arc::new(AtomicBool::new(false));
     *slot = Some(Session { child, stop: stop.clone() });
     drop(slot);
     send(&on_frame, serde_json::json!({ "state": "waiting", "network": network }));
-    let pumped = app.clone();
-    thread::spawn(move || pump(socket, on_frame, stop, root, receiver_pid, move || pumped.state::<Airplay>().exited()));
+    let relaunch = Relaunch { app: app.clone(), root, exe, port, mdns_ipv4, network, stop };
+    thread::spawn(move || pump(socket, on_frame, relaunch, receiver_pid));
     Ok(())
 }
 
@@ -397,7 +487,7 @@ mod tests {
         let root = local_ai_root();
         let exe = receiver_path(&root).unwrap();
         let socket = video_socket().unwrap();
-        let mut child = spawn_receiver(&root, &exe, socket.local_addr().unwrap().port(), Some(Ipv4Addr::new(192, 168, 137, 1))).unwrap();
+        let mut child = spawn_receiver(&root, &exe, socket.local_addr().unwrap().port(), Some(Ipv4Addr::new(192, 168, 137, 1)), true).unwrap();
         let deadline = Instant::now() + STARTUP;
         let mut log = String::new();
         while Instant::now() < deadline && !log.contains("mDNS: advertising on") && matches!(child.try_wait(), Ok(None)) {
@@ -408,6 +498,31 @@ mod tests {
         child.kill().ok();
         assert!(running, "UxPlay exited: {log}");
         assert!(log.contains("mDNS: advertising on 192.168.137.1"), "{log}");
+    }
+
+    #[test]
+    fn restarts_a_receiver_that_exits_until_it_keeps_failing_without_video() {
+        assert!(may_restart(0));
+        assert!(may_restart(MAX_RESTARTS - 1));
+        assert!(!may_restart(MAX_RESTARTS));
+    }
+
+    #[test]
+    fn a_restart_keeps_the_log_of_why_the_receiver_went_down() {
+        use std::io::Write;
+        let root = scratch("log");
+        std::fs::create_dir_all(root.join("runtime")).unwrap();
+        writeln!(open_log(&root, true).unwrap(), "Begin streaming").unwrap();
+        writeln!(open_log(&root, false).unwrap(), "Initialized").unwrap();
+        let log = std::fs::read_to_string(root.join(LOG_FILE)).unwrap();
+        assert_eq!(log, "Begin streaming
+--- Hodeum restarted the receiver ---
+Initialized
+");
+        writeln!(open_log(&root, true).unwrap(), "fresh").unwrap();
+        assert_eq!(std::fs::read_to_string(root.join(LOG_FILE)).unwrap(), "fresh
+");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
