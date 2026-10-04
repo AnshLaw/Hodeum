@@ -5,16 +5,17 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::UI::WindowsAndMessaging::{
     GetAncestor, GetWindow, GetWindowLongPtrW, IsIconic, IsWindowVisible, SetWindowPos, GA_ROOTOWNER, GWL_EXSTYLE, GW_HWNDPREV,
-    HWND_TOPMOST, SET_WINDOW_POS_FLAGS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, WS_EX_TOPMOST,
+    HWND_TOPMOST, SET_WINDOW_POS_FLAGS, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_TOPMOST,
 };
 
 use super::px_rect;
 use crate::dock::geometry::PxRect;
 use crate::perception::window_watch::window_frame;
 
-/// Z-order only: no move, no resize, no activation, any owner left where it is, and never
-/// SWP_SHOWWINDOW, so a notch the learner hid stays hidden.
-pub const RAISE_FLAGS: SET_WINDOW_POS_FLAGS = SET_WINDOW_POS_FLAGS(SWP_NOMOVE.0 | SWP_NOSIZE.0 | SWP_NOACTIVATE.0 | SWP_NOOWNERZORDER.0);
+/// Z-order only: no move, no resize, no activation, and never SWP_SHOWWINDOW, so a notch the learner
+/// hid stays hidden. Without SWP_NOOWNERZORDER, windows a surface owns (a dropdown, a tooltip) move up
+/// with it and stay above it; the surfaces themselves have no owner to drag along.
+pub const RAISE_FLAGS: SET_WINDOW_POS_FLAGS = SET_WINDOW_POS_FLAGS(SWP_NOMOVE.0 | SWP_NOSIZE.0 | SWP_NOACTIVATE.0);
 /// Most windows read above one surface. The topmost band rarely holds more than a few dozen; this only
 /// bounds a walk that a z-order changing underneath it could stretch.
 const MAX_WALK: usize = 1024;
@@ -153,7 +154,7 @@ pub fn raise(hwnd: HWND) -> windows::core::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use windows::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW;
+    use windows::Win32::UI::WindowsAndMessaging::{SWP_NOOWNERZORDER, SWP_SHOWWINDOW};
 
     const SURFACE: PxRect = PxRect { x: 0, y: 0, width: 1920, height: 1080 };
     const NOTCH: isize = 2;
@@ -219,10 +220,15 @@ mod tests {
 
     #[test]
     fn raising_never_moves_sizes_activates_or_shows() {
-        for flag in [SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE, SWP_NOOWNERZORDER] {
+        for flag in [SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE] {
             assert_eq!(RAISE_FLAGS.0 & flag.0, flag.0);
         }
         assert_eq!(RAISE_FLAGS.0 & SWP_SHOWWINDOW.0, 0);
+    }
+
+    #[test]
+    fn raising_takes_a_surfaces_own_popups_along() {
+        assert_eq!(RAISE_FLAGS.0 & SWP_NOOWNERZORDER.0, 0, "SWP_NOOWNERZORDER would leave a dropdown under the notch");
     }
 }
 

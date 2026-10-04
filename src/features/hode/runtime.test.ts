@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { notchView } from "../../components/notch/notch-view";
 import { LocalBus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
 import { center, padRect } from "../../lib/coords";
@@ -485,6 +486,34 @@ describe("what Hodey is saying", () => {
     const said = runtime.hodeySaying() ?? "";
     expect(said).toContain(spokenCopy("en").greeting);
     expect(said).toContain(spokenCopy("en").notATask);
+  });
+});
+
+describe("an app opened during a lesson", () => {
+  const CALCULATOR = { id: "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", name: "Calculator", kind: "packaged" as const };
+
+  /** The lesson's card at its first three steps, with "open Calculator" said at the first one or not. */
+  async function cards(errand: boolean) {
+    const h = setup();
+    Object.assign(h.perception, { openInstalledApp: vi.fn(async () => true) });
+    await h.start("teach");
+    if (errand) {
+      h.runtime.dispatch({ type: "OPEN_APP", app: CALCULATOR, said: "open calculator" });
+      await settle();
+    }
+    const seen = [notchView(h.state())];
+    for (const id of ["tab:Insert", "ribbon:PivotTable"]) {
+      await h.act(id);
+      seen.push(notchView(h.state()));
+    }
+    return seen;
+  }
+
+  it("shows its line beside the step until the learner acts, never in place of the lesson's own words", async () => {
+    const [first, ...later] = await cards(true);
+    const [plainFirst, ...plainLater] = await cards(false);
+    expect(first).toEqual({ ...plainFirst, eyebrow: `${spokenCopy("en").opening("Calculator")} ${spokenCopy("en").openTip}` });
+    expect(later).toEqual(plainLater);
   });
 });
 

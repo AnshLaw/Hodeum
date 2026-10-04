@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { InstalledApp } from "../../lib/types";
 import catalog from "./__fixtures__/start-apps.json";
-import { appNamedIn, knownAppId, pickOption, resolveApp } from "./resolve";
+import { appNamedIn, knownAppId, mentionsOption, pickOption, resolveApp } from "./resolve";
 
-/** A trimmed copy of `Get-StartApps` on the dev PC, traps included (WSL Settings, WhatsApp Web, Outlook (classic)). */
+/**
+ * A trimmed copy of `list_apps` on the dev PC, desktop apps' window names included, traps too (WSL Settings,
+ * WhatsApp Web, Outlook (classic), My Dell, Click to Do, and WinRAR and Telegram, whose windows go by other names).
+ */
 const APPS = catalog as InstalledApp[];
 
 const idOf = (query: string) => {
@@ -90,9 +93,44 @@ describe("pickOption", () => {
     }
   });
 
+  it("picks by place and name together, when they agree", () => {
+    expect(pickOption("the first outlook", OUTLOOKS)).toBe(0);
+    expect(pickOption("second outlook", OUTLOOKS)).toBe(1);
+    expect(pickOption("the second classic one", OUTLOOKS)).toBe(1);
+    expect(pickOption("the first classic", OUTLOOKS)).toBeUndefined();
+  });
+
+  it("picks the new or the old one when only one offered app is the old kind", () => {
+    for (const said of ["the new one", "new outlook", "the new outlook app", "naya wala", "nayi wali", "नया वाला", "नई वाली", "the latest one"]) {
+      expect(pickOption(said, OUTLOOKS), said).toBe(0);
+    }
+    for (const said of ["the old one", "old outlook", "the classic version", "purana wala", "purani wali", "पुराना वाला", "पुरानी वाली", "the legacy one"]) {
+      expect(pickOption(said, OUTLOOKS), said).toBe(1);
+    }
+    expect(pickOption("the old one", ["Media Player", "Windows Media Player Legacy"])).toBe(1);
+    expect(pickOption("the new one", ["Paint", "Paint 3D"])).toBeUndefined();
+    expect(pickOption("the new classic one", OUTLOOKS)).toBeUndefined();
+  });
+
   it("picks nothing when the reply names neither, or a place past the end", () => {
-    for (const said of ["the third one", "teesra", "thunderbird", "the new one", "yes", "never mind", "open excel"]) {
+    for (const said of ["the third one", "teesra", "thunderbird", "normal outlook", "yes", "never mind", "open excel"]) {
       expect(pickOption(said, OUTLOOKS), said).toBeUndefined();
+    }
+  });
+});
+
+describe("mentionsOption", () => {
+  const OUTLOOKS = ["Outlook", "Outlook (classic)"];
+
+  it("is a reply that tries to pick: a place, the new or old one, or a word of an offered app's name", () => {
+    for (const said of ["normal outlook", "the third one", "the new classic one", "teesra wala", "classic"]) {
+      expect(mentionsOption(said, OUTLOOKS), said).toBe(true);
+    }
+  });
+
+  it("isn't a reply about something else", () => {
+    for (const said of ["thunderbird", "great job", "never mind", "the one", "open excel"]) {
+      expect(mentionsOption(said, OUTLOOKS), said).toBe(false);
     }
   });
 });
@@ -108,21 +146,22 @@ describe("knownAppId", () => {
 });
 
 describe("appNamedIn", () => {
-  const app = (name: string, id: string, kind: InstalledApp["kind"] = "packaged"): InstalledApp => ({ id, name, kind });
-  /** Everyday-word names that aren't in the trimmed fixture, and Hodeum's own entry (ids as on the dev PC). */
+  const app = (name: string, id: string, kind: InstalledApp["kind"] = "packaged", windowName?: string): InstalledApp => ({ id, name, kind, ...(windowName ? { windowName } : {}) });
+  /** Apps that aren't in the trimmed fixture, and Hodeum's own entry (ids and window names as on the dev PC). */
   const MORE = [
     app("Microsoft To Do", "Microsoft.Todos_8wekyb3d8bbwe!App"),
     app("Phone Link", "Microsoft.YourPhone_8wekyb3d8bbwe!App"),
-    app("Zoom Workplace", "zoom.us.Zoom.Video.Meetings", "desktop"),
-    app("Zoom", "zoom.us.Zoom", "desktop"),
-    app("OBS Studio (64bit)", "{6D809377-6AF0-444B-8957-A3773F02200E}\\obs-studio\\bin\\64bit\\obs64.exe", "desktop"),
+    app("Zoom Workplace", "zoom.us.Zoom Video Meetings", "desktop", "Zoom Meetings"),
+    app("Zoom", "zoom.us.Zoom", "desktop", "Zoom"),
+    app("OBS Studio (64bit)", "{6D809377-6AF0-444B-8957-A3773F02200E}\\obs-studio\\bin\\64bit\\obs64.exe", "desktop", "OBS Studio"),
+    // Started through an installer stub: what its windows are called isn't known.
     app("Microsoft Teams (work or school)", "com.squirrel.Teams.Teams", "desktop"),
     app("Microsoft 365 (Office)", "Microsoft.MicrosoftOfficeHub_8wekyb3d8bbwe!Microsoft.MicrosoftOfficeHub"),
-    app("Everything", "voidtools.Everything", "desktop"),
-    app("Cursor", "Anysphere.Cursor", "desktop"),
-    app("ChatGPT", "OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!ChatGPT"),
-    app("ChatGPT Classic", "Chrome._crx_chatgptclassic", "desktop"),
-    app("Hodeum", "com.hodeum.app", "desktop"),
+    app("Everything", "voidtools.Everything", "desktop", "Everything"),
+    app("Cursor", "Anysphere.Cursor", "desktop", "Cursor"),
+    app("ChatGPT", "OpenAI.Codex_2p2nqsd0c76g0!App"),
+    app("ChatGPT Classic", "OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!ChatGPT"),
+    app("Hodeum", "com.hodeum.app", "desktop", "Hodeum"),
   ];
   const ALL = [...APPS, ...MORE];
 
@@ -131,12 +170,11 @@ describe("appNamedIn", () => {
     ["how do i send a message on discord?", "Discord"],
     ["make a discord server", "Discord"],
     ["discord pe message kaise bheju", "Discord"],
+    ["how do I send a message on Discord on my computer", "Discord"],
     ["how do I make a playlist in spotify", "Spotify"],
     ["how to send a pdf on whatsapp", "WhatsApp"],
-    ["how do I open a chat in whatsapp web", "WhatsApp Web"],
     ["व्हाट्सएप पर पीडीएफ कैसे भेजें", "WhatsApp"],
-    ["how do I change wsl settings", "WSL Settings"],
-    ["how do I upload to amazon photos", "Amazon Photos"],
+    ["नोटपैड में नोट कैसे लिखें", "Notepad"],
     ["how do I take a screenshot with snipping tool", "Snipping Tool"],
     ["how do I install an app from the microsoft store", "Microsoft Store"],
     ["how do I add a rule in cursor", "Cursor"],
@@ -151,8 +189,24 @@ describe("appNamedIn", () => {
   it("names an app as its windows report it, so a Hode can tell when it's open", () => {
     expect(appNamedIn("how do I install an extension in visual studio code", APPS)).toBe("VS Code");
     expect(appNamedIn("how do I commit in vs code", APPS)).toBe("VS Code");
-    // A desktop app's window goes by its file description, which has no "(64bit)".
+    // A desktop app's windows go by its program's description: "OBS Studio", without "(64bit)".
     expect(appNamedIn("how do I record my screen with obs studio", ALL)).toBe("OBS Studio");
+    // A web app's windows carry its own id, so they go by its Start-menu name, as packaged apps' do.
+    expect(appNamedIn("how do I open a chat in whatsapp web", ALL)).toBe("WhatsApp Web");
+  });
+
+  it("names no app whose windows go by another name, so a Hode never waits for a name that won't appear", () => {
+    // Measured: WinRAR's windows say "WinRAR archiver", Telegram's "Telegram Desktop", WSL Settings' "Windows Subsystem for Linux Settings".
+    expect(appNamedIn("how do I extract a zip file with WinRAR", ALL)).toBeUndefined();
+    expect(appNamedIn("how do I send a file on telegram", ALL)).toBeUndefined();
+    // Still the app the goal is about: not the "Settings" or "Photos" inside its name, nor the other app beside it.
+    expect(appNamedIn("how do I change wsl settings", ALL)).toBeUndefined();
+    expect(appNamedIn("how do I upload to amazon photos", ALL)).toBeUndefined();
+    expect(appNamedIn("how do I share a spotify song on telegram", ALL)).toBeUndefined();
+  });
+
+  it("of two apps called by the words said, names the one whose windows it can tell", () => {
+    expect(appNamedIn("how do I join a meeting on teams", ALL)).toBe("Microsoft Teams");
   });
 
   it.each([
@@ -161,11 +215,14 @@ describe("appNamedIn", () => {
     ["how do I set an alarm on the clock app", "Clock"],
     ["how do I make Paint full screen", "Paint"],
     ["paint mein circle kaise banaye", "Paint"],
-    ["how do I join a meeting on teams", "Microsoft Teams"],
+    ["वर्ड में टेबल कैसे बनाएं", "Word"],
     ["how do I use the calculator", "Calculator"],
     ["how do I add a task in to do", "Microsoft To Do"],
+    ["how do I use click to do", "Click to Do"],
     ["how do I reply to a text from phone link", "Phone Link"],
     ["how do I share my screen on zoom", "Zoom"],
+    ["how do I check my warranty in My Dell", "My Dell"],
+    ["how do I update drivers with the my dell app", "My Dell"],
   ])("takes the everyday-word name in %j as the app it's used as", (goal, name) => {
     expect(appNamedIn(goal, ALL)).toBe(name);
   });
@@ -175,6 +232,8 @@ describe("appNamedIn", () => {
     "how do I set the clock",
     "how do I send mail",
     "how to do a pivot table",
+    "what do I click to do a pivot table",
+    "which button do I click to do this",
     "Paint the header blue",
     "how do I change my display settings",
     "be brave and click the button",
@@ -184,7 +243,23 @@ describe("appNamedIn", () => {
     "how do I select everything",
     "how do I count 365 days from today",
     "how do I move the cursor",
+    "how do I fix a bug in my code",
+    "how do I find my files",
+    "इस वर्ड का मतलब क्या है",
   ])("finds no app in %j", (goal) => {
+    expect(appNamedIn(goal, ALL)).toBeUndefined();
+  });
+
+  it.each([
+    "how do I turn on dark mode on my computer",
+    "how do I make a pivot table on my computer",
+    "how do I calculate a percentage using my computer",
+    "computer pe dark mode chalu karo",
+    "mere computer mein dark mode kaise lagaye",
+    "how do I save a note on this PC",
+    "how do I turn on dark mode on my Dell laptop",
+    "how do I zip files on my dell",
+  ])("takes %j as the learner's own computer, not an app", (goal) => {
     expect(appNamedIn(goal, ALL)).toBeUndefined();
   });
 
@@ -197,4 +272,3 @@ describe("appNamedIn", () => {
     expect(appNamedIn("how do I send a message on discord", [])).toBeUndefined();
   });
 });
-

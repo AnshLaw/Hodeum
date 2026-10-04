@@ -400,10 +400,13 @@ export class HodeRuntime {
     this.dispatch(away === undefined ? { type: "APP_SWITCHED" } : { type: "APP_SWITCHED", away });
   }
 
-  /** Another app than the Hode's (undefined outside a Hode, or when either app is unknown). */
+  /**
+   * Another app than the Hode's (undefined outside a Hode, when either app is unknown, or without a window watcher:
+   * nothing would ever say the learner came back).
+   */
   private awayFrom(window: AppSwitch): boolean | undefined {
     const app = this.state.app ?? this.hodeApp;
-    if (this.state.phase === "idle" || app === undefined || !window.app) return undefined;
+    if (!this.deps.perception.onAppSwitched || this.state.phase === "idle" || app === undefined || !window.app) return undefined;
     return !sameApp(window.app, app);
   }
 

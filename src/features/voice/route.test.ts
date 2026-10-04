@@ -56,6 +56,11 @@ describe("pressing the mic and asking to be taught", () => {
     expect(types(route(initialState, "excel mein chart kaise banate hain", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
   });
 
+  it("plans an English how-to with no lesson and no task wording into a Hode, not a one-off answer", () => {
+    expect(types(route(initialState, "how do I add a column", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
+    expect(types(route(initialState, "how can I share my screen", true))).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
+  });
+
   it("starts it while vision is still loading, so Hodey can say so", () => {
     const events = routeUtterance(initialState, "how do I send a message on discord", TASK_PACKS, false, [], [], true);
     expect(events).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", openAllowed: false, visionStarting: true }]);
@@ -186,16 +191,16 @@ describe("what the learner means", () => {
     }
   });
 
-  it("starts an open Hode only for a real task: anything else unclear is at most a question", () => {
-    expect(route(initialState, "new tab", true)).toEqual([{ type: "VOICE_QUESTION", question: "new tab" }]);
-    expect(types(route(initialState, "We are okay we are going to put monster tricks out a little bit", true))).toEqual(["VOICE_QUESTION"]);
+  it("starts an open Hode only for a real task", () => {
+    expect(route(initialState, "new tab", true)).toEqual([]);
+    expect(route(initialState, "We are okay we are going to put monster tricks out a little bit", true)).toEqual([]);
     for (const said of ["how to send a pdf on whatsapp", "make a pivot table in excel", "add a chart", "zip these files"]) {
       expect(types(route(initialState, said, true)), said).toEqual(["START_HODE", "GOAL_SUBMITTED"]);
     }
   });
 
-  it("asks about the screen for anything unclear with a few real words in it, as main did", () => {
-    for (const said of ["explain this screen", "how many sheets are there", "tell me about this page", "इस पेज के बारे में बताओ"]) {
+  it("asks about the screen when asked to explain or describe it, or pointed at something on it", () => {
+    for (const said of ["explain this screen", "how many sheets are there", "tell me about this page", "इस पेज के बारे में बताओ", "is page ke bare mein batao", "this button"]) {
       expect(route(initialState, said), said).toEqual([{ type: "VOICE_QUESTION", question: said }]);
       expect(route(initialState, said, true), said).toEqual([{ type: "VOICE_QUESTION", question: said }]);
     }
@@ -207,6 +212,35 @@ describe("what the learner means", () => {
     }
     for (const said of ["can you hear me", "is this working", "is it on", "testing one two three"]) {
       expect(route(initialState, said, true), said).toEqual([{ type: "CHITCHAT", kind: "greeting" }]);
+    }
+  });
+
+  it("drops thanks, praise, sign-offs, mic checks, remarks to someone else and known mishearings, as before", () => {
+    const chatter = [
+      "shukriya hodey",
+      "dhanyavaad hodey",
+      "शुक्रिया होडी",
+      "bahut badhiya",
+      "that makes sense",
+      "great job hodey",
+      "bye hodey",
+      "see you later",
+      "can you hear me clearly",
+      "hello can you hear me now",
+      "mic testing one two three",
+      "testing the mic",
+      "meri awaaz aa rahi hai",
+      "sunai de raha hai",
+      "sorry I wasn't talking to you",
+      "I was talking to someone else",
+      "never mind forget it",
+      "koi baat nahi",
+      "Thank you for watching, see you next time",
+      "subscribe to my channel",
+    ];
+    for (const said of chatter) {
+      expect(routeApps(initialState, said), said).toEqual([]);
+      expect(routeApps(initialState, said, true), said).toEqual([]);
     }
   });
 
@@ -226,10 +260,23 @@ describe("what the learner means", () => {
     }
   });
 
-  it("answers a question that opens with a question word, even about a pack's task", () => {
-    expect(route(initialState, "what is a pivot table")).toEqual([{ type: "VOICE_QUESTION", question: "what is a pivot table" }]);
-    expect(route(initialState, "is dark mode on")).toEqual([{ type: "VOICE_QUESTION", question: "is dark mode on" }]);
-    expect(route(initialState, "ये बटन क्या करता है")).toEqual([{ type: "VOICE_QUESTION", question: "ये बटन क्या करता है" }]);
+  it("answers a question about a pack's task instead of starting its lesson, in English, Hinglish or Hindi", () => {
+    const questions = [
+      "what is a pivot table",
+      "is dark mode on",
+      "ये बटन क्या करता है",
+      "pivot table kya hai",
+      "पिवट टेबल क्या है",
+      "क्या डार्क मोड चालू है",
+      "dark mode kahan hai",
+      "dark mode kya hota hai",
+      "क्या लाइट मोड ऑन है",
+      "zip file kya hoti hai",
+    ];
+    for (const said of questions) {
+      expect(route(initialState, said), said).toEqual([{ type: "VOICE_QUESTION", question: said }]);
+      expect(route(initialState, said, true), said).toEqual([{ type: "VOICE_QUESTION", question: said }]);
+    }
   });
 
   it("still starts a pack's lesson from its own words, verb or not", () => {
@@ -270,7 +317,13 @@ describe("what the learner means", () => {
   it("names the installed app a spoken goal is about, from idle or goal entry", () => {
     expect(routeApps(initialState, "how do I send a message on Discord", true)).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", app: "Discord" }]);
     expect(routeApps({ ...initialState, phase: "goal_entry" }, "Hey Hodey, how do I send a message on Discord")).toMatchObject([{ type: "GOAL_SUBMITTED", goal: "how do I send a message on Discord", app: "Discord" }]);
-    expect(routeApps(initialState, "how do I turn on dark mode in discord", true)).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", app: "Discord", pack: undefined }]);
+    expect(routeApps(initialState, "how do I send a message on discord on my computer", true)).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", app: "Discord" }]);
+  });
+
+  it("keeps a spoken lesson when the goal only says where its result goes", () => {
+    const [start, goal] = routeApps(initialState, "how do I zip files to send on whatsapp");
+    expect([start, goal]).toMatchObject([{ type: "START_HODE" }, { type: "GOAL_SUBMITTED", pack: { id: "windows-zip" } }]);
+    expect(goal).not.toHaveProperty("app", expect.anything());
   });
 
   it("without a catalog, an app request is an ordinary goal", () => {
@@ -309,14 +362,35 @@ describe("answering \"Did you mean Outlook or Outlook (classic)?\"", () => {
     expect(routeApps(asked, "the first")).toMatchObject(opened("Outlook"));
     expect(routeApps(asked, "doosra wala")).toMatchObject(opened("Outlook (classic)"));
     expect(routeApps(asked, "पहला वाला")).toMatchObject(opened("Outlook"));
+    expect(routeApps(asked, "the first outlook")).toMatchObject(opened("Outlook"));
   });
 
-  it("leaves the question as it was when the reply picks neither", () => {
-    for (const said of ["the third one", "thunderbird"]) {
+  it("opens the new one or the old one, in English, Hinglish or Hindi", () => {
+    for (const said of ["naya wala", "नया वाला", "the new outlook", "new outlook", "the new one"]) {
+      expect(routeApps(asked, said), said).toMatchObject(opened("Outlook"));
+    }
+    for (const said of ["purana wala", "पुराना वाला", "the classic version", "the old one"]) {
+      expect(routeApps(asked, said), said).toMatchObject(opened("Outlook (classic)"));
+    }
+  });
+
+  it("pays no attention to Hodey's name in the reply", () => {
+    expect(routeApps(asked, "the classic one please hodey")).toMatchObject(opened("Outlook (classic)"));
+    expect(routeApps(asked, "the second one, Hodey")).toMatchObject(opened("Outlook (classic)"));
+  });
+
+  it("asks again, instead of asking about the screen, when the reply tries to pick but can't be told apart", () => {
+    for (const said of ["normal outlook", "the third one", "the new classic one"]) {
       const events = routeApps(asked, said);
-      expect(types(events), said).not.toContain("OPEN_APP");
+      expect(events, said).toEqual([{ type: "APP_OPEN_FAILED", app: expect.objectContaining({ name: "Outlook" }), reason: "ambiguous", options: ["Outlook", "Outlook (classic)"] }]);
       expect(events.reduce((s, e) => step(s, e).state, asked), said).toEqual(asked);
     }
+  });
+
+  it("leaves the question as it was when the reply is about something else", () => {
+    expect(routeApps(asked, "thunderbird")).toEqual([]);
+    expect(routeApps(asked, "great job hodey")).toEqual([]);
+    expect(routeApps(asked, "what is outlook")).toEqual([{ type: "VOICE_QUESTION", question: "what is outlook" }]);
   });
 });
 

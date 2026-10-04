@@ -43,6 +43,11 @@ export interface InstalledApp {
   id: string;
   name: string;
   kind: "packaged" | "desktop" | "link";
+  /**
+   * A desktop app's windows report this as their app unless they carry its id: its program's description
+   * ("WinRAR archiver" for WinRAR). Absent when the entry doesn't start a program (shell folders, scripts).
+   */
+  windowName?: string;
 }
 
 /** A monitor in physical pixels; `scale` is the DPI factor (1.25 = 125%). */

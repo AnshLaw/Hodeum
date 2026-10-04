@@ -3,7 +3,7 @@ import { spoken } from "../../lib/spoken";
 import type { InstalledApp } from "../../lib/types";
 import catalog from "../apps/__fixtures__/start-apps.json";
 import { initialState, type HodeState } from "./model";
-import { APP_AMBIGUOUS, APP_NOT_FOUND, appChoiceEvent, idleOpenAppEvent, openAppEvent } from "./open-app";
+import { APP_AMBIGUOUS, APP_NOT_FOUND, appChoiceEvent, askAgainEvent, idleOpenAppEvent, openAppEvent } from "./open-app";
 import { step } from "./reducer";
 import { PACK, guideAction } from "./test-fixtures";
 
@@ -30,17 +30,25 @@ describe("OPEN_APP", () => {
     expect(step(entry, { type: "OPEN_APP", app: EXCEL, said: "open excel" }).state.phase).toBe("idle");
   });
 
-  it("is a side errand during a Hode: the step and its guidance stay as they were, with the line shown too", () => {
+  it("is a side errand during a Hode: the step and its card stay as they were, the line shown beside the step", () => {
     const t = step(guiding, { type: "OPEN_APP", app: EXCEL, said: "open excel" });
     const line = `${en.opening("Excel")} ${en.openTip}`;
-    expect(t.state).toEqual({ ...guiding, notice: line });
+    expect(t.state).toEqual({ ...guiding, ack: line });
     expect(t.effects).toEqual([{ type: "say", text: line }, { type: "launchApp", app: EXCEL }]);
   });
 
-  it("shows its line, so a muted learner sees it, in every phase it opens apps from", () => {
+  it("never covers what a Hode's card says, in any phase: the error, Hodey's press, the step's why", () => {
+    const line = `${en.opening("Excel")} ${en.openTip}`;
     for (const phase of ["answering", "paused", "acting", "checkpoint", "success", "recovering"] as const) {
-      expect(step({ ...guiding, phase }, { type: "OPEN_APP", app: EXCEL, said: "open excel" }).state.notice, phase).toBe(`${en.opening("Excel")} ${en.openTip}`);
+      const before: HodeState = { ...guiding, phase, notice: "Couldn't read the screen", reason: "Insert holds everything you can add." };
+      const after = step(before, { type: "OPEN_APP", app: EXCEL, said: "open excel" }).state;
+      expect(after, phase).toEqual({ ...before, ack: line });
     }
+  });
+
+  it("shows its line beside an open-ended Hode's step too", () => {
+    const open: HodeState = { ...initialState, phase: "guiding", open: true, goal: "send a pdf", action: guideAction() };
+    expect(step(open, { type: "OPEN_APP", app: EXCEL, said: "open excel" }).state).toEqual({ ...open, ack: `${en.opening("Excel")} ${en.openTip}` });
   });
 
   it("replaces what the card said, and says it again when asked again", () => {
@@ -77,18 +85,22 @@ describe("APP_OPEN_FAILED", () => {
     expect(which.state.notice).toBe(en.appWhich(["Outlook", "Outlook (classic)"]));
   });
 
-  it("shows it as well as saying it during a Hode, leaving the step as it was", () => {
+  it("shows it beside the step as well as saying it during a Hode, leaving the step and its card as they were", () => {
     const t = step(guiding, { type: "APP_OPEN_FAILED", app: EXCEL, reason: "timeout" });
-    expect(t.state).toEqual({ ...guiding, notice: en.openFailed("Excel") });
+    expect(t.state).toEqual({ ...guiding, ack: en.openFailed("Excel") });
     expect(t.effects).toEqual([{ type: "say", text: en.openFailed("Excel") }]);
   });
 
-  it("isn't lost while the learner marks the screen: it waits on the card for when they're done", () => {
+  it("isn't lost while the learner marks the screen: it waits for when they're done", () => {
     const marking = { ...guiding, phase: "annotating" as const, resumePhase: "guiding" as const };
     const t = step(marking, { type: "APP_OPEN_FAILED", app: EXCEL, reason: "timeout" });
-    expect(t.state).toEqual({ ...marking, notice: en.openFailed("Excel") });
+    expect(t.state).toEqual({ ...marking, ack: en.openFailed("Excel") });
     expect(t.effects).toEqual([{ type: "say", text: en.openFailed("Excel") }]);
-    expect(step(t.state, { type: "ANNOTATE_CANCEL" }).state).toMatchObject({ phase: "guiding", notice: en.openFailed("Excel") });
+    expect(step(t.state, { type: "ANNOTATE_CANCEL" }).state).toMatchObject({ phase: "guiding", ack: en.openFailed("Excel") });
+
+    const markingIdle = { ...initialState, phase: "annotating" as const, resumePhase: "idle" as const };
+    const idle = step(step(markingIdle, { type: "APP_OPEN_FAILED", app: EXCEL, reason: "timeout" }).state, { type: "ANNOTATE_CANCEL" }).state;
+    expect(idle).toMatchObject({ phase: "idle", notice: en.openFailed("Excel") });
   });
 });
 
@@ -113,10 +125,34 @@ describe("choosing between the apps Hodey asked about", () => {
     expect(appChoiceEvent(asked, "the first", APPS)).toMatchObject({ type: "OPEN_APP", app: { name: "Outlook" } });
   });
 
+  it("pays no attention to Hodey's name in the reply", () => {
+    expect(appChoiceEvent(asked, "the classic one please, Hodey!", APPS)).toMatchObject({ type: "OPEN_APP", app: { name: "Outlook (classic)" }, said: "the classic one please, Hodey!" });
+    expect(appChoiceEvent(asked, "दूसरा वाला होडी", APPS)).toMatchObject({ type: "OPEN_APP", app: { name: "Outlook (classic)" } });
+  });
+
   it("is no choice when nothing was asked, the reply picks neither, or the app is gone", () => {
     expect(appChoiceEvent(initialState, "the second one", APPS)).toBeUndefined();
     expect(appChoiceEvent(asked, "the third one", APPS)).toBeUndefined();
     expect(appChoiceEvent(asked, "the second one", APPS.filter((app) => app.name !== "Outlook (classic)"))).toBeUndefined();
+  });
+
+  it("asks again when a reply tries to pick but can't be told apart, keeping the same apps", () => {
+    const again = askAgainEvent(asked, "normal outlook hodey", APPS);
+    expect(again).toEqual({ type: "APP_OPEN_FAILED", app: APPS.find((app) => app.name === "Outlook"), reason: APP_AMBIGUOUS, options: OUTLOOKS });
+    const t = step(asked, again!);
+    expect(t.state).toEqual(asked);
+    expect(t.effects).toEqual([{ type: "say", text: en.appWhich(OUTLOOKS) }]);
+    expect(askAgainEvent(asked, "the third one", APPS)).toMatchObject({ type: "APP_OPEN_FAILED", options: OUTLOOKS });
+  });
+
+  it("asks nothing again when nothing was asked or the reply is about something else", () => {
+    expect(askAgainEvent(initialState, "normal outlook", APPS)).toBeUndefined();
+    expect(askAgainEvent(asked, "great job hodey", APPS)).toBeUndefined();
+    expect(askAgainEvent(asked, "thunderbird", APPS)).toBeUndefined();
+  });
+
+  it("asks again by name when an offered app has gone from the catalog", () => {
+    expect(askAgainEvent(asked, "normal outlook", [])).toEqual({ type: "APP_OPEN_FAILED", app: { id: "", name: "Outlook", kind: "desktop" }, reason: APP_AMBIGUOUS, options: OUTLOOKS });
   });
 });
 

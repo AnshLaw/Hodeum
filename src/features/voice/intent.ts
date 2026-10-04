@@ -21,28 +21,17 @@ const MIN_HOW_TO_WORDS = 3;
 const MIN_TASK_WORDS = 2;
 /** An app's name is at most this many words; longer is a task about the app ("open a new tab in Brave"). */
 const MAX_APP_NAME_WORDS = 4;
-/** Real words it takes to be worth asking about the screen ("explain this screen"), unlike a fragment ("the tab"). */
-const MIN_CONTENT_WORDS = 2;
+
+/** Hodey's name as speech recognition writes it: "body", "howdy", "hodie", and (measured) "holdy", "hudi", "hodee". */
+export const HODEY_NAME = String.raw`(?:hode?y|hod(?:ee|[iy]e?)|hoadie|howdy|body|hold[iy]e?|hu?d[iy])`;
+/** That name as a word of its own, anywhere in what was said, Hindi script too ("होडी"). */
+const NAME_WORD = new RegExp(String.raw`(?<![\p{L}\p{M}\p{N}'])(?:${HODEY_NAME}|होडी)(?![\p{L}\p{M}\p{N}'])`, "giu");
 
 /** Thanks and okays: they close an answer, and with nothing running they need no reply at all. */
 const ACK_WORDS = new Set(["ok", "okay", "great", "perfect", "nice", "cool", "awesome", "alright", "understood", "thanks", "thank", "got"]);
 const ACK_FILLER = new Set(["you", "it", "so", "much", "a", "lot", "all", "right", "that", "very"]);
 const FILLER = new Set(["um", "uh", "uhh", "umm", "hmm", "hm", "mm", "mmm", "ah", "er", "erm", "huh", "oh", "eh", "so", "like", "okay", "ok", "yeah", "yes", "no", "yep", "nope", "right", "well", "and", "the", "a", "हाँ", "हां", "हम्म", "अच्छा"]);
 const NUMBER_WORDS = new Set(["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred", "thousand"]);
-/** Words that ask for nothing on their own (pronouns, helpers, linking words, filler phrases), in English, Hinglish and Hindi. */
-const FUNCTION_WORDS = new Set(
-  [
-    "i me my mine you your we us our they them their he him his she her it its this that these those there here",
-    "a an the is are was were be been being am do does did done have has had will would can could should shall may might must",
-    "to of in on at by for with from into onto about as up down out over off than then too very just not never",
-    "don't doesn't didn't isn't aren't wasn't can't won't i'm i've i'll you're it's that's there's what's let let's",
-    "what which who whom whose why how when where if or but because some any all each every much many more most",
-    "something anything nothing everything else also again maybe really actually now think know mean guess sure please",
-    "good fine sounds looks seems first second third last next minute moment sec",
-    "hai hain tha thi ho ka ki ke ko mein se par pe ye yeh wo woh aur to bhi hi na nahi nahin ji theek thik main mujhe mera meri mere aap tum hum kya kuch is us ise use bas",
-    "है हैं था थी थे हो का की के को में से पर पे ये यह वो वह और तो भी ही ना न नहीं जी ठीक मैं मुझे मेरा मेरी मेरे आप तुम हम क्या कुछ इस उस इसे उसे कि बस",
-  ].flatMap((words) => words.split(" ")),
-);
 /** What speech recognition writes for silence, music and room noise. */
 const HALLUCINATIONS = /^(?:thanks? (?:you )?for watching|thank you\.?|you|bye\.?|subtitles? by.*|\[?(?:music|blank_audio|silence|noise|applause|laughter)\]?|\(.*\))$/i;
 /** Leading filler that doesn't change what follows ("um hello", "so hi"). */
@@ -82,6 +71,15 @@ const QUESTION_HI = /(?:क्या|कहाँ|कहां|कौन|क्�
 const TASK_VERB =
   /\b(?:make|create|add|insert|build|send|share|attach|open|launch|start|close|change|turn (?:on|off)|switch|enable|disable|set ?up|setup|install|uninstall|zip|unzip|compress|extract|rename|delete|remove|move|copy|paste|find|search|look up|google|download|upload|save|print|format|sort|filter|merge|split|convert|export|import|edit|write|type|draw|record|connect|pair|join|book|order|pay|play|watch|message|call|email|reply|forward|schedule|update|fix|clean|resize|crop|bold|highlight|sum|calculate|chart|graph|pivot|bookmark|pin|mute|unmute)\b/;
 const TASK_VERB_HI = /(?:बनाओ|बनाइए|बनाना|भेजो|भेजना|भेजिए|डालो|जोड़ो|जोड़ो|बदलो|हटाओ|ढूंढो|ढूँढो|सेव करो|करना है|\bbanao\b|\bbanana\b|\bbhejo\b|\bbhejna\b|\bdalo\b|\bjodo\b|\bbadlo\b|\bhatao\b|karna hai)/u;
+
+/** Asking Hodey to explain or describe, said first in English: "explain this screen", "could you tell me about this page". */
+const ASK_EN = /^(?:(?:please|just|so|now|ok|okay) )*(?:(?:can|could|would|will) you (?:please |just )?)?(?:explain|describe|summari[sz]e|tell (?:me|us)|show me)\b/;
+/** The same in Hindi and Hinglish, where the asking verb comes last: "इस पेज के बारे में बताओ", "ye samjhao na". */
+const ASK_HI =
+  /(?:^| )(?:batao|bataiye|bataye|bata do|bata dijiye|samjhao|samjhaiye|samjha do|samjha dijiye|explain karo|explain kijiye|explain kar do|बताओ|बताइए|बताइये|बता दो|बता दीजिए|समझाओ|समझाइए|समझाइये|समझा दो|समझा दीजिए)(?: (?:na|please|ji|ना|जी))*$/u;
+/** Pointing at something on screen: "this button", "that error", "इस पेज", "ye button". */
+const ON_SCREEN =
+  /(?:^| )(?:this|that|these|those|ye|yeh|is|us|wo|woh|इस|उस|ये|यह|वो|वह) (?:screen|page|window|button|icon|menu|tab|dialog|popup|box|error|message|option|setting|link|field|toolbar|ribbon|स्क्रीन|पेज|विंडो|बटन|आइकन|मेनू|टैब|एरर|मैसेज|ऑप्शन|सेटिंग|सेटिंग्स|लिंक)s?(?= |$)/u;
 
 /** Lowercase words, keeping Devanagari vowel signs (marks) inside their words. */
 export function normalize(text: string): string {
@@ -123,16 +121,18 @@ function isGreeting(words: string[], greeting: RegExp): boolean {
   return greeting.test(deduped) || greeting.test(deduped.replace(LEADING_FILLER, ""));
 }
 
-const isContentWord = (word: string) => ![FILLER, FUNCTION_WORDS, ACK_WORDS, ACK_FILLER, NUMBER_WORDS].some((words) => words.has(word));
-
-/** Two or more real words: worth asking about the screen ("explain this screen"), unlike a fragment or filler ("let me think"). */
-export function isSubstantive(text: string): boolean {
-  return wordsIn(text).filter(isContentWord).length >= MIN_CONTENT_WORDS;
+/**
+ * Asking Hodey about what's on screen in so many words: an asking verb ("explain", "tell me", "batao", "समझाओ") or
+ * something pointed at ("this button"). Thanks, sign-offs, mic checks and talk meant for someone else have neither.
+ */
+export function asksAboutScreen(text: string): boolean {
+  const words = normalize(text);
+  return ASK_EN.test(words) || ASK_HI.test(words) || ON_SCREEN.test(words);
 }
 
-/** Opens with a question word or helper verb ("what is…", "is dark mode on", "how many…"), so it's a question, not a request. */
-export function opensWithQuestion(text: string): boolean {
-  return QUESTION_START.test(normalize(text));
+/** What was said without Hodey's name in it, wherever it falls ("the classic one please Hodey"). */
+export function withoutHodeysName(text: string): string {
+  return text.replace(NAME_WORD, " ").replace(/\s+/g, " ").trim();
 }
 
 function isTask(text: string, words: string[]): boolean {
@@ -150,7 +150,7 @@ export function classify(raw: string, options: IntentOptions = {}): Intent {
   const app = appQuery(text);
   if (app !== undefined && (options.isApp?.(app) ?? true)) return "open_app";
   if (isTask(text, words)) return "task";
-  if (opensWithQuestion(text) || QUESTION_HI.test(text)) return "question";
+  if (QUESTION_START.test(text) || QUESTION_HI.test(text)) return "question";
   if ((TASK_VERB.test(text) || TASK_VERB_HI.test(text)) && words.length >= MIN_TASK_WORDS) return "task";
   return "unclear";
 }

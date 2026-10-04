@@ -1,14 +1,27 @@
 import { spoken } from "../../lib/spoken";
 import type { InstalledApp } from "../../lib/types";
-import { pickOption, resolveApp } from "../apps/resolve";
-import { appQuery } from "../voice/intent";
+import { mentionsOption, pickOption, resolveApp } from "../apps/resolve";
+import { appQuery, withoutHodeysName } from "../voice/intent";
 import { noop, type EventOf, type HodeEffect, type HodeEvent, type HodeState, type Transition } from "./model";
 
 /** APP_OPEN_FAILED reasons that aren't Windows failing to open it. */
 export const APP_NOT_FOUND = "not_found";
 export const APP_AMBIGUOUS = "ambiguous";
 
+/** The goal form or nothing: an app opened from here leaves Hodey idle. */
 const noHode = (s: HodeState) => s.phase === "idle" || s.phase === "goal_entry";
+
+/** A lesson or an open goal is under way, whatever the phase (a question or a mark may be borrowing it). */
+const hodeRunning = (s: HodeState) => s.pack !== undefined || s.open;
+
+/**
+ * An app line, shown as well as said so a muted learner sees it. With no Hode it's the card's notice. During a
+ * Hode it goes where a step's "Exactly right." goes, beside the step, and leaves with the learner's next action
+ * (learner.ts clears `ack`): it never takes the place of the step's why, an error, or Hodey's press.
+ */
+function showLine(s: HodeState, line: string): HodeState {
+  return hodeRunning(s) ? { ...s, ack: line } : { ...s, notice: line };
+}
 
 /** "Open Excel" as OPEN_APP when exactly one installed app fits the name; otherwise it isn't an app request. */
 export function openAppEvent(text: string, apps: InstalledApp[]): HodeEvent | undefined {
@@ -33,21 +46,34 @@ export function idleOpenAppEvent(text: string, apps: InstalledApp[], openAllowed
 }
 
 /**
- * A reply to "Did you mean Outlook or Outlook (classic)?" that picks one, by name ("Outlook classic", "classic wala")
- * or by place ("the second one", "doosra"), opens it. Undefined when nothing was asked or the reply picks neither.
+ * A reply to "Did you mean Outlook or Outlook (classic)?" that picks one, by name ("Outlook classic", "classic wala"),
+ * by place ("the second one", "doosra") or as the new or old one ("naya wala"), opens it; Hodey's name in it doesn't
+ * matter. Undefined when nothing was asked or the reply picks neither.
  */
 export function appChoiceEvent(s: HodeState, text: string, apps: InstalledApp[]): HodeEvent | undefined {
   if (!s.appChoice) return undefined;
-  const picked = pickOption(text, s.appChoice);
+  const picked = pickOption(withoutHodeysName(text), s.appChoice);
   const name = picked === undefined ? undefined : s.appChoice[picked];
   const app = apps.find((candidate) => candidate.name === name);
   return app ? { type: "OPEN_APP", app, said: text } : undefined;
 }
 
 /**
+ * A reply that tries to pick but can't be told apart ("normal Outlook", "the third one"): the same question again,
+ * rather than a guess or a look at the screen. Undefined when nothing was asked or the reply is about something else.
+ */
+export function askAgainEvent(s: HodeState, text: string, apps: InstalledApp[]): HodeEvent | undefined {
+  const options = s.appChoice;
+  if (!options?.length || !mentionsOption(withoutHodeysName(text), options)) return undefined;
+  // The catalog may have changed since: the question needs only the names.
+  const app = apps.find((candidate) => candidate.name === options[0]) ?? { id: "", name: options[0], kind: "desktop" as const };
+  return { type: "APP_OPEN_FAILED", app, reason: APP_AMBIGUOUS, options };
+}
+
+/**
  * Opens the app: from idle (closing the goal form), or as a side errand that leaves a running Hode's step alone.
- * Its line is said and shown, every time, so a muted learner sees it too. A Hode waiting for that app carries
- * on when its window comes forward (the runtime's app-switch check).
+ * Its line is said and shown every time (see `showLine`). A Hode waiting for that app carries on when its window
+ * comes forward (the runtime's app-switch check).
  */
 export function onOpenApp(s: HodeState, e: EventOf<"OPEN_APP">): Transition {
   if (s.phase === "annotating") return noop(s);
@@ -56,7 +82,7 @@ export function onOpenApp(s: HodeState, e: EventOf<"OPEN_APP">): Transition {
   const words = spoken(s.language);
   // Teach mode: opening apps is a skill too, so Hodey says how to do it without asking next time.
   const line = mode === "teach" ? `${words.opening(e.app.name)} ${words.openTip}` : words.opening(e.app.name);
-  const shown: HodeState = { ...s, notice: line, appChoice: undefined };
+  const shown = showLine({ ...s, appChoice: undefined }, line);
   const effects: HodeEffect[] = [{ type: "say", text: line }, { type: "launchApp", app: e.app }];
   return { state: idle ? { ...shown, phase: "idle" } : shown, effects };
 }
@@ -69,11 +95,11 @@ function failureLine(s: HodeState, e: EventOf<"APP_OPEN_FAILED">): string {
 }
 
 /**
- * Says why the app didn't open, and shows it, in every phase: a muted learner sees it beside a Hode's step, and
- * one marking the screen finds it there afterwards. Asking which app, it keeps the choice open.
+ * Says why the app didn't open, and shows it (see `showLine`), in every phase: one marking the screen finds it
+ * there afterwards. Asking which app, it keeps the choice open.
  */
 export function onAppOpenFailed(s: HodeState, e: EventOf<"APP_OPEN_FAILED">): Transition {
   const line = failureLine(s, e);
   const appChoice = e.reason === APP_AMBIGUOUS ? (e.options ?? [e.app.name]) : undefined;
-  return { state: { ...s, notice: line, appChoice }, effects: [{ type: "say", text: line }] };
+  return { state: showLine({ ...s, appChoice }, line), effects: [{ type: "say", text: line }] };
 }

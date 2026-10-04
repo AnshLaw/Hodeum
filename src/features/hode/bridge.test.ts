@@ -131,12 +131,17 @@ describe("goalEvents", () => {
     expect(event).not.toHaveProperty("app", expect.anything());
   });
 
-  it("doesn't teach another app's lesson for a goal about an installed app", () => {
-    const [event] = goalEvents("how do I turn on dark mode in Discord", options);
-    expect(event).toMatchObject({ type: "GOAL_SUBMITTED", app: "Discord" });
-    expect(event).toHaveProperty("pack", undefined);
-    expect(goalEvents("how do I turn on dark mode in Settings", options)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "windows-dark-mode" }, app: "Settings" }]);
-    expect(goalEvents("how do I turn on dark mode", options)).toMatchObject([{ type: "GOAL_SUBMITTED", pack: { id: "windows-dark-mode" } }]);
+  it.each([
+    ["how do I save a note to OneDrive", "notepad-save-note"],
+    ["how do I zip files to send on WhatsApp", "windows-zip"],
+    ["how do I calculate a percentage for my Netflix bill", "calculator-percent"],
+    ["how do I make a pivot table and share it on Teams", "excel-pivot"],
+    ["how do I turn on dark mode on my computer", "windows-dark-mode"],
+    ["what do I click to do a pivot table", "excel-pivot"],
+  ])("keeps the lesson for %j: an installed app it mentions doesn't take its place", (goal, packId) => {
+    const [event] = goalEvents(goal, options);
+    expect(event).toMatchObject({ type: "GOAL_SUBMITTED", pack: { id: packId } });
+    expect(event).not.toHaveProperty("app", expect.anything());
   });
 
   it("replies instead of starting an open Hode for small talk, noise or something unclear", () => {

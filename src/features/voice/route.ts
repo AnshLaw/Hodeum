@@ -2,15 +2,13 @@ import type { InstalledApp, TaskPack } from "../../lib/types";
 import { withoutAddresses } from "../../providers/web/scrub";
 import { goalEvent, goalEvents } from "../hode/bridge";
 import type { HodeEvent, HodeState } from "../hode/model";
-import { appChoiceEvent, idleOpenAppEvent, openAppEvent } from "../hode/open-app";
-import { classify, isAcknowledgement, isSubstantive, opensWithQuestion, type Intent } from "./intent";
+import { appChoiceEvent, askAgainEvent, idleOpenAppEvent, openAppEvent } from "../hode/open-app";
+import { HODEY_NAME, asksAboutScreen, classify, isAcknowledgement, type Intent } from "./intent";
 
 export { isAcknowledgement } from "./intent";
 
-/** Hodey's name as speech recognition writes it: "body", "howdy", "hodie", and (measured) "holdy", "hudi", "hodee". */
-const NAME = String.raw`(?:hode?y|hod(?:ee|[iy]e?)|hoadie|howdy|body|hold[iy]e?|hu?d[iy])`;
 /** Said before a command or question; dropped before matching. The greeting may run into the name ("heyhodi"). */
-const WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*)?${NAME}\b[,!.]?\s*`, "i");
+const WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*)?${HODEY_NAME}\b[,!.]?\s*`, "i");
 const POLITE = /\b(?:please|thanks|thank you|can you|could you)\b/gi;
 /** Utterances shorter than this (after cleanup) are noise: "um", "uh". */
 const MIN_CHARS = 3;
@@ -44,7 +42,7 @@ const COMMANDS: [RegExp, HodeEvent][] = [
 
 /** Hands-free is stricter: the room is always heard, so a mishearing ("body", "howdy") counts only
  *  after a greeting, and Hodey's name alone only in its real spellings. Includes Hindi script ("हे होडी"). */
-const HANDS_FREE_WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*${NAME}|hode?y|hod(?:ee|[iy]e?)|hoadie|(?:(?:हे|हाय|ओके)[ ,]*)?होडी)(?=[\s,!.?]|$)[,!.?]?\s*`, "i");
+const HANDS_FREE_WAKE = new RegExp(String.raw`^(?:(?:hey|hi|hello|ok|okay)[ ,]*${HODEY_NAME}|hode?y|hod(?:ee|[iy]e?)|hoadie|(?:(?:हे|हाय|ओके)[ ,]*)?होडी)(?=[\s,!.?]|$)[,!.?]?\s*`, "i");
 
 /** The same controls in Hindi and Hinglish, as Hindi speech recognition writes them (in Devanagari). */
 const HINDI_COMMANDS: [string, HodeEvent][] = [
@@ -191,27 +189,35 @@ function routeInHode(s: HodeState, text: string, apps: InstalledApp[]): HodeEven
   return [open ?? question(text)];
 }
 
+/** Asking what something is, or a yes/no question: answered even when it names a lesson's task. */
+const ANSWER_ONLY =
+  /^(?:what(?:'s| is| are) (?:a|an|the)\b|what does\b|(?:is|are|does|do|did|can|could|was|were|has|have)\b|kya\b|क्या(?:\s|$))|\b(?:kya (?:hai|hota|hoti|hote)|kahan|kahaan|matlab kya)\b|क्या (?:है|होता|होती|करता|करती)|कहाँ|कहां/i;
+
 /** "How do I…", "teach me…", "help me…": a request to be taught, planned into a Hode rather than answered once. */
 const TEACH_ME =
-  /^(?:how (?:do|can|would|should|could) (?:i|we|you)|how to|where do i|teach me|show me how|help me|i want to|i need to|i'd like to|(?:can|could|will|would) you (?:teach|show|help))|(?:kaise|sikhao|sikha do)|कैसे|सिखाओ|सिखा दो/i;
+  /^(?:how (?:do|can|would|should|could) (?:i|we|you)|how to|where do i|teach me|show me how|help me|i want to|i need to|i'd like to|(?:can|could|will|would) you (?:teach|show|help))\b|\b(?:kaise|sikhao|sikha do)\b|कैसे|सिखाओ|सिखा दो/i;
 
 /**
- * Idle, once it's neither small talk nor noise: a pack's lesson, a task or a request to be taught (planned into a
- * Hode, which says so while vision loads), or a question about the screen. A pack's words start its lesson even
- * around a Hindi question word ("क्या आप मुझे डार्क मोड चालू करना सिखा सकते हैं"); one that opens with a question
- * word ("what is a pivot table?") is answered instead. Anything else with a few real words in it ("explain this
- * screen") is asked about the screen.
+ * Idle, once it's neither small talk nor noise. Asking to be taught ("how do I…", "teach me…", "kaise…", "सिखाओ") or
+ * a task is planned into a Hode (which says so while vision loads), a pack's lesson when one fits. Any other
+ * question is answered, in any language ("pivot table kya hai"); a pack's own words start its lesson. Anything else
+ * is asked about the screen only when the learner asks Hodey in so many words ("explain this screen"): thanks,
+ * sign-offs and talk meant for someone else go unanswered.
  */
 function askOrStart(text: string, intent: Intent, packs: TaskPack[], openAllowed: boolean, visionStarting: boolean, apps: InstalledApp[]): HodeEvent[] {
   const goal = goalEvent(text, { packs, openAllowed, apps, visionStarting });
-  if (goal.type === "GOAL_SUBMITTED" && goal.pack && !opensWithQuestion(text)) return [{ type: "START_HODE" }, goal];
   if (intent === "task" || TEACH_ME.test(text)) return [{ type: "START_HODE" }, goal];
-  return intent === "question" || isSubstantive(text) ? [question(text)] : [];
+  // "What is 15% of 200?" is the lesson's task; "what is a pivot table?" or "is dark mode on?" is answered.
+  const lesson = goal.type === "GOAL_SUBMITTED" && goal.pack !== undefined;
+  if (lesson && !(intent === "question" && ANSWER_ONLY.test(text.trim()))) return [{ type: "START_HODE" }, goal];
+  if (intent === "question") return [question(text)];
+  return asksAboutScreen(text) ? [question(text)] : [];
 }
 
 /**
  * Idle: a task, a pack's own words or a how-to request starts a Hode; a greeting or mic check gets a reply, noise and
- * fragments nothing. A reply to "Did you mean Outlook or Outlook (classic)?" that picks one opens it.
+ * fragments nothing. A reply to "Did you mean Outlook or Outlook (classic)?" that picks one opens it, and one
+ * that tries to but can't be told apart ("normal Outlook") hears the question again.
  */
 function routeIdle(s: HodeState, text: string, packs: TaskPack[], openAllowed: boolean, apps: InstalledApp[], visionStarting: boolean): HodeEvent[] {
   const open = appChoiceEvent(s, text, apps) ?? idleOpenAppEvent(text, apps, openAllowed);
@@ -220,7 +226,8 @@ function routeIdle(s: HodeState, text: string, packs: TaskPack[], openAllowed: b
   const intent = classify(text, { isCommand, isApp: () => false });
   if (intent === "greeting") return [{ type: "CHITCHAT", kind: "greeting" }];
   if (intent === "noise" || intent === "ack" || intent === "control" || tooShort(text)) return [];
-  return askOrStart(text, intent, packs, openAllowed, visionStarting, apps);
+  const again = intent === "unclear" ? askAgainEvent(s, text, apps) : undefined;
+  return again ? [again] : askOrStart(text, intent, packs, openAllowed, visionStarting, apps);
 }
 
 /**

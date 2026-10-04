@@ -80,13 +80,18 @@ const sameApp = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /**
  * A typed goal as an event: its task pack, or (when vision can plan) the app it names, built in or installed.
- * A pack for another app isn't this goal's lesson: "dark mode in Discord" isn't Windows' dark mode.
+ * Only a built-in app keeps a pack from the goal (`matchGoal`): an installed app it mentions is often just where
+ * the result goes ("save a note to OneDrive"), so it never replaces the lesson.
  */
 export function goalEvent(goal: string, { packs, openAllowed, apps = [], mode, agentStyle, visionStarting, phoneLive = phoneLiveNow() }: GoalOptions): HodeEvent {
-  const app = appFromGoal(goal) ?? appNamedIn(goal, apps);
-  const onPhone = phoneLive && app === undefined ? phonePack(goal, packs) : undefined;
+  const named = appFromGoal(goal);
+  const installed = named === undefined ? appNamedIn(goal, apps) : undefined;
+  // A goal that names a desktop app stays on the PC, even with the iPhone mirrored.
+  const onPhone = phoneLive && named === undefined && installed === undefined ? phonePack(goal, packs) : undefined;
   const matched = onPhone ?? matchGoal(goal, packs);
-  const pack = matched && (onPhone !== undefined || app === undefined || sameApp(matched.app, app)) ? matched : undefined;
+  const pack = matched && (onPhone !== undefined || named === undefined || sameApp(matched.app, named)) ? matched : undefined;
+  // A lesson wins over an installed app the goal only mentions ("…to send on WhatsApp"); those name the app of a goal with none.
+  const app = named ?? (pack ? undefined : installed);
   const starting = !openAllowed && visionStarting === true ? { visionStarting: true } : {};
   return { type: "GOAL_SUBMITTED", goal, pack, openAllowed, app, mode, agentStyle, ...starting };
 }
