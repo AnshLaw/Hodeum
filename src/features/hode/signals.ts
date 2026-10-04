@@ -35,6 +35,8 @@ export function evaluateSignal(signal: StateSignal, observation: ScreenObservati
       return findByNames(observation.elements, signal.names).length === 0;
     case "element_selected":
       return findByNames(observation.elements, signal.names).some((e) => e.selected === true);
+    case "element_checked":
+      return findByNames(observation.elements, signal.names).some((e) => (e.checked ?? e.selected) === true);
     case "window_title_contains":
       return normalize(observation.windowTitle).includes(normalize(signal.text));
     case "screen_tone":

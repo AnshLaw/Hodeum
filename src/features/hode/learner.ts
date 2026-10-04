@@ -1,7 +1,7 @@
 import { spoken } from "../../lib/spoken";
 import { ASSISTANCE_LEVELS, type ActionVerdict, type ScreenObservation, type StepOutcome, type TaskStep, type TeachingAction } from "../../lib/types";
 import { assessAction, mattered } from "./change";
-import { beginStep, inWrongApp, onObserved, onSkillLoaded, requestReason, waitForApp } from "./flow";
+import { beginStep, inWrongApp, onObserved, onSkillLoaded, openedApp, requestReason, waitForApp } from "./flow";
 import { takeOver } from "./execute";
 import { acknowledgement, watchedOnly } from "./ack";
 import { onVoiceQuestion } from "./session";
@@ -140,6 +140,7 @@ function completeStep(s: HodeState, step: TaskStep): Transition {
  */
 function onOpenAction(s: HodeState, e: EventOf<"LEARNER_ACTED">): Transition {
   if (inWrongApp(s, e.observation)) return waitForApp(s, e.observation);
+  if (s.openingApp) return openedApp({ ...s, observation: e.observation });
   const action = { before: s.observation, after: e.observation };
   const next: HodeState = { ...s, observation: e.observation, waitingForApp: undefined, stepActions: remember(s.stepActions, action), ack: undefined };
   if (!s.waitingForApp && !mattered(assessAction(action))) return quiet(next);
@@ -279,7 +280,7 @@ export function onSkipStep(s: HodeState): Transition {
   const asking = s.spokenQuestion !== undefined || s.question !== undefined;
   if (!step || s.open || asking || !SKIPPABLE.includes(s.phase)) return noop(s);
   const moved: HodeState = { ...s, ack: undefined, pendingAck: undefined, reason: undefined, pendingReason: undefined, pendingNote: undefined };
-  const done: HodeEffect[] = [CANCEL_TIMER, { type: "clearOverlay" }];
+  const done: HodeEffect[] = [{ type: "stopSpeech" }, CANCEL_TIMER, { type: "clearOverlay" }];
   const nextIndex = s.stepIndex + 1;
   if (!s.pack || nextIndex >= s.pack.steps.length) return withLeadingEffects(finishHode(moved), done);
   return withLeadingEffects(beginStep(moved, nextIndex), done);

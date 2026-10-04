@@ -65,6 +65,8 @@ function guideStep(context: TeachingContext, step: TaskStep): TeachingAction {
 
 /** Names shorter than this are too generic to match against speech ("OK", "A1"). */
 const MIN_SPOKEN_NAME = 4;
+/** "Where is…?" in English, Hindi and Roman Hinglish: pointing at the control is the whole answer. */
+const WHERE_QUESTION = /\b(?:where|where's|which (?:one|button|tab|menu)|find)\b|कहाँ|कहां|किधर|\bkahan\b|\bkahaan\b|\bkidhar\b/i;
 
 /**
  * Offline answer to a spoken question: point at a control the learner named ("where is Insert?").
@@ -79,7 +81,8 @@ function answerSpoken(context: TeachingContext, utterance: string): TeachingActi
   const level = context.assistanceLevel;
   if (!named) return { kind: "answer", speech: spoken(context.language).needVisionToAnswer, skill, assistanceLevel: level };
   const target = { elementId: named.id, bounds: named.bounds, confidence: named.confidence, label: named.name };
-  return { kind: "answer", speech: spoken(context.language).itsHere(named.name), target, skill, assistanceLevel: level };
+  // A where-question is fully answered by pointing; "what does it do?" still needs the vision model.
+  return { kind: "answer", speech: spoken(context.language).itsHere(named.name), target, skill, assistanceLevel: level, final: WHERE_QUESTION.test(utterance) };
 }
 
 /** Prefer the smallest element whose centre is inside the mark — a button over the pane that contains it. */
@@ -89,13 +92,14 @@ function pickMarkedElement(elements: UiElement[], region: Rect): UiElement | und
   return [...pool].sort((a, b) => area(a.bounds) - area(b.bounds))[0];
 }
 
-function describe(element: UiElement, context: TeachingContext): string {
+/** What a marked control is; `fromLesson` when the pack's own explanation says it (a complete answer). */
+function describe(element: UiElement, context: TeachingContext): { speech: string; fromLesson: boolean } {
   const matches = (step: TaskStep) => step.target.names.some((n) => nameMatches(n, element.name));
   const packStep = context.pack?.steps.find(matches);
   const say = spoken(context.language);
   const base = packStep ? say.thatsControl(element.name, packStep.explain) : say.thatsElement(element.name, element.role);
   const isCurrentTarget = context.step !== undefined && matches(context.step);
-  return isCurrentTarget ? `${base} ${say.neededForThisStep}` : base;
+  return { speech: isCurrentTarget ? `${base} ${say.neededForThisStep}` : base, fromLesson: packStep !== undefined };
 }
 
 function answerAbout(context: TeachingContext, annotation: LearnerAnnotation): TeachingAction {
@@ -103,11 +107,7 @@ function answerAbout(context: TeachingContext, annotation: LearnerAnnotation): T
   const skill = context.step?.skill ?? GENERAL_SKILL;
   const level = context.assistanceLevel;
   if (!element) return { kind: "answer", speech: spoken(context.language).nothingMarked, skill, assistanceLevel: level };
-  return {
-    kind: "answer",
-    speech: describe(element, context),
-    target: { elementId: element.id, bounds: element.bounds, confidence: element.confidence, label: element.name },
-    skill,
-    assistanceLevel: level,
-  };
+  const { speech, fromLesson } = describe(element, context);
+  const target = { elementId: element.id, bounds: element.bounds, confidence: element.confidence, label: element.name };
+  return { kind: "answer", speech, target, skill, assistanceLevel: level, final: fromLesson };
 }

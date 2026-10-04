@@ -45,6 +45,7 @@ export function describeSignal(signal: StateSignal): string {
   if (signal.kind === "element_visible") return `${names(signal.names)} is visible`;
   if (signal.kind === "element_absent") return `${names(signal.names)} is gone`;
   if (signal.kind === "element_selected") return `${names(signal.names)} is selected`;
+  if (signal.kind === "element_checked") return `${names(signal.names)} is ticked`;
   if (signal.kind === "window_title_contains") return `the window title contains "${untrusted(signal.text)}"`;
   return `the screen turns ${signal.tone}`;
 }

@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { MOOD_LABELS, type HodeyMood } from "./mood";
+// The face brings its own colours and motion: any window that draws Hodey (the notch, Settings) gets them.
+import "./hodey-face.css";
 
 /** Hodey's head is the notch's own silhouette: flat where it meets the screen edge, round below. */
 const HEAD = "M8 10h48v22a24 24 0 0 1-24 24A24 24 0 0 1 8 32z";

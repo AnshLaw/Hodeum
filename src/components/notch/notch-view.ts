@@ -242,7 +242,9 @@ function successView(s: HodeState): NotchView {
   // No skill to claim (an open-ended Hode, or every step skipped): just "Hode complete".
   const learned = hodeyOnly ? COPY.hodeyDidIt : s.learnedSkills.length > 0 ? COPY.skillLearned : undefined;
   // A finished Teach lesson can be done again with Hodey only watching.
-  const controls: NotchControl[] = s.mode === "teach" && s.pack && !s.open ? ["practice"] : [];
+  const practice: NotchControl[] = s.mode === "teach" && s.pack && !s.open ? ["practice"] : [];
+  // A question waiting for an answer holds the card open, so it can be closed without answering.
+  const controls: NotchControl[] = s.review && s.review.picked === undefined ? [...practice, "dismiss"] : practice;
   // An open-ended Hode lists what the learner did, since it had no plan to tick off.
   const steps = s.open && s.openDone?.length ? s.openDone.map((objective, index) => ({ id: `open-${index}`, objective, state: "done" as const })) : undefined;
   const base: NotchView = { mode: "success", size: "success", eyebrow: COPY.idleTitle, title: COPY.hodeComplete, detail: learned, busy: false, controls, skills: s.learnedSkills.map(skillLabel), steps };

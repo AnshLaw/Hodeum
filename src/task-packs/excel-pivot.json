@@ -80,10 +80,10 @@
         "independent": ""
       },
       "explain": "Each field you tick becomes rows, columns, or values in the summary.",
-      "success": { "kind": "element_selected", "names": ["Region"] },
+      "success": { "kind": "element_checked", "names": ["Region"] },
       "mistakes": [
         {
-          "signal": { "kind": "element_selected", "names": ["Product"] },
+          "signal": { "kind": "element_checked", "names": ["Product"] },
           "correction": "That's Product. For totals by region, tick Region."
         }
       ]
@@ -101,7 +101,7 @@
         "independent": ""
       },
       "explain": "Number fields become values, so Excel adds them up for each row.",
-      "success": { "kind": "element_selected", "names": ["Sales"] },
+      "success": { "kind": "element_checked", "names": ["Sales"] },
       "mistakes": []
     }
   ]

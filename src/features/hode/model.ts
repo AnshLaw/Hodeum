@@ -85,6 +85,8 @@ export interface HodeState {
   open: boolean;
   /** The app this Hode happens in (the pack's, or one an open goal names). */
   app?: string;
+  /** The goal is opening `app` itself ("how do I open Excel?"): Hodey teaches the launch and finishes once it's open. */
+  openingApp?: boolean;
   /** That app, while Hodey waits for the learner to open or switch to it. */
   waitingForApp?: string;
   /** Teach (learn by doing), help (stand by until asked) or agent (guide or do every step). */
@@ -121,6 +123,8 @@ export interface HodeState {
   reason?: string;
   /** The current step's why has been said (in a demonstration, a correction, or Explain). */
   whySaid?: boolean;
+  /** Paused, then a question: where the pause itself resumes to, kept while the question is answered. */
+  pausedResume?: Pick<HodeState, "resumePhase" | "resumeAction" | "resumeObservation">;
   /** A short line said once, ahead of the next guidance ("I can't see that done yet."). */
   pendingNote?: string;
   /** The learner said they did the step ("I did it", look again): the next screen read may finish it. */
@@ -285,6 +289,14 @@ export function rechecking(s: HodeState): boolean {
   // Asked for (a hint, look again) and a slow reasoner is on it: show Hodey working instead.
   const shownWorking = s.thinking === true && s.prompted === true;
   return s.phase === "reasoning" && !shownWorking && !asking && s.action !== undefined && s.action.kind !== "answer";
+}
+
+/**
+ * A blank Hode that keeps what outlives one: the reply language, and the request counter, so a slow
+ * reply to the last Hode can never pass for a request of this one.
+ */
+export function nextHode(s: HodeState): HodeState {
+  return { ...initialState, language: s.language, requestId: s.requestId };
 }
 
 /** The conversation with one more turn, keeping only the last few. */

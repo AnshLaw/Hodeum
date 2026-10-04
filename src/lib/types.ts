@@ -106,6 +106,8 @@ export type StateSignal =
   | { kind: "element_visible"; names: string[] }
   | { kind: "element_absent"; names: string[] }
   | { kind: "element_selected"; names: string[] }
+  /** Ticked (a check box, a field-list box); the highlighted row when the read can't tell ticks apart. */
+  | { kind: "element_checked"; names: string[] }
   | { kind: "window_title_contains"; text: string }
   /** `names` must be visible too, so a dark lock screen or a black frame never counts. */
   | { kind: "screen_tone"; tone: ScreenTone; names?: string[] };
@@ -200,6 +202,8 @@ export interface TeachingAction {
   target?: ActionTarget;
   skill: string;
   assistanceLevel: AssistanceLevel;
+  /** The answer is complete as it stands (a located control, the lesson's own explanation): no slower reasoner needs to improve it. */
+  final?: boolean;
 }
 
 export type AnnotationShape =

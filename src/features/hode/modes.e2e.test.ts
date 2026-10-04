@@ -370,6 +370,48 @@ describe("the stuck timer", () => {
   });
 });
 
+describe("practice on your own, end to end", () => {
+  it("runs the PivotTable again on a fresh workbook with Hodey silent, and ends saying the learner did it alone", async () => {
+    let scene = PIVOT.scene();
+    const perception = new MockPerception(() => scene);
+    const said: string[] = [];
+    const tts: TTSProvider = {
+      async speak(text) {
+        for await (const chunk of text) said.push(chunk);
+      },
+      stop: async () => undefined,
+      healthCheck: async () => true,
+    };
+    const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
+    const press = async ({ id, button = "left" }: Click) => {
+      const pressed = scene.snapshot().elements.find((e) => e.id === id);
+      if (!pressed) throw new Error(`${id} isn't on the practice screen`);
+      scene.press(id, button);
+      perception.notifyLearnerAction([{ kind: "click", at: center(pressed.bounds), button }]);
+      await settle();
+    };
+    runtime.dispatch({ type: "START_HODE" });
+    runtime.dispatch({ type: "GOAL_SUBMITTED", goal: PIVOT.goal, pack: PIVOT.pack, mode: "teach" });
+    await settle();
+    for (const next of PIVOT.clicks) await press(next);
+    expect(runtime.getState().review).toBeDefined();
+
+    scene = PIVOT.scene();
+    said.length = 0;
+    runtime.dispatch({ type: "PRACTICE_AGAIN" });
+    await settle();
+    expect(runtime.getState()).toMatchObject({ practice: true, level: "observe", stepIndex: 0 });
+    expect(said).toEqual([EN.practiceIntro]);
+    for (const next of PIVOT.clicks) await press(next);
+    expect(runtime.getState()).toMatchObject({ phase: "success" });
+    expect(runtime.getState().review).toBeUndefined();
+    expect(said.at(-1)).toBe(`${EN.didItAlone} ${PIVOT.pack.recap}`);
+    // Watching only: no step was prompted, so none of the lesson's instructions was said.
+    const instructions = PIVOT.pack.steps.flatMap((s) => [s.speech.hint, s.speech.guide, s.speech.demonstrate]);
+    expect(said.filter((line) => instructions.some((instruction) => line.includes(instruction)))).toEqual([]);
+  });
+});
+
 describe("Teach with a practised skill", () => {
   it("starts with less help the next time: no idea re-explained, no question, no highlight, just Your turn", async () => {
     const skills = new MemorySkillStore();

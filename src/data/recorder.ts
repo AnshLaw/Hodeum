@@ -16,9 +16,18 @@ function started(event: HodeEvent, prev: HodeState, next: HodeState): boolean {
   return (fromGoal || practice) && next.phase === "observing";
 }
 
+/**
+ * The learner finished a step, by whatever event Hodey noticed it (a click, "I did it", the read that
+ * prepared the next step). Hodey's own steps and skipped ones aren't the learner's.
+ */
+export function learnerFinishedStep(event: HodeEvent, prev: HodeState, next: HodeState): boolean {
+  if (!prev.pack || event.type === "HODEY_ACTED" || event.type === "SKIP_STEP" || event.type === "PRACTICE_AGAIN") return false;
+  return next.stepIndex > prev.stepIndex || (next.phase === "success" && prev.phase !== "success");
+}
+
 function progressEvents(event: HodeEvent, prev: HodeState, next: HodeState, at: string, hodeId: string): HodeEventRecord[] {
   const out: HodeEventRecord[] = [];
-  const stepDone = event.type === "LEARNER_ACTED" && prev.pack && (next.stepIndex > prev.stepIndex || next.phase === "success");
+  const stepDone = learnerFinishedStep(event, prev, next);
   if (stepDone) out.push({ hodeId, kind: "step_done", detail: currentStep(prev)?.objective, at });
   const hodeyDone = event.type === "HODEY_ACTED" && prev.pack && next.hodeyDid > prev.hodeyDid;
   if (hodeyDone) out.push({ hodeId, kind: "hodey_step", detail: currentStep(prev)?.objective, at });

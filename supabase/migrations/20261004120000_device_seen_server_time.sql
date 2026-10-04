@@ -10,6 +10,8 @@ begin
 end;
 $$;
 
+-- Safe to run again: the project's first schema was applied by hand, so the CLI's migration history may not list this one.
+drop trigger if exists devices_seen_now on public.devices;
 create trigger devices_seen_now
 before insert or update on public.devices
 for each row execute function public.stamp_device_seen();
