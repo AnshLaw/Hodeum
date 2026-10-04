@@ -10,6 +10,8 @@ export const PHONE_APP = "iPhone";
 export const PHONE_OFFLINE_APP = "iPhone (not connected)";
 /** How often the mirror is sampled for changes while Hodey is watching. */
 export const PHONE_SAMPLE_MS = 250;
+/** A phone Hode opens the mirror as it starts; give it this long before asking the learner to connect. */
+export const PHONE_CONNECT_WAIT_MS = 4000;
 /** Windows OCR gives no per-line score; printed UI text reads reliably, so it earns a precise highlight. */
 const OCR_CONFIDENCE = 0.9;
 
@@ -22,7 +24,7 @@ export interface OcrSegment {
   height: number;
 }
 
-export type PhoneEyes = Pick<PhoneMirror, "isLive" | "grabFrame" | "thumbnail" | "onLive">;
+export type PhoneEyes = Pick<PhoneMirror, "isLive" | "grabFrame" | "thumbnail" | "onLive" | "onOffline">;
 
 export function ocrElements(segments: OcrSegment[]): UiElement[] {
   return segments.map((s, i) => ({
@@ -39,7 +41,7 @@ export function ocrElements(segments: OcrSegment[]): UiElement[] {
 export class PhonePerception implements PerceptionAdapter {
   private readonly handlers = new Set<(observation: ScreenObservation) => void>();
   private readonly detector = new ChangeDetector();
-  private readonly stopLive: () => void;
+  private readonly unsubscribe: Array<() => void>;
   private timer: ReturnType<typeof setInterval> | undefined;
   private watching = false;
   private inFlight = false;
@@ -49,8 +51,11 @@ export class PhonePerception implements PerceptionAdapter {
     private readonly eyes: PhoneEyes,
     private readonly ocr: (png: string) => Promise<OcrSegment[]>,
     private readonly sampleMs = PHONE_SAMPLE_MS,
+    private readonly connectWaitMs = PHONE_CONNECT_WAIT_MS,
   ) {
-    this.stopLive = eyes.onLive(() => this.watching && this.emit());
+    // Connecting or dropping out is a learner action too: the Hode resumes, or asks to reconnect.
+    const onChange = () => this.watching && this.emit();
+    this.unsubscribe = [eyes.onLive(onChange), eyes.onOffline(onChange)];
   }
 
   async observe(region?: Rect): Promise<ScreenObservation> {
@@ -68,7 +73,17 @@ export class PhonePerception implements PerceptionAdapter {
   }
 
   async focusApp(app: string): Promise<boolean> {
-    return app.toLowerCase() === PHONE_APP.toLowerCase() && this.eyes.isLive();
+    if (app.toLowerCase() !== PHONE_APP.toLowerCase()) return false;
+    if (this.eyes.isLive()) return true;
+    return new Promise((resolve) => {
+      const done = (live: boolean) => {
+        clearTimeout(timer);
+        off();
+        resolve(live);
+      };
+      const off = this.eyes.onLive(() => done(true));
+      const timer = setTimeout(() => done(false), this.connectWaitMs);
+    });
   }
 
   onLearnerAction(handler: (observation: ScreenObservation) => void): () => void {
@@ -89,7 +104,7 @@ export class PhonePerception implements PerceptionAdapter {
 
   dispose(): void {
     this.setWatching(false);
-    this.stopLive();
+    this.unsubscribe.forEach((off) => off());
     this.handlers.clear();
   }
 

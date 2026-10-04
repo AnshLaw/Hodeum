@@ -51,7 +51,12 @@ function setup(startOn: "iphone" | "excel" = "iphone") {
     perception.notifyLearnerAction();
     await settle();
   };
-  return { runtime, renders, spoken, act, start, connectPhone, state: () => runtime.getState() };
+  const disconnectPhone = async () => {
+    current = new ExcelScene();
+    perception.notifyLearnerAction();
+    await settle();
+  };
+  return { runtime, renders, spoken, act, start, connectPhone, disconnectPhone, state: () => runtime.getState() };
 }
 
 describe("iPhone Dark Mode Hode", () => {
@@ -86,6 +91,15 @@ describe("iPhone Dark Mode Hode", () => {
     await h.act("row:Battery", "row:Battery");
     expect(h.spoken.length).toBe(said);
     expect(h.state().level).toBe(level);
+  });
+
+  it("asks to reconnect when the iPhone drops mid-Hode, then picks up", async () => {
+    const h = setup();
+    await h.start();
+    await h.disconnectPhone();
+    expect(h.spoken.at(-1)).toBe(COPY.connectPhone);
+    await h.connectPhone();
+    expect(h.state()).toMatchObject({ phase: "guiding", waitingForApp: undefined, stepIndex: 0 });
   });
 
   it("waits for the iPhone when it isn't connected, then picks up", async () => {

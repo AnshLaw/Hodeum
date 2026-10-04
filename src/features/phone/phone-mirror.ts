@@ -10,6 +10,7 @@ export class PhoneMirror {
   private current: PhoneSourceStatus = OFF;
   private readonly listeners = new Set<() => void>();
   private readonly liveHandlers = new Set<() => void>();
+  private readonly offlineHandlers = new Set<() => void>();
 
   constructor(
     readonly surface: FrameSurface,
@@ -32,6 +33,14 @@ export class PhoneMirror {
     this.liveHandlers.add(handler);
     return () => {
       this.liveHandlers.delete(handler);
+    };
+  }
+
+  /** The mirror stopped being live: unplugged, stopped, failed, or closed. */
+  onOffline(handler: () => void): () => void {
+    this.offlineHandlers.add(handler);
+    return () => {
+      this.offlineHandlers.delete(handler);
     };
   }
 
@@ -80,5 +89,6 @@ export class PhoneMirror {
     this.current = status;
     this.listeners.forEach((listener) => listener());
     if (!wasLive && this.isLive()) this.liveHandlers.forEach((handler) => handler());
+    if (wasLive && !this.isLive()) this.offlineHandlers.forEach((handler) => handler());
   }
 }

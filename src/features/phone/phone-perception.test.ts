@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PHONE_OFFLINE_APP, PhonePerception, ocrElements, type OcrSegment, type PhoneEyes } from "./phone-perception";
+import { PHONE_CONNECT_WAIT_MS, PHONE_OFFLINE_APP, PhonePerception, ocrElements, type OcrSegment, type PhoneEyes } from "./phone-perception";
 import { SETTLE_MS } from "./change-detector";
 
 const SIZE = 32 * 64;
@@ -7,6 +7,7 @@ const SAMPLE_MS = 250;
 
 function fakeEyes(live = true) {
   const liveHandlers = new Set<() => void>();
+  const offlineHandlers = new Set<() => void>();
   const eyes = {
     live,
     thumb: new Uint8Array(SIZE).fill(220),
@@ -17,9 +18,17 @@ function fakeEyes(live = true) {
       liveHandlers.add(h);
       return () => liveHandlers.delete(h);
     },
+    onOffline: (h: () => void) => {
+      offlineHandlers.add(h);
+      return () => offlineHandlers.delete(h);
+    },
     goLive: () => {
       eyes.live = true;
       liveHandlers.forEach((h) => h());
+    },
+    goOffline: () => {
+      eyes.live = false;
+      offlineHandlers.forEach((h) => h());
     },
   };
   return eyes;
@@ -47,7 +56,33 @@ describe("PhonePerception", () => {
   it("reports the phone as not connected while nothing is mirroring", async () => {
     const p = new PhonePerception(fakeEyes(false) as PhoneEyes, async () => SEGMENTS);
     expect((await p.observe()).app).toBe(PHONE_OFFLINE_APP);
-    expect(await p.focusApp("iPhone")).toBe(false);
+  });
+
+  it("waits a moment for the mirror to come up before saying the iPhone isn't there", async () => {
+    vi.useFakeTimers();
+    const eyes = fakeEyes(false);
+    const p = new PhonePerception(eyes as PhoneEyes, async () => SEGMENTS);
+    const connecting = p.focusApp("iPhone");
+    eyes.goLive();
+    await expect(connecting).resolves.toBe(true);
+    const alreadyLive = p.focusApp("iPhone");
+    eyes.live = false;
+    const gaveUp = p.focusApp("iPhone");
+    await vi.advanceTimersByTimeAsync(PHONE_CONNECT_WAIT_MS);
+    await expect(alreadyLive).resolves.toBe(true);
+    await expect(gaveUp).resolves.toBe(false);
+  });
+
+  it("fires an offline learner action when the mirror stops mid-Hode", async () => {
+    const eyes = fakeEyes(true);
+    const p = new PhonePerception(eyes as PhoneEyes, async () => SEGMENTS);
+    const seen = vi.fn();
+    p.onLearnerAction(seen);
+    p.setWatching(true);
+    eyes.goOffline();
+    await vi.waitFor(() => expect(seen).toHaveBeenCalledTimes(1));
+    expect(seen.mock.calls[0][0].app).toBe(PHONE_OFFLINE_APP);
+    p.dispose();
   });
 
   it("fires a learner action when the screen changes and settles, only while watching", async () => {

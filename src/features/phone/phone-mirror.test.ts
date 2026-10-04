@@ -38,6 +38,19 @@ describe("PhoneMirror", () => {
     await expect(mirror.grabFrame()).resolves.toMatchObject({ png: "AAA" });
   });
 
+  it("tells listeners when the mirror stops being live", async () => {
+    const sources: FakeSource[] = [];
+    const mirror = new PhoneMirror(surface, (kind) => sources[sources.push(new FakeSource(kind)) - 1]);
+    let offline = 0;
+    mirror.onOffline(() => offline++);
+    await mirror.open("camera");
+    sources[0].emit({ state: "live", width: 10, height: 20 });
+    sources[0].emit({ state: "error", message: "unplugged" });
+    expect(offline).toBe(1);
+    await mirror.close();
+    expect(offline).toBe(1);
+  });
+
   it("switching source stops the old one", async () => {
     const sources: FakeSource[] = [];
     const mirror = new PhoneMirror(surface, (kind) => sources[sources.push(new FakeSource(kind)) - 1]);
