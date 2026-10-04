@@ -19,7 +19,7 @@ import { NotchBar, NotchContent } from "./NotchParts";
 import { Sidebar } from "./Sidebar";
 import type { SurfaceProps } from "./surface";
 import { useDock, useRevealed } from "./use-dock";
-import { EXPANDED_SIZES, NOTCH_WIDTHS, inScript, islandSize, notchView, shouldPeek, stepItems, voiceNotice, type NotchSize, type NotchView } from "./notch-view";
+import { EXPANDED_SIZES, NOTCH_WIDTHS, inScript, islandSize, notchView, shouldPeek, stepItems, voiceNotice, type NotchControl, type NotchSize, type NotchView } from "./notch-view";
 import type { NativeVoiceStatus } from "../../providers/speech/native-voice";
 import { HodeyFace } from "../hodey/HodeyFace";
 import { hodeyMood, type HodeyMood } from "../hodey/mood";
@@ -28,6 +28,8 @@ import type { ActivityState, ActivityTracker } from "../../lib/activity";
 import type { SpeechInput, SpeechInputStatus } from "../../providers/speech/speech-input";
 import type { PhoneMirror } from "../../features/phone/phone-mirror";
 import { PhonePanel } from "./PhonePanel";
+import { useWebActivity } from "./use-web-activity";
+import { webSearchView } from "./web-activity";
 import { usePhoneControls, usePhoneScreen, useTallNotch } from "./use-phone";
 import { phoneNotchWidth } from "./phone-layout";
 import type { Size } from "../../lib/types";
@@ -237,17 +239,20 @@ export function Notch({ runtime, bus, shell, packs, bootNotice, voiceStatus, vis
   const visionStatus = useVisionStatus(vision);
   const notice = bootNotice ?? voiceNotice(useTtsState(voiceStatus));
   const show = script?.() === "roman" ? romanize : (text: string) => text;
-  const view = inScript(notchView(state), show);
+  // A web search from the app takes the notch while it runs, so the learner sees what leaves the PC.
+  const [web, closeWeb] = useWebActivity(bus);
+  const view = web ? webSearchView(web) : inScript(notchView(state), show);
   const surfaceRef = useRef<HTMLElement>(null);
   const [muted, setMuted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const dock = useDock(shell, holdsSpace(state), bus);
+  const dock = useDock(shell, holdsSpace(state), bus, web !== undefined);
   const layoutKey = dock.prefs.dock;
   const hovered = useNotchHover(surfaceRef, shell, layoutKey);
   const skills = useNotchSkills(skillSource, bus, state, packs, (next) => startFromApp(runtime, next.pack.title, packs, visionStatus?.state === "ready"));
   // Hodey stays out while the learner is in its menu or reading their skills.
-  const revealed = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true, state.phase);
-  const onControl = useControlHandler(runtime, bus);
+  const revealed = useRevealed(dock.prefs, hovered || menuOpen || skills?.open === true || web !== undefined, state.phase);
+  const handleControl = useControlHandler(runtime, bus);
+  const onControl = (control: NotchControl) => (web && control === "dismiss" ? closeWeb() : handleControl(control));
   useHitRect(surfaceRef, shell, bus, `${layoutKey}:${revealed}`);
   // The success card stays while the learner reads it (hovering), then makes way.
   useAutoDismiss(view.mode === "success" && !hovered, runtime);

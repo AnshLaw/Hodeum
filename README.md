@@ -52,7 +52,8 @@ Hodeum is a Windows-first, local-first learning companion. A Hodian starts a **H
   - On this PC, Hodey decides whether a question needs the web and writes a short, generic query from what you typed. The screen, window titles and earlier replies are never used for it, so nothing on screen or on a web page can steer what gets sent.
   - Rust then removes emails, links, file paths and names, long numbers and your Windows user name, so only that query is sent.
   - Your screen, chat and files never leave the PC.
-  - The blue privacy dot shows while it searches, and each answer shows the exact query and its sources.
+  - While it searches, the notch comes out over the app with the exact query ("Searching the web for “…”"), then the sites it found, with **Stop** (the app's Stop does the same). The blue privacy dot shows the whole time, and each answer shows the exact query and its sources.
+  - One search per question, never retried. If the web doesn't answer within 12 seconds, Hodey says "Couldn't reach the web. Answering from what I know." and answers locally.
   - Without a key, results come from Stack Exchange (Super User) and Microsoft Learn, which welcome programs; general search engines block them. Set the `HODEUM_BRAVE_API_KEY` environment variable to use Brave Search for full web results.
 - **Ask Hodey**: chat with the local Qwen3-VL. It attaches the app you were last in (or any window you pick), streams the answer, and can turn a question into a Hode. The screenshot stays in memory; the notch's green dot shows while it's taken.
 - **Settings**:

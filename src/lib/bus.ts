@@ -2,6 +2,7 @@ import type { ActivityChannel } from "./activity";
 import type { AccountStatus } from "../features/account/types";
 import type { AppPresence, DockPrefs } from "../features/dock/dock";
 import type { LearnerAnnotation, OverlayPrimitive, Rect, Surface } from "./types";
+import type { WebProgress } from "../providers/web/types";
 
 type Empty = Record<string, never>;
 
@@ -30,6 +31,10 @@ export interface BusEvents {
   "hode:summary-request": Empty;
   /** Another window (the app) is using a privacy channel; the notch shows its dot. */
   "activity:remote": { id: string; channel: ActivityChannel; active: boolean };
+  /** A web search from Ask Hodey (in the app), shown on the notch so the learner sees what leaves the PC. */
+  "web:search": WebProgress;
+  /** Stop the web search and answer in progress (the notch's Stop). */
+  "web:cancel": Empty;
   /** Where Hodey lives, broadcast by the notch (which owns it) whenever it changes or is asked. */
   "dock:prefs": DockPrefs;
   "dock:prefs-request": Empty;

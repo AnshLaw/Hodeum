@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatThread } from "../../data/types";
 import { useLiveQuery } from "../hooks";
-import { produceReply } from "../chat-reply";
+import { COPY } from "../../lib/copy";
+import { produceReply, sourceHosts } from "../chat-reply";
 import { GlobeIcon, SendIcon, WindowIcon } from "../icons";
+import type { WebProgress } from "../../providers/web/types";
 import type { AppServices, WindowInfo } from "../services";
 import { timeAgo } from "../view";
 import "./pages.css";
 
 const TITLE_CHARS = 48;
 const REPLY_TIMEOUT_MS = 60_000;
+const TOO_SLOW = "Hodey took too long to answer. Try again, or turn web search off for a faster answer.";
 const LOOKING = "Hodey is looking at this screen…";
 
 function message(chatId: string, role: ChatMessage["role"], content: string, context?: string): ChatMessage {
@@ -74,19 +77,11 @@ function Thread({ messages, streaming, status, note, onStartHode }: { messages: 
   );
 }
 
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
 /** What went to the web for this reply, and where the answer came from. Plain text: no links open in the app. */
 function WebSources({ web }: { web: NonNullable<ChatMessage["web"]> }) {
   return (
     <p className="hbubble__web">
-      <GlobeIcon /> Searched the web for “{web.query}” · {[...new Set(web.sources.map((s) => hostOf(s.url)))].join(" · ") || "nothing relevant found"}
+      <GlobeIcon /> Searched the web for “{web.query}” · {sourceHosts(web.sources.map((s) => s.url)).join(" · ") || "nothing relevant found"}
     </p>
   );
 }
@@ -124,13 +119,18 @@ export function ChatPage({ services }: { services: AppServices }) {
   const [context, setContext] = useState<WindowInfo>();
   const [status, setStatus] = useState(LOOKING);
   const [webEnabled, toggleWeb] = useWebSearchSetting(services);
+  // Set synchronously, so a double Enter can't send (and search) twice; Stop and the notch abort it.
+  const replying = useRef<AbortController>(undefined);
   useEffect(() => {
     services.windows?.lastActive().then(setContext, (e) => console.error("Couldn't find the last app window", e));
   }, [services]);
+  useEffect(() => services.bus.on("web:cancel", () => replying.current?.abort()), [services]);
 
   const send = async () => {
     const text = draft.trim();
-    if (!text || streaming !== undefined) return;
+    if (!text || replying.current) return;
+    const stop = new AbortController();
+    replying.current = stop;
     setDraft("");
     setError(undefined);
     const chat = active ?? (await services.chats.createChat(text.slice(0, TITLE_CHARS), new Date().toISOString()));
@@ -143,14 +143,17 @@ export function ChatPage({ services }: { services: AppServices }) {
     try {
       if (!services.chat) throw new Error(services.limitation ?? "The local model isn't available.");
       const deps = { chat: services.chat, windows: services.windows, web: services.web };
-      const options = { webEnabled, signal: AbortSignal.timeout(REPLY_TIMEOUT_MS), onText: setStreaming, onStatus: setStatus };
+      const signal = AbortSignal.any([stop.signal, AbortSignal.timeout(REPLY_TIMEOUT_MS)]);
+      const options = { webEnabled, signal, onText: setStreaming, onStatus: setStatus, onWeb: (p: WebProgress) => services.bus.emit("web:search", p) };
       const reply = await produceReply(deps, [...past, mine], context, options);
-      if (reply.webError) setError(`Web search didn't work (${reply.webError}), so this answer is from Hodey alone.`);
+      if (reply.webError) setError(`${COPY.webFallback} (${reply.webError})`);
       await services.chats.append({ ...message(chat.id, "hodey", reply.text.trim() || "I couldn't come up with an answer for that."), ...(reply.web ? { web: reply.web } : {}) });
     } catch (e) {
+      if (stop.signal.aborted) return;
       console.error("Hodey couldn't answer", e);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof DOMException && e.name === "TimeoutError" ? TOO_SLOW : e instanceof Error ? e.message : String(e));
     } finally {
+      replying.current = undefined;
       setStreaming(undefined);
       services.bus.emit("data:changed", {});
     }
@@ -191,9 +194,15 @@ export function ChatPage({ services }: { services: AppServices }) {
             </button>
           )}
           <input className="field hcomposer__field" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Where do I change page margins?" aria-label="Message Hodey" />
-          <button type="submit" className="btn btn--primary hcomposer__send" aria-label="Send" disabled={draft.trim() === "" || streaming !== undefined}>
-            <SendIcon />
-          </button>
+          {streaming === undefined ? (
+            <button type="submit" className="btn btn--primary hcomposer__send" aria-label="Send" disabled={draft.trim() === ""}>
+              <SendIcon />
+            </button>
+          ) : (
+            <button type="button" className="btn hcomposer__send" onClick={() => replying.current?.abort()}>
+              {COPY.stop}
+            </button>
+          )}
         </form>
       </section>
     </div>
