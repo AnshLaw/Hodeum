@@ -2,9 +2,9 @@ import { detectLanguage, type ReplyLanguage } from "../../lib/language";
 import type { Bus } from "../../lib/bus";
 import { errorMessage } from "../../lib/errors";
 import type { AgentStyle, AppLaunch, AssistanceLevel, HodeMode, InstalledApp, OverlayPrimitive, PerformRequest, Rect, StepOutcome, TeachingContext } from "../../lib/types";
-import type { AppSwitch, LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
+import type { LearningMemory, MemoryProvider, PerceptionAdapter, ReasoningProvider, SkillStore, TTSProvider } from "../../providers/interfaces";
 import { reasonWithFallback } from "../../providers/router";
-import { isAwaitedApp, knownAppId } from "../apps/resolve";
+import { observeShellTargets } from "./shell";
 import { rememberedLevel } from "../memory/tracker";
 import { initialState, type HodeEffect, type HodeEvent, type HodeState } from "./model";
 import { step } from "./reducer";
@@ -85,7 +85,7 @@ export class HodeRuntime {
       deps.bus.on("annotate:start", () => this.dispatch({ type: "ANNOTATE_START" })),
       deps.bus.on("annotate:cancel", () => this.dispatch({ type: "ANNOTATE_CANCEL" })),
       deps.bus.on("annotation:submitted", ({ annotation }) => this.dispatch({ type: "ANNOTATION_SUBMITTED", annotation })),
-      deps.perception.onAppSwitched?.((window) => this.appSwitched(window)) ?? (() => undefined),
+      deps.perception.onAppSwitched?.(() => this.appSwitched()) ?? (() => undefined),
     ];
   }
 
@@ -205,13 +205,19 @@ export class HodeRuntime {
         return this.recordOutcome(effect.skillId, effect.outcome);
       case "launchApp":
         return this.openApp(effect.app);
+      case "observeShell":
+        return this.observeShell();
     }
   }
 
-  /** Waiting for the learner to open or switch to the app: look again once that app (not just any window) is in front. */
-  private appSwitched(window: AppSwitch = {}): void {
-    const s = this.state;
-    if (s.phase === "guiding" && s.waitingForApp && isAwaitedApp(window, s.waitingForApp, s.goal)) this.dispatch({ type: "LOOK_AGAIN" });
+  /** Another window came forward: the reducer decides what it means (the awaited app, progress in an open Hode). */
+  private appSwitched(): void {
+    this.dispatch({ type: "APP_SWITCHED" });
+  }
+
+  /** The taskbar's Start button and search box, for a Hode waiting on an app; always answered, empty when unreadable. */
+  private observeShell(): void {
+    observeShellTargets(this.deps.perception).then((elements) => this.dispatch({ type: "SHELL_OBSERVED", elements }));
   }
 
   /** Opens an installed app the learner asked for; a Hode waiting for it carries on as soon as it's up. */
@@ -221,7 +227,7 @@ export class HodeRuntime {
     withTimeout(open, OPEN_APP_TIMEOUT_MS, `${app.name} didn't open in time`).then(
       (appeared) => {
         if (!appeared) return failed(`No ${app.name} window appeared`);
-        this.appSwitched({ app: app.name, appId: knownAppId(app.name) });
+        this.appSwitched();
       },
       (error) => {
         console.error(`Couldn't open ${app.name}`, error);

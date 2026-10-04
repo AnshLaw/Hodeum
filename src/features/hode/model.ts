@@ -19,6 +19,7 @@ import type {
   TaskStep,
   TeachingAction,
   TeachingContext,
+  UiElement,
 } from "../../lib/types";
 import type { StepAction, StuckSignal } from "./stuck";
 
@@ -222,6 +223,8 @@ export type HodeEvent =
   | { type: "LOOK_AGAIN" }
   /** Another window came to the front (the learner opened or switched apps, with or without a click). */
   | { type: "APP_SWITCHED" }
+  /** The taskbar's Start button and search box, read for `observeShell`; empty when they couldn't be read. */
+  | { type: "SHELL_OBSERVED"; elements: UiElement[] }
   | { type: "LET_ME_TRY" }
   /** Past a step Hodey can't see done; nothing is learned or failed for it. */
   | { type: "SKIP_STEP" }
@@ -265,7 +268,9 @@ export type HodeEffect =
   | { type: "cancelStuckTimer" }
   | { type: "recordOutcome"; skillId: string; outcome: StepOutcome }
   /** Open an installed app by its catalog id; APP_OPEN_FAILED comes back if it doesn't appear. */
-  | { type: "launchApp"; app: InstalledApp };
+  | { type: "launchApp"; app: InstalledApp }
+  /** Read the taskbar's Start button and search box; SHELL_OBSERVED always comes back. */
+  | { type: "observeShell" };
 
 export interface Transition {
   state: HodeState;

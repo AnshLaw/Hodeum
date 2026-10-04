@@ -69,12 +69,14 @@ export function activeChannels(state: ActivityState): ActivityChannel[] {
  * while Hodey watches, which `screenWatch` shows as one steady dot rather than a blink per keystroke.
  */
 export function withScreenActivity(perception: PerceptionAdapter, activity: ActivityTracker): PerceptionAdapter {
+  const { shellTargets } = perception;
   return {
     observe: (region?: Rect): Promise<ScreenObservation> => activity.track("screen", () => perception.observe(region)),
     focusApp: perception.focusApp?.bind(perception),
     launchApp: perception.launchApp?.bind(perception),
     onAppSwitched: perception.onAppSwitched?.bind(perception),
     openInstalledApp: perception.openInstalledApp?.bind(perception),
+    shellTargets: shellTargets && (() => activity.track("screen", () => shellTargets.call(perception))),
     perform: perception.perform?.bind(perception),
     onLearnerAction: (handler) => perception.onLearnerAction(handler),
   };

@@ -1,4 +1,4 @@
-import type { AppLaunch, PerformRequest, Rect, ScreenObservation, Surface } from "../lib/types";
+import type { AppLaunch, PerformRequest, Rect, ScreenObservation, Surface, UiElement } from "../lib/types";
 import type { AppSwitch, PerceptionAdapter } from "./interfaces";
 
 export interface WatchablePerception extends PerceptionAdapter {
@@ -49,6 +49,12 @@ export class SurfacePerception implements PerceptionAdapter {
     const open = this.adapters.windows.openInstalledApp;
     if (!open) throw new Error("Opening apps isn't available here.");
     return open.call(this.adapters.windows, id);
+  }
+
+  /** The desktop's taskbar; a phone has none. */
+  async shellTargets(): Promise<UiElement[]> {
+    if (this.active !== "windows") return [];
+    return (await this.adapters.windows.shellTargets?.()) ?? [];
   }
 
   async perform(request: PerformRequest): Promise<void> {

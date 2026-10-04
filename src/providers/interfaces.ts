@@ -8,6 +8,7 @@ import type {
   StepOutcome,
   TeachingAction,
   TeachingContext,
+  UiElement,
 } from "../lib/types";
 
 /** What a reasoner tells the Hode while it works, and how the Hode calls it off. */
@@ -89,6 +90,8 @@ export interface PerceptionAdapter {
   onAppSwitched?(handler: (window: AppSwitch) => void): () => void;
   /** Opens an installed app by its catalog id (`list_apps`) and brings it forward. False when it didn't appear in time. */
   openInstalledApp?(id: string): Promise<boolean>;
+  /** The taskbar's Start button and search box (and the Start menu's while it's open), with screen bounds. */
+  shellTargets?(): Promise<UiElement[]>;
   /** Agent · Do it for me: presses a control for the learner. Rejects when it's no longer where it was seen. */
   perform?(request: PerformRequest): Promise<void>;
 }

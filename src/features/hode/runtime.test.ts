@@ -3,7 +3,7 @@ import { LocalBus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
 import { center, padRect } from "../../lib/coords";
 import { spoken as spokenCopy } from "../../lib/spoken";
-import type { ReasoningProvider, TTSProvider } from "../../providers/interfaces";
+import type { AppSwitch, ReasoningProvider, TTSProvider } from "../../providers/interfaces";
 import { MemorySkillStore } from "../../providers/memory-skill-store";
 import { MockPerception } from "../../providers/mock-perception";
 import { TaskPackReasoningProvider } from "../../providers/task-pack-reasoner";
@@ -290,7 +290,7 @@ describe("opening the pack's app", () => {
     expect(focus).not.toHaveBeenCalled();
   });
 
-  it("looks again by itself when the learner switches apps while Hodey waits for the right one", async () => {
+  it("looks again by itself when the learner switches apps while Hodey waits for one", async () => {
     const scene = new ExcelScene();
     const perception = new MockPerception(() => scene);
     let switched: () => void = () => undefined;
@@ -302,7 +302,26 @@ describe("opening the pack's app", () => {
     const dispatch = vi.spyOn(runtime, "dispatch");
     Object.assign(runtime, { state: waiting });
     switched();
-    expect(dispatch).toHaveBeenCalledWith({ type: "LOOK_AGAIN" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "APP_SWITCHED" });
+    // Whichever app came forward, the screen read decides whether it's the one (Brave will do for "a browser").
+    expect(runtime.getState().phase).toBe("observing");
+  });
+});
+
+describe("another app coming forward", () => {
+  it("reaches the reducer every time, whichever app it is: the reducer decides what it means", () => {
+    let switched: ((window: AppSwitch) => void) | undefined;
+    const scene = new ExcelScene();
+    const perception = Object.assign(new MockPerception(() => scene), {
+      onAppSwitched: (handler: (window: AppSwitch) => void) => ((switched = handler), () => (switched = undefined)),
+    });
+    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
+    const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
+    const seen: string[] = [];
+    runtime.onTransition((event) => seen.push(event.type));
+    switched?.({ app: "Discord" });
+    switched?.({});
+    expect(seen).toEqual(["APP_SWITCHED", "APP_SWITCHED"]);
   });
 });
 
@@ -312,13 +331,13 @@ describe("looking it up for a spoken question", () => {
     const recording: ReasoningProvider = { id: "local", reason: async (context) => (seen.push(context.reference), { kind: "answer", speech: "Here.", skill: "general", assistanceLevel: "guide" }), healthCheck: async () => true };
     const scene = new ExcelScene();
     const lookups: string[] = [];
-    // The web only when the learner asked to look it up (`lookUp`); the offline help always.
+    // The offline help always; the web only with `lookUp`, here because the screen-first answer pointed at nothing.
     const reference = async (question: string, _app: string | undefined, _signal: AbortSignal, { web }: { web: boolean }) => (lookups.push(`${question} web=${web}`), "Reference for x:\n<web>\n[1] Steps\n</web>");
     const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
     const runtime = new HodeRuntime({ perception: new MockPerception(() => scene), reasoners: [recording], skills: new MemorySkillStore(), bus: new LocalBus(), tts, reference });
     runtime.dispatch({ type: "VOICE_QUESTION", question: "how do I make a pivot table?" });
     await settle();
-    expect(lookups).toEqual(["how do I make a pivot table? web=false"]);
+    expect(lookups).toEqual(["how do I make a pivot table? web=false", "how do I make a pivot table? web=true"]);
     expect(seen.at(-1)).toContain("<web>");
   });
 
@@ -328,7 +347,7 @@ describe("looking it up for a spoken question", () => {
     const scene = new ExcelScene();
     const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
     const runtime = new HodeRuntime({ perception: new MockPerception(() => scene), reasoners: [recording], skills: new MemorySkillStore(), bus: new LocalBus(), tts, reference: async () => Promise.reject(new Error("offline")) });
-    runtime.dispatch({ type: "VOICE_QUESTION", question: "how do I make a pivot table?" });
+    runtime.dispatch({ type: "VOICE_QUESTION", question: "what is a pivot table?" });
     await settle();
     expect(seen).toEqual(["none"]);
   });
@@ -355,34 +374,6 @@ describe("what Hodey is saying", () => {
     const said = runtime.hodeySaying() ?? "";
     expect(said).toContain(spokenCopy("en").greeting);
     expect(said).toContain(spokenCopy("en").notATask);
-  });
-});
-
-describe("app switches while Hodey waits for an app", () => {
-  function waitingRuntime(waitingForApp: string, goal: string) {
-    const scene = new ExcelScene();
-    const perception = new MockPerception(() => scene);
-    let switched: (window: { app?: string; appId?: string }) => void = () => undefined;
-    Object.assign(perception, { onAppSwitched: (handler: typeof switched) => ((switched = handler), () => undefined) });
-    const tts: TTSProvider = { speak: async () => undefined, stop: async () => undefined, healthCheck: async () => true };
-    const runtime = new HodeRuntime({ perception, reasoners: [new TaskPackReasoningProvider()], skills: new MemorySkillStore(), bus: new LocalBus(), tts });
-    Object.assign(runtime, { state: { ...runtime.getState(), phase: "guiding", waitingForApp, goal } });
-    const dispatch = vi.spyOn(runtime, "dispatch").mockImplementation(() => undefined);
-    return { switch: (window: { app?: string; appId?: string }) => switched(window), dispatch };
-  }
-
-  it("stays quiet while the learner goes through other apps, and looks again when the awaited one comes forward", () => {
-    const h = waitingRuntime("Excel", GOAL);
-    for (let i = 0; i < 5; i++) h.switch({ app: "Notepad", appId: "notepad" });
-    expect(h.dispatch).not.toHaveBeenCalled();
-    h.switch({ app: "Excel", appId: "excel" });
-    expect(h.dispatch).toHaveBeenCalledWith({ type: "LOOK_AGAIN" });
-  });
-
-  it("takes Brave for Chrome when the goal only meant a browser", () => {
-    const h = waitingRuntime("Chrome", "search for cats in chrome");
-    h.switch({ app: "Brave", appId: "brave" });
-    expect(h.dispatch).toHaveBeenCalledWith({ type: "LOOK_AGAIN" });
   });
 });
 

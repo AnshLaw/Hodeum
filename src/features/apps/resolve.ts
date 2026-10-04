@@ -3,12 +3,6 @@ import type { InstalledApp } from "../../lib/types";
 /** A spoken app name against the Start menu's apps: one app, a few equally good ones, or none. */
 export type AppMatch = { kind: "match"; app: InstalledApp } | { kind: "ambiguous"; options: InstalledApp[] } | { kind: "none" };
 
-/** What a window reports about its app (the native window watcher's `app` and `appId`). */
-export interface AppIdentity {
-  app?: string;
-  appId?: string;
-}
-
 const EXACT = 1;
 /** The query is the first words of the name ("snipping" for Snipping Tool). */
 const PREFIX = 0.9;
@@ -51,10 +45,6 @@ const KNOWN: KnownApp[] = [
   { id: "edge", catalogId: /^MSEdge$/i, aliases: ["edge", "ms edge", "एज"] },
   { id: "vs-code", catalogId: /VisualStudioCode/i, aliases: ["vs code", "vscode", "visual studio code", "code"] },
 ];
-
-const BROWSERS = new Set(["brave", "chrome", "edge"]);
-/** A goal that names any browser, or Chrome as the usual stand-in for one: Brave or Edge will do. */
-const ANY_BROWSER = /\b(?:browser|chrome)\b/i;
 
 const LEADING = /^(?:the |my |microsoft |ms |google )+/;
 const TRAILING = /(?: app| application| program| browser| classic)+$/;
@@ -151,14 +141,3 @@ export function resolveApp(query: string, catalog: InstalledApp[]): AppMatch {
   return { kind: "ambiguous", options: close.slice(0, MAX_OPTIONS).map(({ app }) => app) };
 }
 
-/**
- * Whether the window that just came forward is the app a Hode waits for. Brave, Chrome and Edge count as
- * one browser when the goal said "browser" or "Chrome". A window with no identity might be it.
- */
-export function isAwaitedApp(window: AppIdentity, awaited: string, goal: string): boolean {
-  if (!window.app && !window.appId) return true;
-  const want = knownAppId(awaited);
-  const got = [window.appId, window.app ? knownAppId(window.app) : undefined].filter((id): id is string => id !== undefined);
-  if (got.includes(want)) return true;
-  return BROWSERS.has(want) && ANY_BROWSER.test(goal) && got.some((id) => BROWSERS.has(id));
-}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { InstalledApp } from "../../lib/types";
 import catalog from "./__fixtures__/start-apps.json";
-import { isAwaitedApp, knownAppId, resolveApp } from "./resolve";
+import { knownAppId, resolveApp } from "./resolve";
 
 /** A trimmed copy of `Get-StartApps` on the dev PC, traps included (WSL Settings, WhatsApp Web, Outlook (classic)). */
 const APPS = catalog as InstalledApp[];
@@ -74,20 +74,3 @@ describe("knownAppId", () => {
   });
 });
 
-describe("isAwaitedApp", () => {
-  it("matches the app Hodey waits for by id or name", () => {
-    expect(isAwaitedApp({ app: "Excel", appId: "excel" }, "Excel", "make a pivot table")).toBe(true);
-    expect(isAwaitedApp({ app: "File Explorer" }, "File Explorer", "zip files")).toBe(true);
-    expect(isAwaitedApp({ app: "Notepad", appId: "notepad" }, "Excel", "make a pivot table")).toBe(false);
-  });
-
-  it("counts any browser when the goal said browser or Chrome", () => {
-    expect(isAwaitedApp({ app: "Brave", appId: "brave" }, "Chrome", "search for cats in chrome")).toBe(true);
-    expect(isAwaitedApp({ app: "Edge", appId: "edge" }, "Chrome", "open a new tab in my browser")).toBe(true);
-    expect(isAwaitedApp({ app: "Brave", appId: "brave" }, "Edge", "bookmark this page in edge")).toBe(false);
-  });
-
-  it("can't tell without an identity, so any switch may be the app (older native builds)", () => {
-    expect(isAwaitedApp({}, "Excel", "make a pivot table")).toBe(true);
-  });
-});

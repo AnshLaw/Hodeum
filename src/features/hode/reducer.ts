@@ -2,7 +2,7 @@ import { onGoalSubmitted, onStartHode, onThinking } from "./flow";
 import { onActionReadyActing, onHodeyActed, onPerformFailed } from "./execute";
 import { onPracticeAgain, onReviewAnswered } from "./closing";
 import { onAppSwitched, onExplainRequested, onHintRequested, onLearnerActed, onLetMeTry, onObservedStep, onLookAgain, onRepeat, onSaidStuck, onShowMe, onSkillLoadedStep, onSkipStep, onStuckTimeout } from "./learner";
-import type { EventOf, HodeEvent, HodeState, Transition } from "./model";
+import { noop, type EventOf, type HodeEvent, type HodeState, type Transition } from "./model";
 import { onAppOpenFailed, onOpenApp } from "./open-app";
 import { onChitchat } from "./chitchat";
 import {
@@ -43,6 +43,8 @@ const handlers: Handlers = {
   REPEAT: onRepeat,
   LOOK_AGAIN: onLookAgain,
   APP_SWITCHED: onAppSwitched,
+  // The reducer side (pointing at the search box) is the teach loop's; until then the read changes nothing.
+  SHELL_OBSERVED: noop,
   LET_ME_TRY: onLetMeTry,
   SKIP_STEP: onSkipStep,
   REVIEW_ANSWERED: onReviewAnswered,
