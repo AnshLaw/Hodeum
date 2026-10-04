@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useState } from "react";
+import { center } from "../lib/coords";
 import { StageKeys, hodeyKeySetting } from "../lib/keys";
 import type { Bus } from "../lib/bus";
 import type { BrowserShell } from "../lib/shell";
@@ -65,8 +66,9 @@ export function Stage({ env }: { env: StageEnvironment }) {
     env.perception.notifyLearnerAction();
   };
   const press = (elementId: string, button: MouseButton) => {
+    const pressed = app.snapshot().elements.find((e) => e.id === elementId);
     app.press(elementId, button);
-    env.perception.notifyLearnerAction();
+    env.perception.notifyLearnerAction(pressed ? [{ kind: "click", at: center(pressed.bounds), button }] : []);
     rerender();
   };
   const reset = () => {

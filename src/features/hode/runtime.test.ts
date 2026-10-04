@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalBus } from "../../lib/bus";
 import { COPY } from "../../lib/copy";
-import { padRect } from "../../lib/coords";
+import { center, padRect } from "../../lib/coords";
+import { spoken as spokenCopy } from "../../lib/spoken";
 import type { ReasoningProvider, TTSProvider } from "../../providers/interfaces";
 import { MemorySkillStore } from "../../providers/memory-skill-store";
 import { MockPerception } from "../../providers/mock-perception";
@@ -48,8 +49,9 @@ function setup(reasoners: ReasoningProvider[] = [new TaskPackReasoningProvider()
   };
   const act = async (...ids: string[]) => {
     for (const id of ids) {
+      const pressed = scene.snapshot().elements.find((e) => e.id === id);
       scene.press(id, "left");
-      perception.notifyLearnerAction();
+      perception.notifyLearnerAction(pressed ? [{ kind: "click", at: center(pressed.bounds), button: "left" }] : []);
       await settle();
     }
   };
@@ -136,6 +138,15 @@ describe("HodeRuntime end to end", () => {
     vi.advanceTimersByTime(STUCK_MS);
     await settle();
     expect(h.state()).toMatchObject({ phase: "guiding", level: "guide" });
+  });
+
+  it("notices the learner clicking the same wrong tab again and again, and points at the right one", async () => {
+    const h = setup();
+    await h.start("teach");
+    await h.act("tab:Home", "tab:Home", "tab:Home");
+    expect(h.state()).toMatchObject({ phase: "guiding", stuck: { kind: "repeated_click", control: "Home" } });
+    expect(h.spoken.at(-1)).toBe(spokenCopy("en").repeatedClick("Home"));
+    expect(h.overlays.at(-1)).toContain("highlight");
   });
 
   it("stays silent when muted", async () => {

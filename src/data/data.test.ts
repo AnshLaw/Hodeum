@@ -46,6 +46,16 @@ describe("HodeRecorder", () => {
     expect(detail?.events[2].detail).toBe("Open the Insert tab");
   });
 
+  it("logs what made Hodey decide the learner was stuck", async () => {
+    const store = new MemoryLearningStore();
+    const recorder = new HodeRecorder(store, undefined, () => "h1", () => "2026-10-03T10:00:00.000Z");
+    const undo = { ...HOME_SELECTED, inputs: [{ kind: "undo" as const }] };
+    drive(recorder, [...HODE.slice(0, 5), { type: "SAID_STUCK" }, { type: "LEARNER_ACTED", observation: undo }, { type: "LEARNER_ACTED", observation: undo }]);
+    await recorder.flushed();
+    const events = (await store.getHode("h1"))?.events ?? [];
+    expect(events.map((e) => [e.kind, e.detail])).toEqual([["stuck", "said_stuck"], ["stuck", "undo_loop"]]);
+  });
+
   it("marks a Hode the learner ended early", async () => {
     const store = new MemoryLearningStore();
     const recorder = new HodeRecorder(store, undefined, () => "h1");

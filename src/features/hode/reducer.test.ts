@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { COPY } from "../../lib/copy";
-import type { AssistanceLevel, HodeMode, SkillRecord } from "../../lib/types";
-import { initialState, type HodeEffect, type HodeEvent, type HodeState, type Transition } from "./model";
+import { spoken } from "../../lib/spoken";
+import type { AssistanceLevel, HodeMode, ScreenObservation, SkillRecord } from "../../lib/types";
+import { STUCK_MS, initialState, type HodeEffect, type HodeEvent, type HodeState, type Transition } from "./model";
 import { step } from "./reducer";
 import {
   DATA_SELECTED,
@@ -11,8 +12,11 @@ import {
   INSERT_SELECTED,
   PACK,
   annotation,
+  el,
   guideAction,
+  obs,
   skillRecord,
+  tab,
 } from "./test-fixtures";
 
 function fold(state: HodeState, ...events: HodeEvent[]): Transition {
@@ -393,5 +397,75 @@ describe("repeat and look again", () => {
   it("ignores both while idle", () => {
     expect(step(initialState, { type: "REPEAT" }).state).toBe(initialState);
     expect(step(initialState, { type: "LOOK_AGAIN" }).state).toBe(initialState);
+  });
+});
+
+describe("richer stuck detection (PRD §7)", () => {
+  const act = (observation: ScreenObservation): HodeEvent => ({ type: "LEARNER_ACTED", observation });
+  const say = spoken("en");
+  const clickHome: ScreenObservation = { ...HOME_SELECTED, inputs: [{ kind: "click", at: { x: 20, y: 10 }, button: "left" }] };
+  const undo: ScreenObservation = { ...HOME_SELECTED, inputs: [{ kind: "undo" }] };
+  const reasonedWith = (t: Transition) => t.effects.find((e) => e.type === "reason");
+
+  it("a third click on the same wrong control raises help and points at the right one", () => {
+    const t = fold(guiding("hint"), act(clickHome), act(clickHome), act(clickHome));
+    expect(t.state).toMatchObject({ phase: "reasoning", level: "demonstrate", stuck: { kind: "repeated_click", control: "Home" } });
+    expect(t.effects[0]).toEqual({ type: "cancelStuckTimer" });
+    expect(reasonedWith(t)).toMatchObject({ context: { correction: say.repeatedClick("Home") } });
+  });
+
+  it("opening, closing and reopening the same wrong menu raises help", () => {
+    const menu = obs([...HOME_SELECTED.elements, el("See more", "menu", { bounds: { x: 300, y: 40, width: 120, height: 200 } })]);
+    const t = fold(guiding("hint"), act(menu), act(HOME_SELECTED), act(menu));
+    expect(t.state).toMatchObject({ level: "demonstrate", stuck: { kind: "menu_loop", menu: "See more" } });
+    expect(reasonedWith(t)).toMatchObject({ context: { correction: say.menuLoop("See more") } });
+  });
+
+  it("two undos in a row raise help without counting as a mistake", () => {
+    const t = fold(guiding("hint"), act(undo), act(undo));
+    expect(t.state).toMatchObject({ level: "guide", mistakes: 0, escalated: true, stuck: { kind: "undo_loop" } });
+    expect(reasonedWith(t)).toMatchObject({ context: { correction: say.undoLoop } });
+  });
+
+  it("the expected control still missing after a few actions raises help", () => {
+    const noInsert = obs([tab("Home", 0, true)]);
+    const t = fold(guiding("hint"), act(noInsert), act(noInsert), act(noInsert));
+    expect(t.state.stuck).toEqual({ kind: "target_missing", target: "Insert" });
+    expect(reasonedWith(t)).toMatchObject({ context: { correction: say.targetMissing("Insert") } });
+  });
+
+  it("a surprise dialog gets a recovery line, and guidance resumes once it's closed", () => {
+    const dialog = obs([...HOME_SELECTED.elements, el("Microsoft Excel", "dialog")]);
+    const shown = step(guiding("hint"), act(dialog));
+    const line = say.surpriseDialog("Microsoft Excel");
+    expect(shown.state).toMatchObject({ phase: "guiding", level: "hint", surprise: "Microsoft Excel", action: { kind: "correct", speech: line } });
+    expect(shown.effects).toEqual([{ type: "cancelStuckTimer" }, { type: "clearOverlay" }, { type: "say", text: line }, { type: "startStuckTimer", ms: STUCK_MS }]);
+    const stillOpen = step(shown.state, act(dialog));
+    expect(stillOpen.effects).toEqual([]);
+    const closed = step(stillOpen.state, act(HOME_SELECTED));
+    expect(closed.state).toMatchObject({ phase: "reasoning", surprise: undefined, level: "hint" });
+  });
+
+  it("starts each step with a clean history", () => {
+    const t = fold(guiding("hint"), act(clickHome), act(INSERT_SELECTED));
+    expect(t.state).toMatchObject({ stepIndex: 1, stepActions: [], stuck: undefined });
+  });
+
+  it("leaves phone Hodes to the stuck timer (their screen changes are navigation)", () => {
+    const phone = { ...guiding("hint"), pack: { ...PACK, surface: "phone" as const } };
+    const noInsert = obs([tab("Home", 0, true)]);
+    expect(fold(phone, act(noInsert), act(noInsert), act(noInsert)).state.stuck).toBeUndefined();
+  });
+
+  it("'where is it?' raises help like the stuck timer, never pausing", () => {
+    const t = step(guiding("hint"), { type: "SAID_STUCK" });
+    expect(t.state).toMatchObject({ phase: "reasoning", level: "guide", escalated: true, mistakes: 0, stuck: { kind: "said_stuck" } });
+    expect(types(t)).toEqual(["cancelStuckTimer", "reason"]);
+    expect(step(reasoning(), { type: "SAID_STUCK" }).state.phase).toBe("reasoning");
+  });
+
+  it("past the most help, explains why and resets the step (the last rung of the ladder)", () => {
+    const t = step(guiding("demonstrate"), { type: "STUCK_TIMEOUT" });
+    expect(reasonedWith(t)).toMatchObject({ context: { assistanceLevel: "demonstrate", correction: "Insert adds things. Click Insert. I highlighted it." } });
   });
 });

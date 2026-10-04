@@ -8,7 +8,7 @@ async function settle(): Promise<void> {
 }
 
 function fakeBridge(observations: ScreenObservation[]) {
-  const listeners = new Map<string, () => void>();
+  const listeners = new Map<string, (payload?: unknown) => void>();
   const invoke = vi.fn(async () => {
     const next = observations.shift();
     if (!next) throw new Error("no more observations");
@@ -16,12 +16,12 @@ function fakeBridge(observations: ScreenObservation[]) {
   });
   const bridge = {
     invoke,
-    listen: (event: string, handler: () => void) => {
+    listen: (event: string, handler: (payload?: unknown) => void) => {
       listeners.set(event, handler);
       return () => listeners.delete(event);
     },
   } as unknown as NativeBridge;
-  return { bridge, invoke, fire: () => listeners.get(LEARNER_ACTION_EVENT)?.() };
+  return { bridge, invoke, fire: (payload?: unknown) => listeners.get(LEARNER_ACTION_EVENT)?.(payload) };
 }
 
 describe("NativePerception", () => {
@@ -58,6 +58,37 @@ describe("NativePerception", () => {
     await settle();
     expect(invoke).toHaveBeenCalledTimes(2);
     expect(handler.mock.calls.map(([o]) => o)).toEqual([HOME_SELECTED, INSERT_SELECTED]);
+  });
+
+  it("passes on what the learner did (clicks, undo, back), including input that arrived mid-read", async () => {
+    const { bridge, fire } = fakeBridge([HOME_SELECTED, INSERT_SELECTED]);
+    const perception = new NativePerception(bridge);
+    const handler = vi.fn();
+    perception.onLearnerAction(handler);
+    perception.setWatching(true);
+    const click = { kind: "click", at: { x: 5, y: 6 }, button: "right" };
+    fire([click]);
+    fire([{ kind: "undo" }]);
+    fire([{ kind: "back" }]);
+    await settle();
+    expect(handler.mock.calls.map(([o]) => o)).toEqual([
+      { ...HOME_SELECTED, inputs: [click] },
+      { ...INSERT_SELECTED, inputs: [{ kind: "undo" }, { kind: "back" }] },
+    ]);
+  });
+
+  it("logs malformed input reports and still reads the screen", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { bridge, fire } = fakeBridge([HOME_SELECTED]);
+    const perception = new NativePerception(bridge);
+    const handler = vi.fn();
+    perception.onLearnerAction(handler);
+    perception.setWatching(true);
+    fire([{ kind: "teleport" }, { kind: "click", at: "nowhere" }]);
+    await settle();
+    expect(handler).toHaveBeenCalledWith(HOME_SELECTED);
+    expect(errorLog).toHaveBeenCalledWith("Ignored a malformed learner input report", expect.anything());
+    errorLog.mockRestore();
   });
 
   it("logs a failed read instead of throwing", async () => {

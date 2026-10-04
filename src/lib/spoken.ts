@@ -20,6 +20,13 @@ export interface SpokenCopy {
   thatsControl: (name: string, explain: string) => string;
   thatsElement: (name: string, role: string) => string;
   neededForThisStep: string;
+  /** Stuck signals (PRD §7). Short and plain: Hodey points at the right control as it says them. */
+  repeatedClick: (control: string) => string;
+  menuLoop: (menu: string) => string;
+  undoLoop: string;
+  /** Said instead of guidance while an unexpected dialog is in the way. */
+  surpriseDialog: (title: string) => string;
+  targetMissing: (target: string) => string;
 }
 
 const ENGLISH: SpokenCopy = {
@@ -37,6 +44,11 @@ const ENGLISH: SpokenCopy = {
   thatsControl: (name, explain) => `That's ${name}. ${explain}`,
   thatsElement: (name, role) => `That's the "${name}" ${role}.`,
   neededForThisStep: "It's the one you need for this step.",
+  repeatedClick: (control) => `${control} isn't the one. Try the one I've highlighted.`,
+  menuLoop: (menu) => `The ${menu} menu isn't the one we need. Try the one I've highlighted.`,
+  undoLoop: "No problem. Let's take it one step at a time.",
+  surpriseDialog: (title) => `"${title}" opened, and it isn't part of this step. Close it, then we'll carry on.`,
+  targetMissing: (target) => `I can't see ${target} on the screen yet. Let's find it together.`,
 };
 
 /** Gender-neutral on purpose: the learner picks a female or male Hindi voice. */
@@ -55,6 +67,11 @@ const HINDI: SpokenCopy = {
   thatsControl: (name, explain) => `ये ${name} है। ${explain}`,
   thatsElement: (name, role) => `ये "${name}" ${role} है।`,
   neededForThisStep: "इस स्टेप के लिए आपको यही चाहिए।",
+  repeatedClick: (control) => `${control} वो नहीं है। जो मैंने हाइलाइट किया है, उसे आज़माइए।`,
+  menuLoop: (menu) => `${menu} मेन्यू वो नहीं है जो हमें चाहिए। जो मैंने हाइलाइट किया है, उसे आज़माइए।`,
+  undoLoop: "कोई बात नहीं। चलिए, एक-एक कदम करके चलते हैं।",
+  surpriseDialog: (title) => `"${title}" खुल गया है, जो इस स्टेप का हिस्सा नहीं है। उसे बंद कीजिए, फिर हम आगे बढ़ेंगे।`,
+  targetMissing: (target) => `मुझे स्क्रीन पर अभी ${target} नहीं दिख रहा। चलिए, साथ में ढूँढते हैं।`,
 };
 
 /** Hindi words in Devanagari, English words in English; the voice gets Devanagari via `speakable`. */
@@ -73,6 +90,11 @@ const HINGLISH: SpokenCopy = {
   thatsControl: (name, explain) => `ये ${name} है। ${explain}`,
   thatsElement: (name, role) => `ये "${name}" ${role} है।`,
   neededForThisStep: "इस step के लिए आपको यही चाहिए।",
+  repeatedClick: (control) => `${control} वो नहीं है। जो मैंने highlight किया है, उसे try कीजिए।`,
+  menuLoop: (menu) => `${menu} menu वो नहीं है जो हमें चाहिए। जो मैंने highlight किया है, उसे try कीजिए।`,
+  undoLoop: "कोई बात नहीं। चलिए, एक-एक step करके चलते हैं।",
+  surpriseDialog: (title) => `"${title}" खुल गया है, जो इस step का हिस्सा नहीं है। उसे close कीजिए, फिर हम आगे बढ़ेंगे।`,
+  targetMissing: (target) => `मुझे screen पर अभी ${target} नहीं दिख रहा। चलिए, साथ में ढूँढते हैं।`,
 };
 
 const BY_LANGUAGE: Record<ReplyLanguage, SpokenCopy> = { en: ENGLISH, hi: HINDI, hinglish: HINGLISH };

@@ -20,6 +20,7 @@ function progressEvents(event: HodeEvent, prev: HodeState, next: HodeState, at: 
   if (next.action?.kind === "correct" && next.action !== prev.action) out.push({ hodeId, kind: "mistake", detail: next.action.speech, at });
   if (event.type === "HINT_REQUESTED" && next !== prev) out.push({ hodeId, kind: "hint", at });
   if (event.type === "STUCK_TIMEOUT" && next !== prev) out.push({ hodeId, kind: "stuck", at });
+  if (next.stuck && next.stuck !== prev.stuck) out.push({ hodeId, kind: "stuck", detail: next.stuck.kind, at });
   if (event.type === "ANNOTATION_SUBMITTED" && event.annotation.intent === "ask") out.push({ hodeId, kind: "asked", detail: event.annotation.question, at });
   if (event.type === "PAUSE" && next.phase === "paused") out.push({ hodeId, kind: "paused", at });
   return out;

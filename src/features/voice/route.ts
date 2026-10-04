@@ -14,6 +14,8 @@ const QUESTION_START = /^(?:what|where|which|why|who|whose|when|is|are|does|did|
 const COMMANDS: [RegExp, HodeEvent][] = [
   [/^(?:(?:give me )?a hint|hint|help(?: me)?|i'?m stuck|i am stuck)$/, { type: "HINT_REQUESTED" }],
   [/^(?:explain(?: that| this)?|why)$/, { type: "EXPLAIN_REQUESTED" }],
+  // "Where?" / "I don't see it" (PRD §7): more help, unlike "wait", which pauses.
+  [/^(?:where|where is it|where's it|where is that|i (?:don'?t|do not|can'?t|cannot) (?:see|find) (?:it|that)(?: anywhere)?)$/, { type: "SAID_STUCK" }],
   [/^(?:repeat(?: that)?|say (?:that|it) again|again|what did you say)$/, { type: "REPEAT" }],
   [/^(?:look again|check again|i did it|done|i'?m done|finished)$/, { type: "LOOK_AGAIN" }],
   [/^(?:let me try|i'?ll try|i will try)$/, { type: "LET_ME_TRY" }],
@@ -35,6 +37,7 @@ const HANDS_FREE_WAKE = /^(?:(?:hey|hi|hello|ok|okay)[ ,]+(?:hode?y|hod[iy]e?|ho
 const HINDI_COMMANDS: [string, HodeEvent][] = [
   ["हिंट(?: दो| दीजिए| चाहिए)?|संकेत(?: दो| दीजिए)?|मदद(?: करो| कीजिए| चाहिए)?|हेल्प(?: करो)?|मैं (?:फंस|फँस|अटक) (?:गया|गई)", { type: "HINT_REQUESTED" }],
   ["समझाओ|समझाइए|समझाइये|क्यों|एक्सप्लेन करो", { type: "EXPLAIN_REQUESTED" }],
+  ["(?:(?:ये|यह|वो|वह) )?(?:कहाँ|कहां|किधर) (?:है|हैं)(?: (?:ये|यह|वो|वह))?|(?:मुझे )?(?:नहीं (?:दिख|मिल) (?:रहा|रही)|(?:दिख|मिल) नहीं (?:रहा|रही))(?: है)?", { type: "SAID_STUCK" }],
   ["(?:फिर से|दोबारा)(?: बोलो| बोलिए| कहो| कहिए)?|रिपीट(?: करो)?|क्या (?:बोला|कहा)", { type: "REPEAT" }],
   ["हो गया|कर दिया|कर लिया|डन|(?:फिर से|दोबारा) देखो", { type: "LOOK_AGAIN" }],
   ["मुझे (?:करने|ट्राई करने) दो|मैं (?:खुद )?(?:करता|करती) ह(?:ूं|ूँ)", { type: "LET_ME_TRY" }],
@@ -51,6 +54,7 @@ const HINDI_COMMANDS: [string, HodeEvent][] = [
 const ROMAN_HINGLISH: [RegExp, HodeEvent][] = [
   [/^(?:hint (?:do|dijiye|chahiye)|madad (?:karo|kijiye|chahiye)|help karo|main (?:phas|phans|atak) (?:gaya|gayi))$/, { type: "HINT_REQUESTED" }],
   [/^(?:samjhao|samjhaiye|samjhaiye na|explain karo)$/, { type: "EXPLAIN_REQUESTED" }],
+  [/^(?:(?:(?:ye|yeh|wo|woh|vo) )?(?:kahan|kahaan|kaha|kidhar) (?:hai|he)(?: (?:ye|yeh|wo|woh|vo))?|(?:mujhe |muje )?(?:(?:nahi|nahin|nai) (?:dikh|mil) (?:raha|rahi)|(?:dikh|mil) (?:nahi|nahin|nai) (?:raha|rahi))(?: hai| he)?)$/, { type: "SAID_STUCK" }],
   [/^(?:(?:phir se|dobara) (?:bolo|boliye|kaho|kahiye)|repeat karo|kya bola|kya kaha)$/, { type: "REPEAT" }],
   [/^(?:ho gaya|kar diya|kar liya|(?:phir se|dobara) dekho)$/, { type: "LOOK_AGAIN" }],
   [/^(?:mujhe (?:karne|try karne) do|main (?:khud )?(?:karta|karti) hoon)$/, { type: "LET_ME_TRY" }],
