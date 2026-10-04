@@ -38,6 +38,8 @@ npm run deploy:site   # builds dist-site (site/public + web.html + signin.html) 
 
 The build reads `.env.local`. The Vercel link lives in `.vercel/` (git-ignored); recreate it with `vercel link --project hodeum`.
 
+The Vercel project is also connected to GitHub, so **every push to `main` deploys to production**. The root `vercel.json` makes that build the site (`npm run build:site` → `dist-site`), not the desktop app. A build on Vercel needs `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under Settings › Environment Variables (both are public). Without them the build fails on purpose, and the live site stays as it was.
+
 ## Recreate from scratch
 
 1. **Supabase:** new project; run `supabase/migrations/20261003120000_hodeum_sync.sql` in the SQL editor; enable Authentication › Providers › Google with the client ID and secret.
