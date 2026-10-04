@@ -129,6 +129,9 @@ fn describe(element: &UIElement, sequence: usize) -> Option<ElementDto> {
         return None;
     }
     Some(ElementDto {
+        checked: None,
+        container: None,
+        focused: None,
         id: format!("uia:{sequence}"),
         role: normalize_role(&element.get_cached_localized_control_type().unwrap_or_default()),
         name,

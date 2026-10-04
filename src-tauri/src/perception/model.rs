@@ -29,6 +29,15 @@ pub struct ElementDto {
     pub confidence: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub selected: Option<bool>,
+    /// Ticked (TogglePattern On): check boxes, toggle switches, the field list's boxes. Separate from `selected`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checked: Option<bool>,
+    /// Where the control sits: "title bar", "tab strip", "tab '<name>'", "toolbar", "menu bar", "status bar", "page", or a named pane.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container: Option<String>,
+    /// Has keyboard focus.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focused: Option<bool>,
 }
 
 /// Mirrors `ScreenObservation` in `src/lib/types.ts`.
@@ -42,6 +51,9 @@ pub struct Observation {
     /// The window that was read; guidance placed from this read is drawn only over it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub window: Option<super::window_watch::WindowDto>,
+    /// A stable id for the app ("excel", "file-explorer", "settings", "calculator", ...), for matching packs and app switches.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
 }
 
 /// UIA localized control types ("Tab Item", "check box") -> task-pack role vocabulary ("tab item").

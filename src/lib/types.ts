@@ -33,6 +33,16 @@ export interface Size {
 export interface WindowRef {
   id: number;
   bounds: Rect;
+  /** Friendly app name ("Excel", "Settings") and stable id ("excel", "settings"), when known. */
+  app?: string;
+  appId?: string;
+}
+
+/** An app the Start menu lists: `id` is its AUMID or shortcut path, as Windows names it. */
+export interface InstalledApp {
+  id: string;
+  name: string;
+  kind: "packaged" | "desktop" | "link";
 }
 
 /** A monitor in physical pixels; `scale` is the DPI factor (1.25 = 125%). */
@@ -61,6 +71,12 @@ export interface UiElement {
   source: ElementSource;
   confidence: number;
   selected?: boolean;
+  /** Ticked (check boxes, toggle switches, the field list's boxes); separate from `selected`, the highlighted row. */
+  checked?: boolean;
+  /** Where the control sits: "title bar", "tab strip", "tab '<name>'", "toolbar", "menu bar", "status bar", "page", or a named pane. */
+  container?: string;
+  /** Has keyboard focus. */
+  focused?: boolean;
 }
 
 /**
@@ -82,6 +98,8 @@ export interface ScreenObservation {
   inputs?: LearnerInput[];
   /** The window that was read; guidance drawn from this read belongs to it. Absent off Windows. */
   window?: WindowRef;
+  /** A stable id for the app ("excel", "file-explorer", "settings", "calculator", ...), for matching packs and app switches. */
+  appId?: string;
 }
 
 export type StateSignal =
@@ -115,8 +133,13 @@ export interface TaskStep {
 }
 
 /** How Agent mode opens a pack's app: its program, and a practice file shipped with Hodeum to open in it. */
+/**
+ * How a pack's app is opened: a program (`exe`, e.g. "excel.exe") or an allowlisted link (`uri`, e.g.
+ * "ms-settings:colors"), exactly one of them; `sample` is a practice file or folder shipped with Hodeum.
+ */
 export interface AppLaunch {
-  exe: string;
+  exe?: string;
+  uri?: string;
   sample?: string;
 }
 
@@ -224,6 +247,8 @@ export interface TeachingContext {
   language?: ReplyLanguage;
   /** The learner's last few actions this step, oldest first: what they did and what it changed. */
   recentActions?: ActionSummary[];
+  /** The control with keyboard focus, as "<role> <name>", when the screen read found one. */
+  focusedControl?: string;
 }
 
 /** A control by what it is (never by a screen read's id, which changes between reads). */
