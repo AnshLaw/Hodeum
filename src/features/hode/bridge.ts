@@ -1,5 +1,5 @@
 import { replyLanguage } from "../../lib/language";
-import type { Bus, HodeSummary } from "../../lib/bus";
+import type { Bus, BusEvents, HodeSummary } from "../../lib/bus";
 import type { AgentStyle, HodeMode, InstalledApp, TaskPack } from "../../lib/types";
 import { HodeRecorder } from "../../data/recorder";
 import type { Settings, SettingsStore } from "../../data/settings";
@@ -32,7 +32,7 @@ export interface BridgeDeps {
   packs: TaskPack[];
   /** Whether the local vision model can plan goals that have no task pack. */
   openGoalsAllowed: () => boolean;
-  /** The installed apps, for "open Excel" goals; empty until the catalog loads. */
+  /** The installed apps, for "open Excel" goals; empty until the catalog loads. Never offered to a web goal. */
   apps?: () => InstalledApp[];
   /** Applies speech settings to the voice in use. */
   applyVoice: (voice: Settings["voice"]) => void;
@@ -98,6 +98,14 @@ function applySettings(deps: BridgeDeps, settings: Settings): void {
   deps.applyWebSearch?.(settings.webSearch);
 }
 
+/**
+ * The apps a goal may open: none for one sent from the web dashboard, so whoever holds the learner's web
+ * session can start a Hode on this PC but can't open a program (Command Prompt, PowerShell) with it.
+ */
+function appsFor(deps: BridgeDeps, source: BusEvents["hode:start"]["source"]): InstalledApp[] {
+  return source === "web" ? [] : (deps.apps?.() ?? []);
+}
+
 function loadSettings(deps: BridgeDeps): void {
   deps.settings.load().then(
     (settings) => applySettings(deps, settings),
@@ -126,7 +134,7 @@ export function connectHodeBridge(deps: BridgeDeps): () => void {
     ...(memory ? [runtime.onTransition(memory.observe)] : []),
     runtime.subscribe(broadcast),
     bus.on("hode:summary-request", () => bus.emit("hode:summary", summaryOf(runtime.getState()))),
-    bus.on("hode:start", ({ goal, mode, agentStyle }) => startFromApp(runtime, goal, deps.packs, deps.openGoalsAllowed(), { apps: deps.apps?.() ?? [], mode, agentStyle })),
+    bus.on("hode:start", ({ goal, mode, agentStyle, source }) => startFromApp(runtime, goal, deps.packs, deps.openGoalsAllowed(), { apps: appsFor(deps, source), mode, agentStyle })),
     bus.on("hode:end", () => runtime.dispatch({ type: "END_HODE" })),
     bus.on("settings:changed", () => loadSettings(deps)),
   ];
